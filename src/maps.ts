@@ -3,12 +3,15 @@
 // Districts blend into each other as you drive (game.ts blendBiome).
 
 export type Flavor =
-  | 'towers'   // downtown blocks, streetlights, racing barriers
-  | 'palms'    // beachfront — palm trees + low painted buildings
-  | 'pagoda'   // tiled-roof houses + red lantern poles
-  | 'park'     // round trees, sparse and green
-  | 'terrace'  // brick row houses, chimneys, the odd phone box
-  | 'market';  // street stalls under striped awnings
+  | 'towers'       // downtown blocks, streetlights, racing barriers
+  | 'palms'        // beachfront — palm trees + low painted buildings
+  | 'pagoda'       // tiled-roof houses + red lantern poles
+  | 'park'         // round trees, sparse and green
+  | 'terrace'      // brick row houses, chimneys, the odd phone box
+  | 'market'       // street stalls under striped awnings
+  | 'pyramids'     // desert obelisks, ancient ruins & stone pillars
+  | 'favela'       // terraced colorful shacks & hillside stairs
+  | 'cyberarcade'; // neon hologram signs & arcade arches
 
 export interface District {
   label: string;
@@ -104,6 +107,48 @@ export const MAPS: MapSpec[] = [
         skyTop: 0x6a8ab0, skyBottom: 0xcfdce0, fog: 0xb0c2b8, ground: 0x4f7a42, road: 0x8a8f8a, hemi: 0xe0ecda, dust: 0x6a8a50 },
       { label: 'Square Mile', flavor: 'towers',
         skyTop: 0x3f4f6f, skyBottom: 0x9fb0c2, fog: 0x92a0b2, ground: 0x39404e, road: 0x8a92a2, hemi: 0xc8d6e8, dust: 0x788090 }
+    ]
+  },
+  {
+    id: 'tokyo', name: 'TOKYO', flag: '🇯🇵',
+    blurb: 'Touge drift switchbacks across Shibuya crossing, arcade alleys and Mt. Fuji pass.',
+    ctlMin: 16, ctlVar: 4, rMin: 0.45, rVar: 0.9, fogNear: 30, fogFar: 155,
+    skyline: 'skyline_tokyo',
+    districts: [
+      { label: 'Shibuya Crossing', flavor: 'towers',
+        skyTop: 0x1a0d35, skyBottom: 0xff3b94, fog: 0x5c2b6a, ground: 0x241a34, road: 0x423c52, hemi: 0xff8cd5, dust: 0x7a508f },
+      { label: 'Akihabara Alleys', flavor: 'cyberarcade',
+        skyTop: 0x0f1b3e, skyBottom: 0x00ffcc, fog: 0x1f4e5a, ground: 0x182638, road: 0x3e4856, hemi: 0xaaffea, dust: 0x408a80 },
+      { label: 'Fuji Shrine Pass', flavor: 'pagoda',
+        skyTop: 0x2b4f6a, skyBottom: 0xd5eef8, fog: 0x8aadb8, ground: 0x4a6e56, road: 0x869498, hemi: 0xe6f8ff, dust: 0x6e8e7a }
+    ]
+  },
+  {
+    id: 'rio', name: 'RIO DE JANEIRO', flag: '🇧🇷',
+    blurb: 'High-speed Copacabana curves plunging into tight hillside favela stairways.',
+    ctlMin: 11, ctlVar: 3, rMin: 0.65, rVar: 0.6, fogNear: 45, fogFar: 190,
+    skyline: 'skyline_rio',
+    districts: [
+      { label: 'Copacabana Beach', flavor: 'palms',
+        skyTop: 0x1e8adb, skyBottom: 0xffdf78, fog: 0xcadaab, ground: 0xd9c086, road: 0x95999e, hemi: 0xfffae0, dust: 0xd9c086 },
+      { label: 'Santa Teresa', flavor: 'favela',
+        skyTop: 0x3868ab, skyBottom: 0xff9c5b, fog: 0xcb8e72, ground: 0x6e6252, road: 0x888a8e, hemi: 0xffe2c4, dust: 0xa28e72 },
+      { label: 'Hillside Market', flavor: 'market',
+        skyTop: 0x5a347e, skyBottom: 0xff6b4a, fog: 0xb86c5e, ground: 0x5c5044, road: 0x808086, hemi: 0xffd2ba, dust: 0x967a64 }
+    ]
+  },
+  {
+    id: 'cairo', name: 'CAIRO', flag: '🇪🇬',
+    blurb: 'Wide-open desert rally straights across ancient pyramids and dusty bazaars.',
+    ctlMin: 9, ctlVar: 3, rMin: 0.8, rVar: 0.4, fogNear: 35, fogFar: 200,
+    skyline: 'skyline_cairo',
+    districts: [
+      { label: 'Nile Corniche', flavor: 'palms',
+        skyTop: 0x2f78b8, skyBottom: 0xfce29c, fog: 0xd8c898, ground: 0xa89466, road: 0x9a968e, hemi: 0xfffae8, dust: 0xbca474 },
+      { label: 'Khan el-Khalili', flavor: 'market',
+        skyTop: 0x8a4b32, skyBottom: 0xffaa64, fog: 0xd68f6a, ground: 0x7c664c, road: 0x8e867a, hemi: 0xffe0c2, dust: 0xab8c66 },
+      { label: 'Giza Excavation', flavor: 'pyramids',
+        skyTop: 0x4b6e8a, skyBottom: 0xffd285, fog: 0xcaa67e, ground: 0xc8aa78, road: 0x9c988c, hemi: 0xfff4d6, dust: 0xd0b484 }
     ]
   }
 ];

@@ -449,6 +449,9 @@ export class Game {
     this.clearLatchedZombies();
     this.gun.setVisible(!!mode.guns);
     this.gun.setAmmo(this.ammo);
+    this.player.infected = false;
+    this.player.voltageMode = !!mode.voltage;
+    this.player.voltageLevel = 100;
 
     this.style.reset();
     this.lastBumpAt = -10;
@@ -716,6 +719,48 @@ export class Game {
           dt, elapsed, this.raceTime, this.player.s, true,
           this.player.x, MODES[this.modeIndex].aggression, this.player.v
         );
+
+        // Slipstream drafting: check if player is directly behind a rival inside draft cone
+        let drafting = false;
+        for (const r of this.rivals.rivals) {
+          const sGap = this.track.wrap(r.s) - this.track.wrap(this.player.s);
+          if (sGap > 3 && sGap < 24 && Math.abs(r.x - this.player.x) < 1.45 && this.player.v > 18) {
+            drafting = true;
+            break;
+          }
+        }
+        this.player.draftingActive = drafting;
+        if (drafting) {
+          this.player.draftGauge = Math.min(1, this.player.draftGauge + dt * 0.55);
+          if (this.player.draftGauge >= 1) {
+            if (this.player.triggerDraftBoost()) {
+              this.audio.play('combo');
+              this.ui.popText('SLIPSTREAM SLINGSHOT!', '#00ffcc');
+            }
+          }
+        } else {
+          this.player.draftGauge = Math.max(0, this.player.draftGauge - dt * 0.18);
+        }
+
+        // Launch ramps: crossing one near the centre of the lane at speed sends
+        // the car airborne (physics in Player); touchdown thumps the camera.
+        if (!this.player.airborne && Math.abs(this.player.x) < 2.1) {
+          const ws = this.track.wrap(this.player.s);
+          for (const rs of this.scenery.rampS) {
+            if (Math.abs(ws - rs) < 2.4 && this.player.launch()) {
+              this.audio.play('go');
+              this.ui.popText('RAMP JUMP! 🚀', '#ffcc00');
+              this.shake = Math.max(this.shake, 0.5);
+              break;
+            }
+          }
+        }
+        if (this.player.landed) {
+          this.shake = Math.max(this.shake, 0.7);
+          this.audio.play('bump');
+          if (navigator.vibrate) navigator.vibrate(40);
+        }
+
         this.simulateContacts(elapsed);
         this.updateStyle(dt, elapsed);
         this.updateGhost(dt);
@@ -908,10 +953,21 @@ export class Game {
         this.audio.play('squish');
         this.ui.popText(`SPLAT x${this.zombieCombo}`, '#7fae5a');
         if (navigator.vibrate) navigator.vibrate(30);
+
+        if (mode.infected && p.infected && this.zombiesSquashed % 10 < squashed) {
+          p.infected = false;
+          this.ui.popText('VIRUS CURED! EMP SHOCKWAVE!', '#00ffcc');
+          this.audio.play('combo');
+          for (const r of this.rivals.rivals) {
+            if (Math.abs(this.track.wrap(r.s) - this.track.wrap(p.s)) < 24) {
+              this.rivals.wreck(r);
+            }
+          }
+        }
       }
     }
 
-    const obstacles = mode.latchers ? this.entities.tryHitObstacle(ws, p.x) : 0;
+    const obstacles = this.entities.tryHitObstacle(ws, p.x);
     if (obstacles > 0) {
       const knocked = this.latchedZombies;
       this.knockOffLatched(Math.max(1, knocked));
@@ -966,6 +1022,17 @@ export class Game {
         r.v *= burnout ? 0.8 : 0.86;
         r.x -= dir * (burnout ? 2.0 : 1.2);
         this.lastBumpAt = elapsed;
+        if (mode.heist && r === this.rivals.rivals[0]) {
+          this.zombieScore += 50;
+          this.coins += 5;
+          this.ui.popText('HEIST LOOT +$50!', '#00ffcc');
+          this.audio.play('coin');
+        }
+        if (mode.infected && !p.infected) {
+          p.infected = true;
+          this.ui.popText('VIRUS INFECTED! SPLAT 10 TO CURE', '#ff5252');
+          this.audio.play('squish');
+        }
         // Grand Prix wants clean racing — trading paint drops the style chain.
         // In Burnout contact IS the game; only TAKING a hit breaks it (below).
         if (!burnout) this.style.crash();
@@ -982,7 +1049,13 @@ export class Game {
               this.rivals.wreck(r);
               this.takedowns++;
               this.style.stoke(0.5);
-              this.ui.popText(`TAKEDOWN! ${r.name} +150`, '#ff8a3d');
+              if (mode.heist && r === this.rivals.rivals[0]) {
+                this.zombieScore += 1000;
+                p.nitroTanks += 2;
+                this.ui.popText('HEIST BOSS TAKEDOWN! +1000 & 2x NITRO!', '#ffe93b');
+              } else {
+                this.ui.popText(`TAKEDOWN! ${r.name} +150`, '#ff8a3d');
+              }
               this.audio.play('combo');
               this.shake = 1.1;
               if (navigator.vibrate) navigator.vibrate([40, 40, 80]);
@@ -1018,6 +1091,9 @@ export class Game {
         this.ui.popText('AMMO +4', '#ff8a3d');
       } else {
         p.nitroTanks += got.nitro;
+        if (mode.voltage) {
+          p.voltageLevel = Math.min(100, p.voltageLevel + 35);
+        }
         this.audio.play('combo');
         this.ui.popText('NITRO TANK +1', '#7fd4ff');
       }

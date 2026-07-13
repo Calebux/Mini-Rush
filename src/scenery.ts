@@ -3,9 +3,10 @@ import { AssetLibrary } from './assets';
 import { districtIndexAt, ROAD_HALF_WIDTH, SHARP_CORNER_K } from './constants';
 import { Flavor, MapSpec } from './maps';
 import {
-  buildCityBuilding, buildColorfulBuilding, buildFinishArch, buildLanternPole,
-  buildPagodaHouse, buildPalm, buildPhoneBox, buildStall, buildStreetlight,
-  buildTerraceHouse, buildTree, mulberry32
+  buildArcadeArch, buildBeachUmbrella, buildCityBuilding, buildColorfulBuilding,
+  buildFavelaHouse, buildFinishArch, buildHoloSign, buildLanternPole, buildLaunchRamp,
+  buildObelisk, buildPagodaHouse, buildPalm, buildPhoneBox, buildPyramid, buildStall,
+  buildStreetlight, buildTerraceHouse, buildTree, mulberry32
 } from './meshes';
 import { toonMat } from './toon';
 import { Track } from './track';
@@ -92,6 +93,7 @@ function buildChevronBoard(arrowDir: number): THREE.Group {
 /** Buildings, lamps, cacti and the finish arch along the whole track. */
 export class Scenery {
   readonly group = new THREE.Group();
+  readonly rampS: number[] = []; // lap positions of launch ramps, for jump detection
   private window: VisibilityWindow;
   private roadMat: THREE.MeshToonMaterial;
 
@@ -164,6 +166,40 @@ export class Scenery {
               dist = ROAD_HALF_WIDTH + 6 + rand() * 6;
             }
             break;
+          case 'pyramids':
+            if (rand() < 0.65) {
+              obj = buildPyramid(rand);
+              dist = ROAD_HALF_WIDTH + 14 + rand() * 15;
+              gap = 35 + rand() * 30;
+            } else {
+              obj = buildObelisk();
+              dist = ROAD_HALF_WIDTH + 6 + rand() * 8;
+              gap = 20 + rand() * 15;
+            }
+            break;
+          case 'favela':
+            if (rand() < 0.8) {
+              obj = buildFavelaHouse(rand);
+              dist = ROAD_HALF_WIDTH + 4.5 + rand() * 5;
+              gap = 12 + rand() * 8;
+            } else {
+              obj = buildBeachUmbrella(rand);
+              dist = ROAD_HALF_WIDTH + 2.5 + rand() * 3;
+              gap = 10 + rand() * 6;
+            }
+            break;
+          case 'cyberarcade':
+            if (rand() < 0.75) {
+              obj = buildHoloSign(rand);
+              dist = ROAD_HALF_WIDTH + 5 + rand() * 6;
+              gap = 15 + rand() * 10;
+            } else {
+              const kit = assets.cityBuildings;
+              obj = kit.length ? kit[Math.floor(rand() * kit.length)].clone(true) : buildCityBuilding(rand);
+              dist = ROAD_HALF_WIDTH + 7 + rand() * 7;
+              gap = 18 + rand() * 12;
+            }
+            break;
         }
 
         track.place(obj, s, side * dist);
@@ -177,14 +213,27 @@ export class Scenery {
     // streetlights in the built-up districts; red lantern poles in the hutongs
     for (let s = 30, side = 1; s < track.length; s += 55, side = -side) {
       const flavor = flavorAt(s);
-      if (flavor === 'park' || flavor === 'palms') continue;
+      if (flavor === 'park' || flavor === 'palms' || flavor === 'pyramids') continue;
       const lamp = flavor === 'pagoda'
         ? buildLanternPole()
+        : flavor === 'cyberarcade'
+        ? buildArcadeArch()
         : assets.streetlight?.clone(true) ?? buildStreetlight();
       this.track.place(lamp, s, side * (ROAD_HALF_WIDTH + 1.2));
       lamp.rotation.y += side > 0 ? 0 : Math.PI;
       this.group.add(lamp);
       items.push({ s, obj: lamp });
+    }
+
+    // launch ramps along long straightaways (jump over traffic or catch air)
+    for (let rs = 220; rs < track.length - 150; rs += 450 + rand() * 250) {
+      if (Math.abs(track.frame(rs).curvature) < 0.005) {
+        const ramp = buildLaunchRamp();
+        track.place(ramp, rs, 0); // centered in the lane
+        this.group.add(ramp);
+        items.push({ s: rs, obj: ramp });
+        this.rampS.push(rs);
+      }
     }
 
     // red/white racing barriers through downtown — street-circuit dressing

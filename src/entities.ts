@@ -32,7 +32,8 @@ interface Obstacle {
 }
 
 const ZOMBIE_DENSITY: Record<Flavor, number> = {
-  towers: 0.85, palms: 0.6, pagoda: 0.9, park: 0.7, terrace: 1, market: 0.95
+  towers: 0.85, palms: 0.6, pagoda: 0.9, park: 0.7, terrace: 1, market: 0.95,
+  pyramids: 0.65, favela: 0.95, cyberarcade: 0.9
 };
 
 /**

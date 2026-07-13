@@ -627,6 +627,155 @@ export function buildCoin(): THREE.Mesh {
   );
 }
 
+export function buildPyramid(rand: () => number): THREE.Group {
+  const g = new THREE.Group();
+  const baseW = 12 + rand() * 14;
+  const height = baseW * (0.65 + rand() * 0.2);
+  const pyr = new THREE.Mesh(
+    new THREE.ConeGeometry(baseW, height, 4),
+    mat(0xcaa268)
+  );
+  pyr.position.y = height / 2;
+  pyr.rotation.y = Math.PI / 4;
+  g.add(pyr);
+  g.add(outlineFor(pyr, 1.02));
+  return g;
+}
+
+export function buildObelisk(): THREE.Group {
+  const g = new THREE.Group();
+  const pillar = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.5, 0.9, 11, 4),
+    mat(0xb89868)
+  );
+  pillar.position.y = 5.5;
+  pillar.rotation.y = Math.PI / 4;
+  g.add(pillar);
+  g.add(outlineFor(pillar));
+
+  const cap = new THREE.Mesh(
+    new THREE.ConeGeometry(0.7, 1.4, 4),
+    mat(0xffe93b, { emissive: 0xbfa018, emissiveIntensity: 0.6 })
+  );
+  cap.position.y = 11 + 0.7;
+  cap.rotation.y = Math.PI / 4;
+  g.add(cap);
+  return g;
+}
+
+export function buildFavelaHouse(rand: () => number): THREE.Group {
+  const g = new THREE.Group();
+  const colors = [0xff5c5c, 0x48b6ff, 0xffcd38, 0x5ce67c, 0xeb6b34, 0x9c5cff];
+  const tiers = 2 + Math.floor(rand() * 2);
+  let curY = 0;
+  for (let i = 0; i < tiers; i++) {
+    const w = (tiers - i) * 2.2 + rand() * 1.5;
+    const d = (tiers - i) * 2.2 + rand() * 1.5;
+    const h = 2.2 + rand() * 0.8;
+    const box = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(colors[Math.floor(rand() * colors.length)]));
+    box.position.set((rand() * 0.6 - 0.3), curY + h / 2, (rand() * 0.6 - 0.3));
+    g.add(box);
+    g.add(outlineFor(box));
+    curY += h;
+  }
+  return g;
+}
+
+export function buildBeachUmbrella(rand: () => number): THREE.Group {
+  const g = new THREE.Group();
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.8, 6), mat(0x8c6d46));
+  pole.position.y = 1.4;
+  g.add(pole);
+  const colors = [0xff3b3b, 0x3bd5ff, 0xffde3b, 0x52ff66];
+  const canopy = new THREE.Mesh(
+    new THREE.ConeGeometry(1.6, 0.6, 8, 1, true),
+    mat(colors[Math.floor(rand() * colors.length)], { side: THREE.DoubleSide })
+  );
+  canopy.position.y = 2.7;
+  g.add(canopy);
+  return g;
+}
+
+export function buildHoloSign(rand: () => number): THREE.Group {
+  const g = new THREE.Group();
+  const post = new THREE.Mesh(new THREE.BoxGeometry(0.4, 7, 0.4), mat(0x222634));
+  post.position.y = 3.5;
+  g.add(post);
+  const signColors = [0x00ffcc, 0xff2e8a, 0xffe93b, 0x8b5cf6];
+  const color = signColors[Math.floor(rand() * signColors.length)];
+  const sign = new THREE.Mesh(
+    new THREE.BoxGeometry(3.2, 4.5, 0.15),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.82 })
+  );
+  sign.position.set(1.6, 5.0, 0);
+  g.add(sign);
+  return g;
+}
+
+export function buildArcadeArch(): THREE.Group {
+  const g = new THREE.Group();
+  const matRed = mat(0xd9352b);
+  const matGold = mat(0xffe93b, { emissive: 0xc49a12, emissiveIntensity: 0.5 });
+  for (const side of [-1, 1]) {
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.6, 6, 0.6), matRed);
+    post.position.set(side * 3.8, 3, 0);
+    g.add(post);
+  }
+  const beam = new THREE.Mesh(new THREE.BoxGeometry(8.6, 1.2, 0.8), matRed);
+  beam.position.y = 6.2;
+  g.add(beam);
+  const crest = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.8, 0.9), matGold);
+  crest.position.y = 7.1;
+  g.add(crest);
+  return g;
+}
+
+export function buildBossTruck(paint = 0x2d343e): THREE.Group {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(2.3, 1.8, 5.4), mat(paint));
+  body.position.y = 1.3;
+  g.add(body);
+  g.add(outlineFor(body));
+
+  const cab = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.3, 2.2), mat(0x1a1d24));
+  cab.position.set(0, 2.4, -0.6);
+  g.add(cab);
+  g.add(outlineFor(cab));
+
+  const bullbar = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.8, 0.4), mat(0x768294));
+  bullbar.position.set(0, 0.9, -2.8);
+  g.add(bullbar);
+
+  // Siren
+  const siren = new THREE.Mesh(
+    new THREE.BoxGeometry(1.4, 0.25, 0.4),
+    new THREE.MeshBasicMaterial({ color: 0xff3b3b })
+  );
+  siren.position.set(0, 3.15, -0.6);
+  g.add(siren);
+
+  return g;
+}
+
+export function buildLaunchRamp(): THREE.Group {
+  const g = new THREE.Group();
+  const L = 5.5, H = 1.25, W = 4.2; // length (down-track), peak height, width
+  // right-triangle side profile — flat ground edge, hypotenuse ramps up to a
+  // vertical lip; extruded across the road width into a solid wedge
+  const shape = new THREE.Shape();
+  shape.moveTo(0, 0);
+  shape.lineTo(L, 0);
+  shape.lineTo(L, H);
+  shape.closePath();
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: W, bevelEnabled: false });
+  geo.translate(-L / 2, 0, -W / 2); // centre on the lane, base sitting on the road
+  const ramp = new THREE.Mesh(geo, mat(0xffcc00));
+  ramp.rotation.y = Math.PI / 2; // length runs down-track; slope faces the driver, lip forward
+  g.add(ramp);
+  g.add(outlineFor(ramp));
+  return g;
+}
+
 // deterministic PRNG so recycled chunks vary but stay reproducible per seed
 export function mulberry32(seed: number): () => number {
   let a = seed >>> 0;

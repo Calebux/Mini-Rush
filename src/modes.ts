@@ -15,6 +15,9 @@ export interface ModeSpec {
   guns?: boolean;      // tap fires the gun instead of nitro (pill fires nitro)
   latchers?: boolean;  // zombies cling to the car; shoot or scrape them off
   featured?: boolean;  // show directly on the main menu
+  heist?: boolean;     // Armored Heist: lead vehicle drops cash/bounty on hits & wreck
+  infected?: boolean;  // Infected Juggernaut: rivals infect player on hit; 10 splats cures + EMP
+  voltage?: boolean;   // Voltage Surge: nitro locked max, battery drains over time unless recharged
 }
 
 export const MODES: ModeSpec[] = [
@@ -64,5 +67,20 @@ export const MODES: ModeSpec[] = [
     id: 'trafficjam', name: 'TRAFFIC JAM', icon: '🚧',
     tagline: 'Dense pack racing with lighter hordes. Near misses and clean exits matter.',
     rivals: 5, zombieMul: 0.35, tumble: false, aggression: 0.35
+  },
+  {
+    id: 'heist', name: 'ARMORED HEIST', icon: '📦',
+    tagline: 'Slam or shoot the Boss Truck for cash loot. Wreck it for a +1000 pt bounty!',
+    rivals: 5, zombieMul: 0.8, tumble: true, aggression: 0.7, guns: true, featured: true, heist: true
+  },
+  {
+    id: 'infected', name: 'INFECTED JUGGERNAUT', icon: '🦠',
+    tagline: 'Hyper-aggressive infected rivals! Splat 10 zombies to cure virus and trigger EMP.',
+    rivals: 7, zombieMul: 1.8, tumble: true, aggression: 1, featured: true, infected: true
+  },
+  {
+    id: 'voltage', name: 'VOLTAGE SURGE', icon: '⚡',
+    tagline: 'Nitro locked at 100%! Battery drains continuously — grab nitro pods or stall out.',
+    rivals: 5, zombieMul: 1.2, tumble: false, aggression: 0.5, featured: true, voltage: true
   }
 ];
