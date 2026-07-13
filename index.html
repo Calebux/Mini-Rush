@@ -1,0 +1,800 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1020" />
+  <link rel="icon" href="data:," />
+  <title>MiniRush: Outbreak GP</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      background: #0b1020; color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      touch-action: none; overscroll-behavior: none;
+      user-select: none; -webkit-user-select: none;
+    }
+    #app { position: fixed; inset: 0; }
+    canvas { display: block; }
+
+    .overlay {
+      position: fixed; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 14px;
+      padding: max(20px, env(safe-area-inset-top)) 20px max(28px, env(safe-area-inset-bottom));
+      background: linear-gradient(180deg, rgba(6,8,20,.72), rgba(6,8,20,.86));
+      backdrop-filter: blur(4px); z-index: 10; text-align: center;
+      transition: opacity .25s ease;
+    }
+    .overlay.hidden { opacity: 0; pointer-events: none; }
+
+    .logo {
+      font-size: 48px; font-weight: 900; font-style: italic;
+      letter-spacing: -1px; line-height: 1; text-transform: uppercase;
+      transform: rotate(-3deg);
+      text-shadow: 0 3px 0 rgba(0,0,0,.5), 0 12px 34px rgba(252,255,82,.18);
+    }
+    .logo em {
+      font-style: italic;
+      background: linear-gradient(180deg, #fcff52 30%, #ff9a1f);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .sub-logo {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 13px; font-weight: 800; font-style: italic;
+      letter-spacing: 6px; color: #7fae5a;
+    }
+    .sub-logo::before, .sub-logo::after {
+      content: ''; width: 34px; height: 2px;
+      background: linear-gradient(90deg, transparent, #7fae5a);
+    }
+    .sub-logo::after { transform: scaleX(-1); }
+    .checker {
+      width: 168px; height: 8px; border-radius: 2px; opacity: .4;
+      background: repeating-conic-gradient(#fff 0 25%, #0b1020 0 50%) 0 0 / 16px 8px;
+      transform: rotate(-1.5deg);
+    }
+    .tag { font-size: 13px; opacity: .75; max-width: 280px; }
+
+    /* the menu is a race lobby over the live 3D scene */
+    #menu {
+      align-items: stretch; justify-content: space-between; text-align: left;
+      gap: 12px;
+      padding-left: max(16px, env(safe-area-inset-left));
+      padding-right: max(16px, env(safe-area-inset-right));
+      background:
+        radial-gradient(120% 44% at 58% -8%, rgba(252,255,82,.16), transparent 58%),
+        linear-gradient(180deg, rgba(6,8,20,.60) 0%, rgba(6,8,20,.34) 35%, rgba(6,8,20,.94) 72%, rgba(6,8,20,.98) 100%);
+      backdrop-filter: none;
+    }
+    .menu-top {
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+      width: min(100%, 520px); margin: 0 auto;
+    }
+    .brand-block { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; }
+    #menu .logo { font-size: clamp(38px, 11vw, 56px); }
+    #menu .sub-logo { letter-spacing: 4px; color: #a3ff2e; }
+    .menu-side {
+      display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+      padding-top: 4px;
+    }
+    .menu-track {
+      width: 112px; padding: 8px 9px 9px; border-radius: 8px;
+      background: rgba(6,8,20,.48); border: 1px solid rgba(255,255,255,.16);
+      box-shadow: 0 10px 28px rgba(0,0,0,.18);
+    }
+    .menu-track-head {
+      display: flex; justify-content: space-between; gap: 8px;
+      font-size: 8px; font-weight: 900; letter-spacing: 1.2px; color: rgba(255,255,255,.58);
+    }
+    #menu-map-canvas { display: block; width: 94px; height: 56px; margin-top: 4px; }
+    .menu-panel {
+      width: min(100%, 520px); margin: 0 auto;
+      display: flex; flex-direction: column; align-items: stretch; gap: 12px;
+      padding: 14px;
+      border-radius: 10px;
+      background: rgba(6,8,20,.72);
+      border: 1px solid rgba(255,255,255,.12);
+      box-shadow: 0 24px 70px rgba(0,0,0,.36), inset 0 1px 0 rgba(255,255,255,.06);
+      backdrop-filter: blur(6px);
+    }
+    .setup-strip {
+      display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px;
+    }
+    .setup-pill {
+      min-width: 0; padding: 9px 10px; border-radius: 8px;
+      background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+    }
+    .setup-pill span {
+      display: block; font-size: 8px; font-weight: 900; letter-spacing: 1.6px;
+      color: rgba(255,255,255,.48); margin-bottom: 3px;
+    }
+    .setup-pill strong {
+      display: block; font-size: 11px; font-weight: 900; color: #fff;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .menu-actions {
+      display: grid; grid-template-columns: 1fr auto; gap: 9px; align-items: stretch;
+    }
+    .menu-secondary {
+      display: grid; grid-template-columns: 1.2fr .8fr; gap: 8px;
+    }
+    #btn-play {
+      width: 100%; font-size: 24px; font-weight: 900; font-style: italic; letter-spacing: 2px;
+      padding: 17px 18px; transform: skewX(-8deg); margin-top: 0;
+      background: linear-gradient(180deg, #fcff52, #ffd52e);
+      box-shadow: 0 8px 30px rgba(252,255,82,.45), inset 0 -3px 0 rgba(0,0,0,.18);
+      animation: race-pulse 1.7s ease-in-out infinite;
+    }
+    #btn-play span { display: inline-block; transform: skewX(8deg); }
+    #btn-play:active { transform: skewX(-8deg) scale(.95); }
+    @keyframes race-pulse {
+      50% { box-shadow: 0 8px 44px rgba(252,255,82,.75), inset 0 -3px 0 rgba(0,0,0,.18); }
+    }
+    #wallet-chip { font-size: 12px; font-weight: 600; opacity: .55; }
+    #wallet-chip:empty { display: none; }
+
+    /* ---------- mode cards — the marquee of the menu ---------- */
+    .menu-label {
+      font-size: 10px; font-weight: 900; letter-spacing: 3px; color: rgba(255,255,255,.55);
+      margin-bottom: -4px;
+    }
+    #mode-select {
+      display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; width: 100%;
+    }
+    .mode-chip {
+      appearance: none; cursor: pointer; min-width: 0;
+      padding: 10px 5px 9px;
+      display: flex; flex-direction: column; align-items: center; gap: 5px;
+      background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.2);
+      border-radius: 8px; color: #fff; font-family: inherit;
+      transition: transform .08s ease, border-color .15s ease, background .15s ease;
+    }
+    .mode-chip:active { transform: scale(.95); }
+    .mode-chip .mi { font-size: 24px; line-height: 1; filter: grayscale(.7); opacity: .72; transition: transform .15s ease; }
+    .mode-chip .mn {
+      width: 100%; font-size: 8px; font-weight: 900; letter-spacing: .3px; opacity: .74;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .mode-chip .mr {
+      font-size: 7px; font-weight: 900; letter-spacing: 1px; color: rgba(255,255,255,.42);
+    }
+    .mode-chip.sel {
+      background: rgba(252,255,82,.14); border-color: #fcff52;
+      box-shadow: 0 0 24px rgba(252,255,82,.3), inset 0 1px 0 rgba(252,255,82,.25);
+      transform: translateY(-3px);
+    }
+    .mode-chip.sel .mi { filter: none; opacity: 1; transform: scale(1.15); }
+    .mode-chip.sel .mn { opacity: 1; color: #fcff52; }
+    .mode-chip.more {
+      background: rgba(255,255,255,.1);
+      border-style: dashed;
+    }
+    .mode-chip.more .mi { filter: none; opacity: .9; }
+    .mode-detail {
+      min-height: 54px; padding: 11px 12px; border-radius: 8px;
+      background: rgba(6,8,20,.48); border: 1px solid rgba(255,255,255,.14);
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    #mode-name-line { font-size: 12px; font-weight: 900; letter-spacing: 2px; color: #fcff52; }
+    #mode-tag { font-size: 12px; line-height: 1.35; opacity: .76; min-height: 16px; }
+    #lap-select.locked { opacity: .3; pointer-events: none; }
+
+    /* daily run — the comeback card: one shared circuit, one board, today only */
+    #btn-daily {
+      appearance: none; cursor: pointer; font-family: inherit;
+      width: 100%; padding: 11px 12px; border-radius: 8px;
+      display: flex; flex-direction: column; align-items: center; gap: 3px;
+      font-size: 12px; font-weight: 900; font-style: italic; letter-spacing: .4px;
+      color: #fcff52;
+      background: linear-gradient(100deg, rgba(252,255,82,.15), rgba(255,154,31,.08));
+      border: 1px solid rgba(252,255,82,.5);
+      box-shadow: 0 4px 20px rgba(252,255,82,.14);
+    }
+    #btn-daily:active { transform: scale(.97); }
+    #btn-daily small {
+      display: block; font-size: 10.5px; font-weight: 700; font-style: normal;
+      letter-spacing: .5px; color: #fff; opacity: .6;
+    }
+
+    /* best + coins as one stat strip */
+    #menu-stats {
+      display: flex; flex-direction: column; justify-content: center; gap: 2px;
+      min-width: 0; padding: 8px 10px; border-radius: 8px;
+      background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.12);
+    }
+    .mstat {
+      display: block; font-size: 11px; font-weight: 800; padding: 0; border-radius: 0;
+      background: transparent; border: 0; opacity: .78; white-space: nowrap; text-align: right;
+    }
+    #bank-line { color: #fcff52; opacity: 1; }
+
+    /* ---------- stage pages (garage / world tour): the 3D scene IS the
+       preview — clear middle, title up top, info card docked at the bottom */
+    .overlay.stage {
+      background: linear-gradient(180deg,
+        rgba(6,8,20,.62) 0%, rgba(6,8,20,0) 24%,
+        rgba(6,8,20,0) 50%, rgba(6,8,20,.78) 100%);
+      backdrop-filter: none;
+      justify-content: flex-end; gap: 12px;
+    }
+    .stage-head {
+      margin-bottom: auto; padding-top: max(10px, env(safe-area-inset-top));
+      display: flex; flex-direction: column; gap: 5px; align-items: center;
+    }
+    .stage-title {
+      font-size: 22px; font-weight: 900; letter-spacing: 5px;
+      text-shadow: 0 2px 12px rgba(0,0,0,.6);
+    }
+    .stage-title em { font-style: normal; color: #fcff52; }
+    .stage-step {
+      font-size: 9.5px; font-weight: 800; letter-spacing: 2px; opacity: .55;
+      text-shadow: 0 2px 8px rgba(0,0,0,.6);
+    }
+    .stage-back {
+      position: absolute; top: max(12px, env(safe-area-inset-top)); left: 14px;
+      appearance: none; cursor: pointer; width: 44px; height: 44px; border-radius: 50%;
+      font-size: 22px; font-weight: 800; color: #fff; line-height: 1;
+      background: rgba(6,8,20,.5); border: 1px solid rgba(255,255,255,.3); z-index: 2;
+    }
+    .stage-back:active { transform: scale(.9); }
+    .stage-arrow {
+      position: absolute; top: 44%; transform: translateY(-50%);
+      appearance: none; cursor: pointer; width: 54px; height: 54px; border-radius: 50%;
+      font-size: 26px; font-weight: 800; color: #fff; line-height: 1;
+      background: rgba(6,8,20,.5); border: 1px solid rgba(255,255,255,.35);
+      backdrop-filter: blur(3px);
+    }
+    .stage-arrow.left { left: 14px; }
+    .stage-arrow.right { right: 14px; }
+    .stage-arrow:active { transform: translateY(-50%) scale(.9); }
+    .stage-card {
+      width: min(86vw, 330px);
+      display: flex; flex-direction: column; gap: 7px; align-items: center;
+      background: rgba(6,8,20,.58); backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,.14); border-radius: 22px;
+      padding: 15px 18px 16px;
+    }
+    .stage-name { font-size: 19px; font-weight: 900; letter-spacing: 1px; }
+    .stage-cta { margin-top: 6px; padding: 12px 46px; font-size: 15px; }
+    #map-canvas { width: 170px; height: 100px; }
+    #map-route { font-size: 10px; font-weight: 800; letter-spacing: .5px; color: #fcff52; opacity: .85; }
+    #map-blurb { font-size: 11px; opacity: .55; }
+
+    /* ---------- garage card bits ---------- */
+    #car-chip {
+      width: 11px; height: 11px; border-radius: 50%; display: inline-block;
+      margin-right: 7px; vertical-align: baseline; box-shadow: 0 0 10px currentColor;
+    }
+    #car-blurb { font-size: 11px; opacity: .6; }
+    #car-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; width: 100%; margin-top: 2px; }
+    .cstat { display: flex; align-items: center; gap: 6px; }
+    .cstat span { width: 26px; font-size: 9px; font-weight: 800; letter-spacing: 1px; opacity: .55; text-align: right; }
+    .cstat .bar { flex: 1; height: 5px; border-radius: 3px; background: rgba(255,255,255,.15); overflow: hidden; }
+    .cstat .bar i { display: block; height: 100%; border-radius: 3px; background: #fcff52; transition: width .2s ease; }
+
+    /* ---------- leaderboard ---------- */
+    #tag-row { display: flex; align-items: center; gap: 10px; }
+    #tag-input {
+      appearance: none; width: 78px; text-align: center;
+      font-size: 18px; font-weight: 900; letter-spacing: 4px; text-transform: uppercase;
+      color: #fcff52; background: rgba(255,255,255,.1);
+      border: 1px solid rgba(255,255,255,.25); border-radius: 10px; padding: 8px 0 8px 4px;
+      outline: none; user-select: text; -webkit-user-select: text;
+      font-family: inherit;
+    }
+    #board-list {
+      width: min(82vw, 330px); display: flex; flex-direction: column; gap: 6px;
+      max-height: 46vh; overflow-y: auto;
+    }
+    .board-row {
+      display: flex; align-items: baseline; gap: 9px; padding: 8px 12px;
+      border-radius: 10px; background: rgba(255,255,255,.07); text-align: left;
+      font-variant-numeric: tabular-nums;
+    }
+    .board-row .rk { width: 20px; font-size: 13px; font-weight: 900; opacity: .55; flex: none; }
+    .board-row.top { background: rgba(252,255,82,.12); }
+    .board-row.top .rk { color: #fcff52; opacity: 1; }
+    .board-head {
+      font-size: 11px; font-weight: 800; letter-spacing: 2px; opacity: .6;
+      margin: 10px 0 4px; text-align: left;
+    }
+    .board-row .tg { font-size: 14px; font-weight: 900; letter-spacing: 2px; flex: none; }
+    .board-row .meta { font-size: 10px; opacity: .55; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .board-row .sc { font-size: 14px; font-weight: 900; color: #fcff52; flex: none; }
+    .board-empty { font-size: 13px; opacity: .6; padding: 18px 0; }
+    #r-rank { font-size: 13px; font-weight: 800; letter-spacing: 1px; color: #fcff52; min-height: 16px; }
+
+    /* ---------- mode browser ---------- */
+    #modes {
+      justify-content: flex-start; overflow-y: auto; text-align: left;
+      background:
+        linear-gradient(180deg, rgba(6,8,20,.82), rgba(6,8,20,.96)),
+        radial-gradient(80% 32% at 50% 0%, rgba(252,255,82,.12), transparent 70%);
+    }
+    .mode-page {
+      width: min(100%, 560px); margin: 0 auto;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    .mode-page-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding-top: 4px;
+    }
+    .mode-page-title {
+      font-size: 24px; font-weight: 900; font-style: italic; letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    .mode-grid {
+      display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px;
+      padding-bottom: 10px;
+    }
+    .mode-card {
+      appearance: none; cursor: pointer; min-height: 118px; text-align: left;
+      color: #fff; font-family: inherit; padding: 12px; border-radius: 8px;
+      background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.14);
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .mode-card.sel {
+      border-color: #fcff52; background: rgba(252,255,82,.12);
+      box-shadow: 0 0 24px rgba(252,255,82,.18);
+    }
+    .mode-card-top { display: flex; align-items: center; gap: 9px; }
+    .mode-card-icon { font-size: 25px; line-height: 1; }
+    .mode-card-name { font-size: 12px; font-weight: 900; letter-spacing: .6px; }
+    .mode-card-meta { font-size: 8px; font-weight: 900; letter-spacing: 1.4px; color: #fcff52; opacity: .9; }
+    .mode-card-copy { font-size: 11px; line-height: 1.35; opacity: .72; }
+    .mode-card-stats {
+      margin-top: auto; display: flex; gap: 5px; flex-wrap: wrap;
+    }
+    .mode-card-stats span {
+      font-size: 8px; font-weight: 900; letter-spacing: .8px;
+      padding: 4px 6px; border-radius: 999px;
+      background: rgba(255,255,255,.08); color: rgba(255,255,255,.72);
+    }
+
+    #lap-select { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+    .lap-label { font-size: 11px; font-weight: 800; letter-spacing: 2px; opacity: .6; }
+    .lap-chip {
+      appearance: none; cursor: pointer; width: 40px; height: 40px; border-radius: 50%;
+      font-size: 16px; font-weight: 800; color: #fff;
+      background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.25);
+    }
+    .lap-chip.sel { background: #fcff52; color: #0b1020; border-color: #fcff52; }
+
+    .btn {
+      appearance: none; border: none; cursor: pointer;
+      font-size: 17px; font-weight: 700; color: #0b1020;
+      background: #fcff52; border-radius: 999px; padding: 14px 38px;
+      box-shadow: 0 6px 24px rgba(252,255,82,.35);
+      transition: transform .08s ease;
+    }
+    .btn:active { transform: scale(.96); }
+    .btn.ghost { background: rgba(255,255,255,.12); color: #fff; box-shadow: none; font-weight: 600; font-size: 14px; padding: 11px 24px; }
+    #menu .btn.ghost {
+      border-radius: 8px; padding: 11px 10px; border: 1px solid rgba(255,255,255,.14);
+      font-size: 12px; font-weight: 800;
+    }
+
+    @media (max-width: 390px) {
+      #mode-select { gap: 5px; }
+      .mode-chip { padding-left: 3px; padding-right: 3px; }
+      .mode-chip .mi { font-size: 22px; }
+      .mode-chip .mn { font-size: 7px; }
+      .setup-pill { padding-left: 8px; padding-right: 8px; }
+      .menu-panel { padding: 11px; gap: 11px; }
+      .mode-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ---------- HUD ---------- */
+    #hud {
+      position: fixed; inset: 0; z-index: 5; pointer-events: none;
+      opacity: 0; transition: opacity .25s ease;
+      text-shadow: 0 2px 8px rgba(0,0,0,.6);
+    }
+    #hud.visible { opacity: 1; }
+    #hud-top {
+      position: absolute; top: max(12px, env(safe-area-inset-top)); left: 16px; right: 16px;
+      display: flex; justify-content: space-between; align-items: flex-start;
+    }
+    #hud-pos { font-size: 34px; font-weight: 900; line-height: 1; }
+    #hud-pos small { font-size: 16px; opacity: .7; }
+    #hud-lap { font-size: 14px; font-weight: 800; color: #fcff52; margin-top: 4px; letter-spacing: 1px; }
+    #hud-time { font-size: 13px; font-weight: 600; opacity: .85; margin-top: 2px; font-variant-numeric: tabular-nums; }
+    #hud-right { text-align: right; font-weight: 800; }
+    #hud-coins { font-size: 17px; color: #fcff52; }
+    #hud-zombies { font-size: 15px; color: #7fae5a; margin-top: 3px; }
+
+    #progress {
+      position: absolute; top: max(64px, calc(env(safe-area-inset-top) + 52px));
+      left: 50%; transform: translateX(-50%);
+      width: min(62vw, 260px); height: 6px; border-radius: 3px;
+      background: rgba(255,255,255,.18);
+    }
+    #progress .dot {
+      position: absolute; top: 50%; width: 10px; height: 10px; border-radius: 50%;
+      transform: translate(-50%, -50%); background: #9aa; transition: left .2s linear;
+    }
+    #progress .dot.player { background: #fcff52; width: 13px; height: 13px; box-shadow: 0 0 8px #fcff52; z-index: 2; }
+
+    /* style combo meter — under the progress bar, only alive mid-chain */
+    #style-ui {
+      position: absolute; top: max(78px, calc(env(safe-area-inset-top) + 66px));
+      left: 50%; transform: translateX(-50%);
+      display: flex; align-items: center; gap: 7px;
+      opacity: 0; transition: opacity .25s ease; pointer-events: none;
+    }
+    #style-ui.on { opacity: 1; }
+    #style-mult {
+      font-size: 17px; font-weight: 900; font-style: italic; color: #ffb84a;
+      text-shadow: 0 2px 6px rgba(0,0,0,.7);
+    }
+    #style-ui.hot #style-mult { color: #ff5e3a; }
+    #style-bar {
+      width: 74px; height: 5px; border-radius: 3px;
+      background: rgba(255,255,255,.18); overflow: hidden;
+    }
+    #style-fill {
+      display: block; height: 100%; width: 0;
+      background: linear-gradient(90deg, #ffb84a, #ff5e3a);
+      transition: width .12s linear;
+    }
+
+    #upgrade-row { display: flex; gap: 8px; margin-top: 8px; }
+    #upgrade-row.hidden { display: none; }
+    .upg {
+      flex: 1 1 0; padding: 7px 4px; border-radius: 10px; cursor: pointer;
+      background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.25);
+      color: #fff; font: inherit; font-size: 10px; font-weight: 800; letter-spacing: .5px;
+      display: flex; flex-direction: column; align-items: center; gap: 2px;
+    }
+    .upg .pips { color: #fcff52; font-size: 9px; letter-spacing: 2px; }
+    .upg .cost { color: #fcff52; opacity: .85; }
+    .upg:disabled { opacity: .38; pointer-events: none; }
+    .upg.maxed { border-color: rgba(252,255,82,.6); }
+
+    #car-lock {
+      display: flex; align-items: center; gap: 10px; margin-top: 6px;
+    }
+    #car-lock.hidden { display: none; }
+    #car-price { font-size: 15px; font-weight: 800; color: #fcff52; }
+    #btn-unlock { padding: 8px 18px; font-size: 13px; }
+    #btn-unlock:disabled { opacity: .35; pointer-events: none; }
+    #btn-garage-done.locked, #btn-tour-done.locked { opacity: .35; pointer-events: none; }
+    #bank-line, #garage-bank { color: #fcff52; opacity: .8; }
+    #btn-daily small { display: block; font-size: 10px; opacity: .65; font-weight: 600; letter-spacing: .5px; }
+
+    #nitro-ui {
+      position: absolute; bottom: max(22px, env(safe-area-inset-bottom)); left: 50%;
+      transform: translateX(-50%);
+      font-size: 14px; font-weight: 800; letter-spacing: 1px;
+      padding: 10px 22px; border-radius: 999px;
+      background: rgba(55,182,255,.16); border: 1px solid rgba(55,182,255,.5); color: #7fd4ff;
+      transition: opacity .2s ease;
+      pointer-events: auto; user-select: none; -webkit-user-select: none; touch-action: none;
+    }
+
+    /* ---------- doom-style gun (gun modes) ---------- */
+    #gun {
+      position: absolute; left: 50%; bottom: max(86px, calc(env(safe-area-inset-bottom) + 66px));
+      margin-left: -60px; width: 120px; height: 120px; z-index: 3; pointer-events: none;
+    }
+    #gun canvas, #gun-img {
+      width: 120px; height: 120px; image-rendering: pixelated;
+      filter: drop-shadow(0 5px 10px rgba(0,0,0,.55));
+    }
+    /* pack sprite (Guns Asset Pack) is a side view pointing right —
+       flip + tilt so the muzzle aims up-forward-left like the fallback pistol */
+    #gun-img {
+      object-fit: contain;
+      transform: scaleX(-1) rotate(-38deg);
+    }
+    #gun:has(#gun-img) #muzzle-flash { left: 10px; top: 22px; }
+    #muzzle-flash {
+      position: absolute; left: 16px; top: 28px; width: 36px; height: 36px; opacity: 0;
+      background: radial-gradient(circle,
+        #fff 0 22%, #ffe9a3 40%, rgba(255,154,31,.9) 62%, transparent 72%);
+    }
+    #muzzle-flash.fire { animation: muzzle .12s steps(2) forwards; }
+    @keyframes muzzle {
+      0% { opacity: 1; transform: scale(1.35); }
+      100% { opacity: 0; transform: scale(.6); }
+    }
+    #gun-ammo {
+      position: absolute; right: -6px; bottom: 10px;
+      font-size: 16px; font-weight: 900; font-style: italic; color: #ffb84a;
+      text-shadow: 0 2px 6px rgba(0,0,0,.75);
+    }
+    #gun-ammo.dry { color: #ff5252; }
+    #nitro-ui.none { opacity: .3; }
+    #nitro-ui.burning { background: rgba(55,182,255,.5); color: #fff; box-shadow: 0 0 24px rgba(55,182,255,.8); }
+
+    #hud-speed {
+      position: absolute; right: 18px;
+      bottom: max(118px, calc(env(safe-area-inset-bottom) + 98px));
+      text-align: right; line-height: 1;
+    }
+    #hud-speed-v { font-size: 40px; font-weight: 900; font-variant-numeric: tabular-nums; }
+    #hud-speed small { font-size: 11px; font-weight: 700; letter-spacing: 1px; opacity: .6; }
+
+    #btn-brake {
+      position: absolute; left: 18px; bottom: max(20px, env(safe-area-inset-bottom));
+      width: 74px; height: 74px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(255,70,70,.16); border: 2px solid rgba(255,70,70,.55); color: #ff8a8a;
+      pointer-events: auto; touch-action: none; user-select: none; -webkit-user-select: none;
+    }
+    #btn-brake svg { width: 34px; height: 34px; }
+    #btn-brake.held { background: rgba(255,70,70,.55); color: #fff; box-shadow: 0 0 24px rgba(255,70,70,.7); }
+
+    #btn-gas {
+      position: absolute; right: 18px; bottom: max(20px, env(safe-area-inset-bottom));
+      width: 84px; height: 84px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(252,255,82,.13); border: 2px solid rgba(252,255,82,.5); color: #fcff52;
+      pointer-events: auto; touch-action: none; user-select: none; -webkit-user-select: none;
+    }
+    #btn-gas svg { width: 40px; height: 40px; }
+    #btn-gas.held { background: rgba(252,255,82,.45); color: #fff; box-shadow: 0 0 26px rgba(252,255,82,.65); }
+
+    #btn-cam {
+      position: absolute; left: 26px; bottom: max(112px, calc(env(safe-area-inset-bottom) + 92px));
+      width: 44px; height: 44px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center; font-size: 20px;
+      background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.3);
+      pointer-events: auto; user-select: none; -webkit-user-select: none;
+    }
+    #btn-mute-race {
+      position: absolute; left: 26px; bottom: max(168px, calc(env(safe-area-inset-bottom) + 148px));
+      width: 44px; height: 44px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center; font-size: 20px;
+      background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.3);
+      pointer-events: auto; user-select: none; -webkit-user-select: none;
+    }
+    button#btn-mute { font: inherit; cursor: pointer; }
+
+    #tutorial {
+      position: fixed; top: max(118px, calc(env(safe-area-inset-top) + 104px));
+      left: 50%; transform: translateX(-50%);
+      max-width: 86vw; white-space: nowrap;
+      padding: 10px 20px; border-radius: 999px; z-index: 5; pointer-events: none;
+      background: rgba(6,8,20,.85); border: 1px solid rgba(252,255,82,.55);
+      font-size: 14px; font-weight: 800; letter-spacing: 1px; color: #fcff52;
+      animation: tut-pulse 1.1s ease-in-out infinite;
+      transition: opacity .25s ease;
+    }
+    #tutorial.hidden { display: none; }
+    @keyframes tut-pulse {
+      0%, 100% { transform: translateX(-50%) scale(1); }
+      50% { transform: translateX(-50%) scale(1.05); }
+    }
+
+    #combo {
+      position: fixed; top: 32%; left: 50%; transform: translateX(-50%);
+      z-index: 6; font-size: 22px; font-weight: 900; color: #fcff52;
+      opacity: 0; pointer-events: none; text-shadow: 0 2px 10px rgba(0,0,0,.6);
+      white-space: nowrap;
+    }
+    #combo.pop { animation: pop .7s ease forwards; }
+    @keyframes pop {
+      0% { opacity: 0; transform: translateX(-50%) scale(.6); }
+      20% { opacity: 1; transform: translateX(-50%) scale(1.15); }
+      100% { opacity: 0; transform: translateX(-50%) translateY(-30px) scale(1); }
+    }
+
+    /* anime-style speed lines during nitro */
+    #speedlines {
+      position: fixed; inset: -12%; z-index: 4; pointer-events: none;
+      opacity: 0; transition: opacity .15s ease;
+      background: repeating-conic-gradient(from 0deg at 50% 42%,
+        rgba(255,255,255,0) 0deg 10deg,
+        rgba(210,242,255,.55) 10deg 11.6deg);
+      -webkit-mask-image: radial-gradient(circle at 50% 42%, transparent 0 36%, #000 64%);
+      mask-image: radial-gradient(circle at 50% 42%, transparent 0 36%, #000 64%);
+    }
+    #speedlines.on { opacity: .75; animation: lines .34s steps(2) infinite; }
+    @keyframes lines { 50% { transform: rotate(5deg) scale(1.05); } }
+
+    #countdown {
+      position: fixed; inset: 0; z-index: 7; display: flex;
+      align-items: center; justify-content: center; pointer-events: none;
+      font-size: 110px; font-weight: 900; color: #fcff52;
+      text-shadow: 0 4px 30px rgba(0,0,0,.7); opacity: 0;
+    }
+    #countdown.show { opacity: 1; }
+
+    .stat-row { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
+    .stat { display: flex; flex-direction: column; gap: 2px; min-width: 64px; }
+    .stat .v { font-size: 24px; font-weight: 900; color: #fcff52; font-variant-numeric: tabular-nums; }
+    .stat .k { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; opacity: .65; }
+    #result-place { font-size: 64px; font-weight: 900; line-height: 1; }
+    #result-place em { font-style: normal; font-size: 26px; vertical-align: super; }
+
+    .hint { font-size: 12px; opacity: .55; max-width: 280px; }
+    .wallet-chip { font-size: 13px; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <div id="hud">
+    <div id="hud-top">
+      <div>
+        <div id="hud-pos">P1<small>/4</small></div>
+        <div id="hud-lap">LAP 1/2</div>
+        <div id="hud-time">0.00</div>
+      </div>
+      <div id="hud-right">
+        <div id="hud-coins">⬤ 0</div>
+        <div id="hud-zombies">☠ 0</div>
+      </div>
+    </div>
+    <div id="progress"></div>
+    <div id="style-ui"><span id="style-mult">×1</span><div id="style-bar"><i id="style-fill"></i></div></div>
+    <div id="nitro-ui" class="none">NITRO ×0 — TAP</div>
+    <div id="hud-speed"><span id="hud-speed-v">0</span><br /><small>KM/H</small></div>
+    <div id="btn-brake" aria-label="Brake">
+      <!-- brake warning symbol: (( ! )) -->
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <circle cx="12" cy="12" r="6.2" />
+        <path d="M12 8.6v4" />
+        <path d="M12 15.4v.01" />
+        <path d="M4.6 4.6a10.4 10.4 0 0 0 0 14.8" />
+        <path d="M19.4 4.6a10.4 10.4 0 0 1 0 14.8" />
+      </svg>
+    </div>
+    <div id="btn-gas" aria-label="Gas">
+      <!-- accelerator pedal -->
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <rect x="8" y="2.6" width="8" height="15" rx="3" transform="rotate(9 12 10)" />
+        <path d="M10.2 6.8l3.6.6" />
+        <path d="M9.7 10.1l3.6.6" />
+        <path d="M9.2 13.4l3.6.6" />
+        <path d="M11 18.6l-1.6 2.8" />
+      </svg>
+    </div>
+    <div id="btn-cam">📷</div>
+    <div id="btn-mute-race">🔊</div>
+  </div>
+  <div id="speedlines"></div>
+  <div id="combo"></div>
+  <div id="countdown"></div>
+  <div id="tutorial" class="hidden"></div>
+
+  <div class="overlay" id="menu">
+    <div class="menu-top">
+      <div class="brand-block">
+        <div class="logo">Mini<em>Rush</em></div>
+        <div class="sub-logo">OUTBREAK GP</div>
+        <div class="checker"></div>
+      </div>
+      <div class="menu-side">
+        <div class="menu-track">
+          <div class="menu-track-head"><span>LIVE</span><span>TRACK</span></div>
+          <canvas id="menu-map-canvas" width="188" height="112"></canvas>
+        </div>
+        <div class="wallet-chip" id="wallet-chip"></div>
+      </div>
+    </div>
+    <div class="menu-panel">
+      <div class="setup-strip">
+        <div class="setup-pill"><span>CITY</span><strong id="menu-city">LAGOS</strong></div>
+        <div class="setup-pill"><span>CAR</span><strong id="menu-car">VIPER GT</strong></div>
+        <div class="setup-pill"><span>LAPS</span><strong id="menu-laps">2 LAPS</strong></div>
+      </div>
+      <div class="menu-label">PICK YOUR CHAOS</div>
+      <div id="mode-select"></div>
+      <div class="mode-detail">
+        <div id="mode-name-line">GRAND PRIX</div>
+        <div id="mode-tag">Clean-ish racing. Beat 3 rivals over the line.</div>
+      </div>
+      <div class="menu-actions">
+        <button class="btn" id="btn-play"><span>RACE&nbsp;▸</span></button>
+        <button class="btn ghost" id="btn-board">🏆 Board</button>
+      </div>
+      <div class="menu-secondary">
+        <button id="btn-daily">⚡ DAILY RUN</button>
+        <div id="menu-stats">
+          <span class="mstat" id="best-line">Best score: 0</span>
+          <span class="mstat" id="bank-line">⬤ 0 coins</span>
+          <button class="mstat" id="btn-mute">🔊 SOUND</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay stage hidden" id="tour">
+    <button class="stage-back" id="tour-back">‹</button>
+    <div class="stage-head">
+      <div class="stage-title">WORLD <em>TOUR</em></div>
+      <div class="stage-step">STEP 1 / 2 — PICK YOUR CITY</div>
+    </div>
+    <button class="stage-arrow left" id="map-prev">‹</button>
+    <button class="stage-arrow right" id="map-next">›</button>
+    <div class="stage-card">
+      <div class="stage-name" id="map-name-t">🇳🇬 LAGOS</div>
+      <canvas id="map-canvas" width="340" height="200"></canvas>
+      <div id="map-route">The Island → Bar Beach → Balogun Market</div>
+      <div id="map-blurb">Flowing sweepers from the Island to the market.</div>
+      <button class="btn stage-cta" id="btn-tour-done">NEXT&nbsp;▸</button>
+    </div>
+  </div>
+
+  <div class="overlay stage hidden" id="garage">
+    <button class="stage-back" id="garage-back">‹</button>
+    <div class="stage-head">
+      <div class="stage-title">GAR<em>AGE</em></div>
+      <div class="stage-step">STEP 2 / 2 — PICK YOUR RIDE</div>
+    </div>
+    <button class="stage-arrow left" id="car-prev">‹</button>
+    <button class="stage-arrow right" id="car-next">›</button>
+    <div class="stage-card">
+      <div class="stage-name" id="car-name"><i id="car-chip"></i><span id="car-name-t">VIPER GT</span></div>
+      <div id="car-blurb">Balanced all-rounder</div>
+      <div id="car-stats">
+        <div class="cstat"><span>SPD</span><div class="bar"><i id="st-spd"></i></div></div>
+        <div class="cstat"><span>ACC</span><div class="bar"><i id="st-acc"></i></div></div>
+        <div class="cstat"><span>GRP</span><div class="bar"><i id="st-grp"></i></div></div>
+        <div class="cstat"><span>NOS</span><div class="bar"><i id="st-nos"></i></div></div>
+      </div>
+      <div id="upgrade-row">
+        <button class="upg" id="upg-speed"></button>
+        <button class="upg" id="upg-grip"></button>
+        <button class="upg" id="upg-nitro"></button>
+      </div>
+      <div id="lap-select">
+        <span class="lap-label">LAPS</span>
+        <button class="lap-chip" data-laps="1">1</button>
+        <button class="lap-chip sel" data-laps="2">2</button>
+        <button class="lap-chip" data-laps="4">4</button>
+      </div>
+      <div id="car-lock" class="hidden">
+        <span id="car-price">🔒 ⬤ 500</span>
+        <button class="btn ghost" id="btn-unlock">UNLOCK</button>
+      </div>
+      <div class="hint" id="garage-bank">⬤ 0 coins</div>
+      <button class="btn stage-cta" id="btn-garage-done">START&nbsp;RACE</button>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="results">
+    <div id="result-place">1<em>st</em></div>
+    <div id="r-rank"></div>
+    <div class="stat-row">
+      <div class="stat"><span class="v" id="r-time">0.0</span><span class="k">Time</span></div>
+      <div class="stat"><span class="v" id="r-zombies">0</span><span class="k">Zombies</span></div>
+      <div class="stat"><span class="v" id="r-coins">0</span><span class="k">Coins</span></div>
+      <div class="stat"><span class="v" id="r-style">0</span><span class="k">Style</span></div>
+      <div class="stat"><span class="v" id="r-score">0</span><span class="k">Score</span></div>
+    </div>
+    <button class="btn" id="btn-retry">RACE AGAIN</button>
+    <button class="btn ghost" id="btn-share">📤 Share</button>
+    <button class="btn ghost" id="btn-menu">Menu</button>
+  </div>
+
+  <div class="overlay hidden" id="board">
+    <div class="logo" style="font-size:30px">Leader<em>board</em></div>
+    <div id="tag-row">
+      <span class="lap-label">YOUR TAG</span>
+      <input id="tag-input" maxlength="3" autocomplete="off" spellcheck="false" enterkeyhint="done" />
+    </div>
+    <div id="board-list"></div>
+    <button class="btn ghost" id="btn-board-close">Back</button>
+  </div>
+
+  <div class="overlay hidden" id="modes">
+    <div class="mode-page">
+      <div class="mode-page-head">
+        <div>
+          <div class="mode-page-title">Race Modes</div>
+          <div class="stage-step">PICK THE RULESET</div>
+        </div>
+        <button class="btn ghost" id="btn-modes-close">Back</button>
+      </div>
+      <div class="mode-grid" id="mode-grid"></div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

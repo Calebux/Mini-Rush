@@ -1,0 +1,12 @@
+Car models & wheel: "PSX Style Cars" by GGBotNet (ggbot.itch.io/psx-style-cars)
+License: CC0 1.0 Universal (public domain)
+
+City buildings: "Downtown City MegaKit" (Standard/free) by Quaternius (quaternius.itch.io/downtown-city-megakit)
+Player car: Audi R8 model downloaded by the user from cgtrader (converted + restyled)
+
+Sprites & audio (../sprites, ../sfx):
+- UI sounds: "Universal UI Soundpack" by Cyrex Studios (cyrex-studios.itch.io/universal-ui-soundpack) — CC0
+- Gun sprite: "Guns Asset Pack v1" by ArcadeIsland (arcadeisland.itch.io/guns-asset-pack-v1)
+- Neon skyline: "Cyberpunk Street Environment" by ansimuz (ansimuz.itch.io/cyberpunk-street-environment)
+- Future skyline: "Free Futuristic City Pixel Art Backgrounds" by CraftPix (free-game-assets.itch.io)
+- Zombies: "Free Zombie Sprite Sheet Pack" by CraftPix (free-game-assets.itch.io)
