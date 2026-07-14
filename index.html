@@ -91,28 +91,38 @@
     .menu-panel {
       width: min(100%, 520px); margin: 0 auto;
       display: flex; flex-direction: column; align-items: stretch; gap: 12px;
-      padding: 14px;
-      border-radius: 10px;
-      background: rgba(6,8,20,.72);
-      border: 1px solid rgba(255,255,255,.12);
-      box-shadow: 0 24px 70px rgba(0,0,0,.36), inset 0 1px 0 rgba(255,255,255,.06);
-      backdrop-filter: blur(6px);
+      padding: 16px;
+      border-radius: 12px;
+      background: linear-gradient(180deg, rgba(14,19,38,.82) 0%, rgba(7,10,24,.92) 100%);
+      border: 1px solid rgba(255,255,255,.16);
+      box-shadow: 0 28px 80px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.12);
+      backdrop-filter: blur(8px);
     }
     .setup-strip {
-      display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px;
+      display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;
     }
     .setup-pill {
-      min-width: 0; padding: 9px 10px; border-radius: 8px;
-      background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14);
+      min-width: 0; padding: 10px 11px; border-radius: 9px; cursor: pointer;
+      background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.16);
       box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+      transition: all .15s ease;
     }
+    .setup-pill:hover {
+      background: rgba(252,255,82,.12); border-color: rgba(252,255,82,.6);
+      transform: translateY(-1.5px); box-shadow: 0 4px 14px rgba(0,0,0,.25);
+    }
+    .setup-pill:active { transform: translateY(0) scale(.98); }
     .setup-pill span {
       display: block; font-size: 8px; font-weight: 900; letter-spacing: 1.6px;
-      color: rgba(255,255,255,.48); margin-bottom: 3px;
+      color: rgba(255,255,255,.55); margin-bottom: 3px;
     }
     .setup-pill strong {
-      display: block; font-size: 11px; font-weight: 900; color: #fff;
+      display: block; font-size: 11.5px; font-weight: 900; color: #fff;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .menu-divider {
+      height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,.14), transparent);
+      margin: 1px 0;
     }
     .menu-actions {
       display: grid; grid-template-columns: 1fr auto; gap: 9px; align-items: stretch;
@@ -136,36 +146,65 @@
     #wallet-chip:empty { display: none; }
 
     /* ---------- mode cards — the marquee of the menu ---------- */
+    .menu-label-row {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: -1px; width: 100%;
+    }
     .menu-label {
-      font-size: 10px; font-weight: 900; letter-spacing: 3px; color: rgba(255,255,255,.55);
-      margin-bottom: -4px;
+      font-size: 10px; font-weight: 900; letter-spacing: 3px; color: rgba(255,255,255,.65);
     }
+    .mode-nav {
+      display: flex; align-items: center; gap: 6px;
+    }
+    .mode-hint {
+      font-size: 8.5px; font-weight: 900; letter-spacing: 1.2px; color: #fcff52; opacity: .9;
+      animation: hint-pulse 1.8s ease-in-out infinite;
+    }
+    @keyframes hint-pulse {
+      0%, 100% { opacity: .6; transform: translateX(0); }
+      50% { opacity: 1; transform: translateX(3px); }
+    }
+    .mode-arrow {
+      appearance: none; border: none; cursor: pointer; width: 24px; height: 24px; border-radius: 50%;
+      background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.32);
+      color: #fff; font-size: 15px; font-weight: 900; line-height: 1;
+      display: flex; align-items: center; justify-content: center;
+      transition: all .12s ease;
+    }
+    .mode-arrow:hover { background: #fcff52; color: #0b1020; transform: scale(1.1); }
+    .mode-arrow:active { transform: scale(.95); }
     #mode-select {
-      display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; width: 100%;
+      display: flex; gap: 8px; width: 100%; overflow-x: auto;
+      scroll-snap-type: x mandatory; padding-bottom: 4px;
+      -webkit-overflow-scrolling: touch; scrollbar-width: none;
+      -webkit-mask-image: linear-gradient(90deg, #000 0%, #000 86%, transparent 100%);
+      mask-image: linear-gradient(90deg, #000 0%, #000 86%, transparent 100%);
     }
+    #mode-select::-webkit-scrollbar { display: none; }
     .mode-chip {
-      appearance: none; cursor: pointer; min-width: 0;
-      padding: 10px 5px 9px;
-      display: flex; flex-direction: column; align-items: center; gap: 5px;
+      appearance: none; cursor: pointer; min-width: 105px; flex: 0 0 calc(28% - 6px);
+      scroll-snap-align: start;
+      padding: 11px 8px 10px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
       background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.2);
-      border-radius: 8px; color: #fff; font-family: inherit;
-      transition: transform .08s ease, border-color .15s ease, background .15s ease;
+      border-radius: 10px; color: #fff; font-family: inherit;
+      transition: transform .12s ease, border-color .15s ease, background .15s ease, box-shadow .15s ease;
     }
     .mode-chip:active { transform: scale(.95); }
-    .mode-chip .mi { font-size: 24px; line-height: 1; filter: grayscale(.7); opacity: .72; transition: transform .15s ease; }
+    .mode-chip .mi { font-size: 26px; line-height: 1; filter: grayscale(.7); opacity: .72; transition: transform .15s ease; }
     .mode-chip .mn {
-      width: 100%; font-size: 8px; font-weight: 900; letter-spacing: .3px; opacity: .74;
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      width: 100%; font-size: 9px; font-weight: 900; letter-spacing: .4px; opacity: .82;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center;
     }
     .mode-chip .mr {
-      font-size: 7px; font-weight: 900; letter-spacing: 1px; color: rgba(255,255,255,.42);
+      font-size: 7.5px; font-weight: 900; letter-spacing: 1px; color: rgba(255,255,255,.45);
     }
     .mode-chip.sel {
-      background: rgba(252,255,82,.14); border-color: #fcff52;
-      box-shadow: 0 0 24px rgba(252,255,82,.3), inset 0 1px 0 rgba(252,255,82,.25);
+      background: rgba(252,255,82,.16); border-color: #fcff52;
+      box-shadow: 0 6px 28px rgba(252,255,82,.32), inset 0 1px 0 rgba(252,255,82,.28);
       transform: translateY(-3px);
     }
-    .mode-chip.sel .mi { filter: none; opacity: 1; transform: scale(1.15); }
+    .mode-chip.sel .mi { filter: none; opacity: 1; transform: scale(1.18); }
     .mode-chip.sel .mn { opacity: 1; color: #fcff52; }
     .mode-chip.more {
       background: rgba(255,255,255,.1);
@@ -173,29 +212,33 @@
     }
     .mode-chip.more .mi { filter: none; opacity: .9; }
     .mode-detail {
-      min-height: 54px; padding: 11px 12px; border-radius: 8px;
-      background: rgba(6,8,20,.48); border: 1px solid rgba(255,255,255,.14);
+      min-height: 56px; padding: 12px 14px; border-radius: 9px;
+      background: rgba(6,8,20,.58); border: 1px solid rgba(255,255,255,.16);
       display: flex; flex-direction: column; gap: 4px;
     }
-    #mode-name-line { font-size: 12px; font-weight: 900; letter-spacing: 2px; color: #fcff52; }
-    #mode-tag { font-size: 12px; line-height: 1.35; opacity: .76; min-height: 16px; }
+    #mode-name-line { font-size: 13px; font-weight: 900; letter-spacing: 2px; color: #fcff52; }
+    #mode-tag { font-size: 12px; line-height: 1.35; opacity: .82; min-height: 16px; }
     #lap-select.locked { opacity: .3; pointer-events: none; }
 
-    /* daily run — the comeback card: one shared circuit, one board, today only */
+    /* daily run — special electric cyan & violet event card so it never clashes with yellow #btn-play */
     #btn-daily {
       appearance: none; cursor: pointer; font-family: inherit;
-      width: 100%; padding: 11px 12px; border-radius: 8px;
+      width: 100%; padding: 12px 14px; border-radius: 9px;
       display: flex; flex-direction: column; align-items: center; gap: 3px;
-      font-size: 12px; font-weight: 900; font-style: italic; letter-spacing: .4px;
-      color: #fcff52;
-      background: linear-gradient(100deg, rgba(252,255,82,.15), rgba(255,154,31,.08));
-      border: 1px solid rgba(252,255,82,.5);
-      box-shadow: 0 4px 20px rgba(252,255,82,.14);
+      font-size: 12.5px; font-weight: 900; font-style: italic; letter-spacing: .6px;
+      color: #00ffcc;
+      background: linear-gradient(100deg, rgba(0,255,204,.16), rgba(138,43,226,.18));
+      border: 1px solid rgba(0,255,204,.55);
+      box-shadow: 0 4px 22px rgba(0,255,204,.18);
+      transition: all .15s ease;
+    }
+    #btn-daily:hover {
+      border-color: #00ffcc; box-shadow: 0 6px 28px rgba(0,255,204,.35); transform: translateY(-1.5px);
     }
     #btn-daily:active { transform: scale(.97); }
     #btn-daily small {
       display: block; font-size: 10.5px; font-weight: 700; font-style: normal;
-      letter-spacing: .5px; color: #fff; opacity: .6;
+      letter-spacing: .5px; color: #fff; opacity: .7;
     }
 
     /* best + coins as one stat strip */
@@ -678,16 +721,24 @@
     </div>
     <div class="menu-panel">
       <div class="setup-strip">
-        <div class="setup-pill"><span>CITY</span><strong id="menu-city">LAGOS</strong></div>
-        <div class="setup-pill"><span>CAR</span><strong id="menu-car">VIPER GT</strong></div>
-        <div class="setup-pill"><span>LAPS</span><strong id="menu-laps">2 LAPS</strong></div>
+        <div class="setup-pill" id="pill-city"><span>CITY</span><strong id="menu-city">LAGOS</strong></div>
+        <div class="setup-pill" id="pill-car"><span>CAR</span><strong id="menu-car">VIPER GT</strong></div>
+        <div class="setup-pill" id="pill-laps"><span>LAPS</span><strong id="menu-laps">2 LAPS</strong></div>
       </div>
-      <div class="menu-label">PICK YOUR CHAOS</div>
+      <div class="menu-label-row">
+        <span class="menu-label">PICK YOUR CHAOS</span>
+        <div class="mode-nav">
+          <button class="mode-arrow" id="mode-left" aria-label="Previous modes">‹</button>
+          <span class="mode-hint">SWIPE ⇄</span>
+          <button class="mode-arrow" id="mode-right" aria-label="Next modes">›</button>
+        </div>
+      </div>
       <div id="mode-select"></div>
       <div class="mode-detail">
         <div id="mode-name-line">GRAND PRIX</div>
         <div id="mode-tag">Clean-ish racing. Beat 3 rivals over the line.</div>
       </div>
+      <div class="menu-divider"></div>
       <div class="menu-actions">
         <button class="btn" id="btn-play"><span>RACE&nbsp;▸</span></button>
         <button class="btn ghost" id="btn-board">🏆 Board</button>

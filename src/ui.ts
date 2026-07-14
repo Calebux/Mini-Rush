@@ -109,6 +109,29 @@ export class UI {
       this.exitDaily();
       goto('menu', 'tour');
     });
+    on('pill-city', () => {
+      this.audio.unlock();
+      this.exitDaily();
+      goto('menu', 'tour');
+    });
+    on('pill-car', () => {
+      this.audio.unlock();
+      this.exitDaily();
+      goto('menu', 'garage');
+    });
+    on('pill-laps', () => {
+      this.audio.unlock();
+      this.exitDaily();
+      goto('menu', 'garage');
+    });
+    on('mode-left', () => {
+      this.audio.play('click');
+      $('mode-select').scrollBy({ left: -220, behavior: 'smooth' });
+    });
+    on('mode-right', () => {
+      this.audio.play('click');
+      $('mode-select').scrollBy({ left: 220, behavior: 'smooth' });
+    });
     on('tour-back', () => goto('tour', 'menu', 'back'));
     on('btn-tour-done', () => goto('tour', 'garage'));
     on('garage-back', () => {
