@@ -76,26 +76,6 @@ node scripts/smoke.mjs [shotsDir]  # Playwright: full race → results → retry
 Exits non-zero on console errors or if the results screen never appears.
 Screenshots (menu, countdown, mid-race, results) land in `shotsDir`.
 
-## Global daily leaderboard (optional)
-
-The daily challenge can rank players worldwide, not just on-device. It's
-off by default — without a backend configured, the game stays fully local.
-
-To turn it on, spin up a free Supabase project and run
-[`supabase/schema.sql`](supabase/schema.sql) in its SQL editor (the file has
-step-by-step setup at the top), then create `.env.local` from `.env.example`:
-
-```bash
-VITE_LB_URL=https://your-project.supabase.co
-VITE_LB_KEY=your-anon-public-key
-```
-
-Restart `npm run dev`. Daily results then post to a shared board (best score
-per player per day) and the 🏆 panel gains a **🌍 GLOBAL DAILY** section, with
-your own row highlighted. Identity is the MiniPay wallet address when
-connected, otherwise a sticky per-device id. Every network call fails soft —
-a missing or down backend never breaks the game. See `src/remoteBoard.ts`.
-
 ## MiniPay integration
 
 - Detects the MiniPay provider (`window.ethereum.isMiniPay`) and
@@ -136,52 +116,7 @@ baked-in default in `src/wallet.ts`).
 
 ## Art & sound
 
-The visual style is cel-shaded PS2-era arcade — inspired by
-[Highway Warriors Remastered](https://jreo.itch.io/highway-warriors-remastered):
-toon-stepped lighting on everything, neon wedge sports cars with black cel
-outlines and underglow, a gradient sky dome with a retro sun, and anime speed
-lines during nitro. Loaded GLB kits are automatically re-skinned with toon
-materials so they match.
-
-**Cars are real 3D models**: [PSX Style Cars by GGBotNet](https://ggbot.itch.io/psx-style-cars)
-(CC0 public domain, credits bundled in `public/assets/models/CREDITS.txt`) —
-hand-drawn PS1-style photo textures, rendered with NearestFilter for crisp
-texels. The player drives a murdered-out Audi R8 (user-supplied cgtrader OBJ,
-decimated + cel-restyled via `scripts/bake-car-colors.cjs`); traffic includes
-a hot hatch, police car, taxi, rusty beater, van and wagon. City-district
-buildings are from Quaternius' free Downtown City MegaKit (stripped to
-base-color textures for the webview). Car bodies without wheels get the PSX
-pack's wheel model auto-mounted by `AssetLibrary.addWheels`. Drifting hard, running offroad and firing nitro
-all spawn billboard smoke/dust/exhaust puffs (`src/smoke.ts`) plus a tire-skid
-chirp.
-
-Everything else still has procedural fallback art. To swap in more kits, see
-**`public/assets/README.md`** — models and sounds are hot-swapped by filename:
-
-- [Downtown City MegaKit](https://quaternius.itch.io/downtown-city-megakit) — city district
-- [Voxel Desert Town](https://maxparata.itch.io/voxel-desert-town) — desert district
-- [Universal UI Soundpack](https://cyrex-studios.itch.io/universal-ui-soundpack) — UI + pickup SFX (shipped)
-- [Guns Asset Pack v1](https://arcadeisland.itch.io/guns-asset-pack-v1) — Doom-style gun overlay (shipped)
-- [Cyberpunk Street Environment](https://ansimuz.itch.io/cyberpunk-street-environment) — NEON CITY skyline (shipped)
-- [Free Futuristic City Backgrounds](https://free-game-assets.itch.io/free-futuristic-city-pixel-art-backgrounds) — spare skyline sprite (shipped)
-- [Free Zombie Sprite Sheet Pack](https://free-game-assets.itch.io/free-zombie-sprite-sheet-pack-pixel-art) — billboard zombies (shipped)
-
-## Structure
-
-```
-index.html          portrait UI shell (menu / HUD / countdown / results)
-src/game.ts         state machine, scoring, contacts, camera, biome blending
-src/track.ts        seeded closed-circuit spline (lap wrap, frames, curvature)
-src/scenery.ts      buildings/props per district, road tinting
-src/entities.ts     zombies, coins, nitro pickups — squash & collect
-src/player.ts       steering physics, nitro, bumping, off-road
-src/rivals.ts       3 AI racers with rubber-banding
-src/input.ts        drag steering + tap nitro (keys on desktop)
-src/ui.ts           HUD, race progress bar, pop text, results
-src/smoke.ts        pooled drift smoke / dust / nitro exhaust puffs
-src/assets.ts       GLB loader with per-file procedural fallback
-src/meshes.ts       procedural placeholder art (cel-shaded cars, buildings, zombies)
-src/toon.ts         toon materials, cel outlines, GLB re-skinning
-src/audio.ts        file SFX with WebAudio synth fallback
-src/wallet.ts       MiniPay / viem / cUSD
-```
+Cel-shaded PS2-era arcade style with real 3D models (CC0/free asset packs,
+credits in `public/assets/models/CREDITS.txt`), procedural fallback art where
+kits aren't loaded, and hot-swappable models/sounds by filename — see
+**`public/assets/README.md`** for the full asset list and credits.
