@@ -1,5 +1,7 @@
 # MiniRush — Outbreak GP 🧟🏁
 
+✅ **MiniPay ready** — auto-connects inside the MiniPay webview, no setup required.
+
 A mobile-first 3D racing game built for **MiniPay** (Celo).
 Race three AI rivals point-to-point through zombie-infested streets: drag to
 steer, tap to fire nitro, splat everything green for combo points, and grab
