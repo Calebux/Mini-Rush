@@ -2,6 +2,8 @@
 
 ✅ **MiniPay ready** — auto-connects inside the MiniPay webview, no setup required.
 
+🔗 **Play now:** [mini-rush.vercel.app](https://mini-rush.vercel.app/)
+
 A mobile-first 3D racing game built for **MiniPay** (Celo).
 Race three AI rivals point-to-point through zombie-infested streets: drag to
 steer, tap to fire nitro, splat everything green for combo points, and grab
