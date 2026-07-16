@@ -19,3 +19,4 @@ contracts/broadcast/
 
 # local agent settings (machine-specific permissions)
 .claude/settings.local.json
+.sim/

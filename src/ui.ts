@@ -5,7 +5,7 @@ import { bank, owned, unlock } from './economy';
 import { Leaderboard } from './leaderboard';
 import { MAPS } from './maps';
 import { MODES } from './modes';
-import { mapUnlocked } from './passport';
+import { mapUnlocked, stamps } from './passport';
 import { playerId, remoteEnabled, submitDaily, topDaily } from './remoteBoard';
 import { RunCard, shareRun } from './share';
 import {
@@ -91,7 +91,15 @@ export class UI {
       this.refreshDaily();
       this.refreshBank();
     });
-    void this.autoConnect(); // inside MiniPay the wallet just connects
+    void this.autoConnect(); // MiniPay connects silently; other wallets get a CONNECT chip
+
+    // wallet chip → driver card (connecting first if needed)
+    on('wallet-chip', () => void this.onWalletChip());
+    on('btn-profile-close', () => {
+      this.audio.play('back');
+      $('profile').classList.add('hidden');
+      this.menu.classList.remove('hidden');
+    });
 
     // race setup flow: RACE → city (tour flyby) → car (garage turntable)
     // + laps → START. The game camera follows each step via onPage.
@@ -649,22 +657,96 @@ export class UI {
   }
 
   /**
-   * MiniPay hands over the account without a dialog, so there's no Connect
-   * button — the chip quietly fills in with the address and cUSD balance.
-   * In a plain browser nothing shows at all.
+   * MiniPay hands over the account without a dialog, so the chip quietly
+   * fills in with the address and cUSD balance. Any other injected wallet
+   * gets an explicit CONNECT chip instead — connecting is never required
+   * to play. In a plain browser with no wallet nothing shows at all.
    */
   private async autoConnect(): Promise<void> {
-    if (!this.wallet.isMiniPay) return;
-    const chip = $('wallet-chip');
-    try {
-      await this.wallet.connect();
-      chip.textContent = this.wallet.shortAddress();
+    if (this.wallet.isMiniPay) {
       try {
-        chip.textContent = `${this.wallet.shortAddress()} · ${await this.wallet.cusdBalance()} cUSD`;
-      } catch { /* balance is best-effort */ }
-      // Register the player on-chain (idempotent, fire-and-forget).
+        await this.wallet.connect();
+        await this.refreshChip();
+        // Register the player on-chain (idempotent, fire-and-forget).
+        void this.wallet.signUp();
+      } catch { /* stay hidden */ }
+    } else if (this.wallet.available) {
+      const chip = $('wallet-chip');
+      chip.classList.add('connectable');
+      chip.textContent = '🔗 CONNECT';
+    }
+  }
+
+  private async refreshChip(): Promise<void> {
+    const chip = $('wallet-chip');
+    chip.classList.remove('connectable');
+    chip.textContent = this.wallet.shortAddress();
+    try {
+      chip.textContent = `${this.wallet.shortAddress()} · ${await this.wallet.cusdBalance()} cUSD`;
+    } catch { /* balance is best-effort */ }
+  }
+
+  /** Chip tap: connect first if needed, then open the driver card. */
+  private async onWalletChip(): Promise<void> {
+    if (!this.wallet.address) {
+      if (!this.wallet.available) return;
+      try {
+        await this.wallet.connect();
+      } catch {
+        return; // dialog dismissed — stay on the menu, chip keeps offering
+      }
       void this.wallet.signUp();
-    } catch { /* stay hidden */ }
+      void this.refreshChip();
+    }
+    this.audio.play('open');
+    this.renderProfile();
+    this.menu.classList.add('hidden');
+    $('profile').classList.remove('hidden');
+  }
+
+  /** The driver card: identity + local progress; on-chain stats fill in async. */
+  private renderProfile(): void {
+    $('profile-tag').textContent = this.board.tag;
+    $('profile-addr').textContent = this.wallet.shortAddress();
+    $('profile-balance').textContent = '';
+    void this.wallet.cusdBalance()
+      .then((b) => { $('profile-balance').textContent = `${b} cUSD`; })
+      .catch(() => { /* balance is best-effort */ });
+
+    $('p-best').textContent = String(this.best);
+    $('p-coins').textContent = String(bank());
+    const cars = CARS.filter((c) => c.price === 0 || owned().has(c.id)).length;
+    $('p-cars').textContent = `${cars}/${CARS.length}`;
+    const got = stamps();
+    $('p-stamps').textContent = `${got.size}/${MAPS.length}`;
+
+    const strip = $('profile-stamps');
+    strip.innerHTML = '';
+    for (const m of MAPS) {
+      const s = document.createElement('span');
+      s.className = got.has(m.id) ? 'pstamp got' : 'pstamp';
+      s.textContent = m.flag;
+      s.title = m.name;
+      strip.appendChild(s);
+    }
+
+    const note = $('profile-chain-note');
+    $('p-races').textContent = '…';
+    $('p-chain-best').textContent = '…';
+    note.textContent = '';
+    void this.wallet.stats().then((s) => {
+      if (!s) {
+        $('p-races').textContent = '—';
+        $('p-chain-best').textContent = '—';
+        note.textContent = 'On-chain stats unavailable right now.';
+        return;
+      }
+      $('p-races').textContent = String(s.races);
+      $('p-chain-best').textContent = String(s.bestScore);
+      note.textContent = s.registered
+        ? 'Synced to MiniRushTracker on Celo mainnet — your record follows this wallet everywhere.'
+        : 'Finish a race to write your first stats to Celo.';
+    });
   }
 
   showRace(): void {
