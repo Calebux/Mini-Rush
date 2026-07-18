@@ -14,6 +14,8 @@ import { StyleMeter } from './style';
 import { MAPS } from './maps';
 import { MODES } from './modes';
 import { mapUnlocked, stamp } from './passport';
+import { captureReferrer, creditReferral, getReferrer } from './referral';
+import { activeColor } from './skins';
 import { applyUpgrades } from './upgrades';
 import { Rival } from './rivals';
 import { InputManager } from './input';
@@ -22,10 +24,14 @@ import { RivalManager } from './rivals';
 import { Scenery } from './scenery';
 import { buildSkyline } from './skyline';
 import { SmokePool } from './smoke';
+import { recordLocalRace } from './stats';
+import { checkReward, recordDay } from './streak';
 import { toonMat } from './toon';
 import { Track } from './track';
 import { UI } from './ui';
 import { Wallet } from './wallet';
+import { rollWeather, WeatherSpec } from './weather';
+import { claimWeeklyPrize, weeklyMapIndex, weeklyModeIndex, weeklySeed } from './weekly';
 
 type State = 'boot' | 'menu' | 'countdown' | 'racing' | 'finished';
 
@@ -111,14 +117,25 @@ export class Game {
   private lastBumpAt = -10;       // trades paint ≠ a near miss
   private daily = false;
   private preDaily = { seed: 0, map: 0, mode: 0, laps: 2 }; // restored afterwards
+  private weekly = false;
+  private preWeekly = { seed: 0, map: 0, mode: 0, laps: 2 }; // restored afterwards
   private raceSeed = 0;           // seed this race was actually built from
   private ghostRec: GhostRecorder | null = null;
   private ghostData: GhostData | null = null;
   private ghostObj: THREE.Group | null = null;
 
+  // --- new features ---
+  private driftChain = 0;           // seconds of continuous drift
+  private driftBestThisRace = 0;    // longest single chain this race
+  private bossKillsThisRace = 0;
+  private weather: WeatherSpec | null = null;
+  private rainOverlay: HTMLElement | null = null;
+  private weatherLabel: HTMLElement | null = null;
+
   constructor(container: HTMLElement) {
     // debug/test handle (crashcheck.mjs pokes at physics through this)
     (window as unknown as { __game: Game }).__game = this;
+    captureReferrer();
     const qp = new URLSearchParams(location.search);
     this.trackLength = Number(qp.get('len')) || TRACK_LENGTH_DEFAULT;
     this.seedCounter = Number(qp.get('seed')) || Math.floor(Math.random() * 1e9);
@@ -173,6 +190,7 @@ export class Game {
     this.ui.setMap(this.mapIndex);
     this.ui.setMode(this.modeIndex);
     this.ui.onPlay = () => this.startRace();
+    this.ui.onRetrySame = () => this.retrySameTrack();
     this.ui.onLaps = (n) => (this.laps = n);
     this.ui.onCar = (i) => this.setCar(i);
     this.ui.onMap = (i) => this.setMap(i);
@@ -185,6 +203,8 @@ export class Game {
     };
     this.ui.onDaily = () => this.startDaily();
     this.ui.onDailyExit = () => this.exitDaily();
+    this.ui.onWeekly = () => this.startWeekly();
+    this.ui.onWeeklyExit = () => this.exitWeekly();
 
     this.gun = new GunHud(document.getElementById('hud')!);
 
@@ -323,14 +343,73 @@ export class Game {
     }
   }
 
+  /** Weekly Cup: one shared circuit per ISO week — fixed seed/map/mode/laps. */
+  private startWeekly(): void {
+    if (this.weekly) return;
+    this.weekly = true;
+    this.preWeekly = {
+      seed: this.seedCounter, map: this.mapIndex, mode: this.modeIndex, laps: this.laps
+    };
+    this.seedCounter = weeklySeed();
+    this.mapIndex = weeklyMapIndex(MAPS.length);
+    this.modeIndex = weeklyModeIndex(MODES.length);
+    this.laps = MODES[this.modeIndex].lapsLocked ?? 2;
+    this.disposeRace();
+    this.buildRace();
+    this.ui.setMap(this.mapIndex);
+    this.ui.setMode(this.modeIndex);
+  }
+
+  /** Restore whatever the player had picked before the Weekly Cup detour. */
+  private exitWeekly(): void {
+    if (!this.weekly) return;
+    this.weekly = false;
+    this.seedCounter = this.preWeekly.seed;
+    this.mapIndex = this.preWeekly.map;
+    this.modeIndex = this.preWeekly.mode;
+    this.laps = this.preWeekly.laps;
+    this.ui.setMap(this.mapIndex);
+    this.ui.setMode(this.modeIndex);
+    if (this.state === 'menu') {
+      this.disposeRace();
+      this.buildRace();
+    }
+  }
+
   private buildRace(): void {
     const seed = this.seedCounter;
     this.raceSeed = seed;
     const map = MAPS[this.mapIndex];
     const mode = MODES[this.modeIndex];
     this.track = new Track(seed, this.trackLength, map);
-    (this.scene.fog as THREE.Fog).near = map.fogNear;
-    (this.scene.fog as THREE.Fog).far = map.fogFar;
+
+    // weather
+    this.weather = rollWeather(map.id, seed);
+    const fogNear = map.fogNear * this.weather.fogMul;
+    const fogFar = map.fogFar * this.weather.fogMul;
+    (this.scene.fog as THREE.Fog).near = fogNear;
+    (this.scene.fog as THREE.Fog).far = fogFar;
+
+    // rain overlay
+    if (!this.rainOverlay) {
+      this.rainOverlay = document.getElementById('rain-overlay');
+    }
+    if (this.rainOverlay) {
+      this.rainOverlay.style.opacity = String(this.weather.rainIntensity);
+    }
+    // weather label
+    if (!this.weatherLabel) {
+      this.weatherLabel = document.getElementById('weather-label');
+    }
+    if (this.weatherLabel) {
+      if (this.weather.type !== 'clear') {
+        this.weatherLabel.textContent = `${this.weather.icon} ${this.weather.label}`;
+        this.weatherLabel.classList.remove('hidden');
+      } else {
+        this.weatherLabel.classList.add('hidden');
+      }
+    }
+
     // horizon panorama ring (rides in the sky group so it follows the camera)
     if (this.skyline) {
       this.sky.remove(this.skyline);
@@ -344,11 +423,17 @@ export class Game {
     this.entities = new Entities(
       this.scene, this.track, this.assets, seed, map, mode.zombieMul, !!mode.latchers
     );
-    this.player = new Player(this.scene, this.assets, this.track, applyUpgrades(CARS[this.carIndex]));
+    this.player = new Player(this.scene, this.assets, this.track, this.carSpec(this.carIndex));
     this.rivals = new RivalManager(
       this.scene, this.assets, this.track, CARS[this.carIndex].model,
       mode.rivals, mode.pursuit
     );
+    // weather grip modifier applies to the whole field, so bad weather slows
+    // the player and the AI alike (no rubber-band advantage in the rain)
+    if (this.weather && this.weather.gripMul !== 1) {
+      this.player.gripMul = this.weather.gripMul;
+      this.rivals.gripMul = this.weather.gripMul;
+    }
     this.resetGrid();
     this.ui.setRacers(mode.rivals + 1);
     this.ui.drawTrackMap(this.track.outline(), map.districts.map((d) => d.skyBottom));
@@ -361,13 +446,18 @@ export class Game {
     }
   }
 
+  /** The car spec to race/park: upgrades applied, active paint-job color swapped in. */
+  private carSpec(i: number) {
+    return { ...applyUpgrades(CARS[i]), color: activeColor(CARS[i].id) };
+  }
+
   /** Garage pick: persist, and swap the parked car live while in the menu. */
   private setCar(i: number): void {
     this.carIndex = i;
     localStorage.setItem('minirush.car', String(i));
     if (this.state === 'menu') {
       this.scene.remove(this.player.mesh);
-      this.player = new Player(this.scene, this.assets, this.track, applyUpgrades(CARS[i]));
+      this.player = new Player(this.scene, this.assets, this.track, this.carSpec(i));
       this.player.reset({ s: -6, x: -2 });
     }
   }
@@ -442,6 +532,10 @@ export class Game {
     this.lastSquashAt = -10;
     this.shake = 0;
     this.lastDistrict = -1;
+    this.driftChain = 0;
+    this.driftBestThisRace = 0;
+    this.bossKillsThisRace = 0;
+    this.ui.showDrift(null);
     const mode = MODES[this.modeIndex];
     this.ammo = mode.guns ? 8 : 0;
     this.gunCooldown = 0;
@@ -624,9 +718,19 @@ export class Game {
           (r) => r.finishTime >= 0 && r.finishTime < this.raceTime
         ).length;
     this.audio.play('finish');
+    if (navigator.vibrate) navigator.vibrate([40, 60, 120]);
     this.ui.endTutorial();
     this.audio.stopEngine();
     void this.audio.playMusic('menu');
+
+    // pay out any remaining drift chain
+    if (this.driftChain > 0.5) {
+      const driftPts = Math.floor(this.driftChain * 40);
+      this.zombieScore += driftPts;
+      this.ui.popText(`DRIFT ${this.driftChain.toFixed(1)}s +${driftPts}`, '#ffb84a');
+    }
+    this.driftChain = 0;
+    this.ui.showDrift(null);
 
     // passport: finishing (not fleeing busted) stamps the city
     if (!this.busted && stamp(MAPS[this.mapIndex].id)) {
@@ -635,6 +739,49 @@ export class Game {
     }
 
     deposit(this.coins); // race coins bank for the garage
+
+    // Record local stats
+    recordLocalRace({
+      place: this.playerPlace,
+      score: this.score(),
+      zombies: this.zombiesSquashed,
+      coins: this.coins,
+      modeId: MODES[this.modeIndex].id,
+      mapId: MAPS[this.mapIndex].id,
+      driftBest: this.driftBestThisRace,
+      bossKills: this.bossKillsThisRace
+    });
+
+    // Daily streak
+    if (this.daily) {
+      recordDay();
+      const reward = checkReward();
+      if (reward) {
+        setTimeout(() => {
+          this.ui.popText(`🔥 ${reward.milestone}-DAY STREAK! +${reward.coins} COINS`, '#00ffcc');
+        }, 2200);
+      }
+    }
+
+    // Weekly Cup prize (non-staked — coins, paid once per week for top-3)
+    if (this.weekly && !this.busted) {
+      const prize = claimWeeklyPrize(this.playerPlace);
+      if (prize > 0) {
+        setTimeout(() => {
+          this.ui.popText(`🏆 WEEKLY CUP PRIZE +${prize} COINS!`, '#fcff52');
+        }, 2200);
+      }
+    }
+
+    // Referral: credit local coins on first race, and record the referrer
+    // on-chain once (V2 only; fails soft otherwise).
+    if (creditReferral()) {
+      const referrer = getReferrer();
+      if (referrer) void this.wallet.recordReferral(referrer);
+      setTimeout(() => {
+        this.ui.popText('🎉 REFERRAL BONUS +50 COINS!', '#fcff52');
+      }, 3000);
+    }
 
     // Count the race on-chain (Celo). Fire-and-forget, fails soft in plain
     // browsers or when no tracker contract is configured.
@@ -654,6 +801,12 @@ export class Game {
     }
     // the daily circuit stays put all day; normal play moves to a fresh one
     if (!this.daily) this.seedCounter++;
+  }
+
+  /** Retry the exact same track (same seed). */
+  private retrySameTrack(): void {
+    this.seedCounter = this.raceSeed;
+    this.startRace();
   }
 
   private score(): number {
@@ -792,7 +945,7 @@ export class Game {
           this.ui.showResults(
             this.playerPlace, this.playerTime, this.zombiesSquashed, this.coins,
             this.score(), this.raceLaps, CARS[this.carIndex].name, this.busted,
-            this.style.score, this.daily
+            this.style.score, this.daily, this.weekly
           );
           // rebuild behind the results overlay so the menu previews the next circuit
           this.disposeRace();
@@ -888,10 +1041,27 @@ export class Game {
    */
   private updateStyle(dt: number, elapsed: number): void {
     const p = this.player;
-    if (p.drifting) this.style.driftTick(dt);
+    if (p.drifting) {
+      this.style.driftTick(dt);
+      this.driftChain += dt;
+      if (this.driftChain > this.driftBestThisRace) this.driftBestThisRace = this.driftChain;
+      this.ui.showDrift(this.driftChain);
+    } else if (this.driftChain > 0.5) {
+      // drift ended — pay out the chain
+      const driftPts = Math.floor(this.driftChain * 40);
+      this.zombieScore += driftPts;
+      this.ui.popText(`DRIFT ${this.driftChain.toFixed(1)}s +${driftPts}`, '#ffb84a');
+      if (navigator.vibrate) navigator.vibrate(25);
+      this.driftChain = 0;
+      this.ui.showDrift(null);
+    } else {
+      this.driftChain = 0;
+      this.ui.showDrift(null);
+    }
     if (this.style.update(dt)) {
       this.ui.popText(`STYLE ×${this.style.mult}`, '#ffb84a');
       this.audio.play('combo');
+      if (navigator.vibrate) navigator.vibrate(30);
     }
     const pursuit = !!MODES[this.modeIndex].pursuit;
     this.rivals.rivals.forEach((r, i) => {
@@ -964,6 +1134,29 @@ export class Game {
             }
           }
         }
+      }
+    }
+
+    // boss zombie: nitro drive-over is an instant kill, otherwise 3 hits
+    const boss = this.entities.trySquashBoss(ws, p.x, elapsed, p.nitroActive);
+    if (boss) {
+      if (boss.killed) {
+        this.zombieScore += 500;
+        this.coins += boss.coins;
+        this.bossKillsThisRace++;
+        this.zombiesSquashed++;
+        this.style.stoke(0.4);
+        this.shake = Math.max(this.shake, 1.6);
+        this.audio.play('crash');
+        this.audio.play('combo');
+        this.ui.popText('BOSS KILLED! +500', '#ff4a4a');
+        if (navigator.vibrate) navigator.vibrate([60, 40, 120]);
+      } else {
+        p.v = Math.max(9, p.v - 4); // brute shrugs you off
+        this.shake = Math.max(this.shake, 0.7);
+        this.audio.play('bump');
+        this.ui.popText('BOSS HIT!', '#ff8a3d');
+        if (navigator.vibrate) navigator.vibrate(45);
       }
     }
 

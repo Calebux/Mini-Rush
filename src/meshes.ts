@@ -575,6 +575,47 @@ export function buildZombie(rand: () => number): THREE.Group {
   return g;
 }
 
+/**
+ * Boss zombie: a hulking, blood-red brute. Same silhouette as buildZombie but
+ * bulkier and scaled up, so it reads as a mini-boss on the horde track.
+ */
+export function buildBossZombie(rand: () => number): THREE.Group {
+  const g = new THREE.Group();
+  const flesh = mat(0x8a2f22, { emissive: 0x501208, emissiveIntensity: 0.55 }); // angry red
+  const dark = mat(0x2a1512);
+
+  const legs = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.8, 0.42), dark);
+  legs.position.y = 0.4;
+  g.add(legs);
+
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.9, 0.5), flesh);
+  torso.position.y = 1.35;
+  g.add(torso);
+
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.56, 0.52), flesh);
+  head.position.y = 2.05;
+  head.rotation.z = (rand() - 0.5) * 0.3;
+  g.add(head);
+
+  // glowing eyes so it stands out in the horde
+  const eyeMat = mat(0xffdd22, { emissive: 0xffaa00, emissiveIntensity: 1 });
+  for (const side of [-1, 1]) {
+    const eye = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.06), eyeMat);
+    eye.position.set(side * 0.14, 2.08, 0.28);
+    g.add(eye);
+  }
+
+  for (const side of [-1, 1]) {
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 0.9), flesh);
+    arm.position.set(side * 0.6, 1.5, 0.5);
+    arm.rotation.x = -0.2;
+    g.add(arm);
+  }
+
+  g.scale.multiplyScalar(1.35);
+  return g;
+}
+
 export function buildNitro(): THREE.Group {
   const g = new THREE.Group();
   const tank = new THREE.Mesh(

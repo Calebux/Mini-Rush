@@ -13,6 +13,7 @@ export interface BoardEntry {
 
 const BOARD_KEY = 'minirush.board';
 const DAILY_PREFIX = 'minirush.board.daily.';
+const WEEKLY_PREFIX = 'minirush.board.weekly.';
 const TAG_KEY = 'minirush.tag';
 export const BOARD_SIZE = 10;
 
@@ -47,6 +48,16 @@ export class Leaderboard {
     return this.read(DAILY_PREFIX + day);
   }
 
+  /** Weekly Cup runs land on their own per-week board. */
+  submitWeekly(week: string, run: Omit<BoardEntry, 'tag' | 'at'>): number {
+    this.pruneWeekly(week);
+    return this.submitTo(WEEKLY_PREFIX + week, run);
+  }
+
+  weeklyEntries(week: string): BoardEntry[] {
+    return this.read(WEEKLY_PREFIX + week);
+  }
+
   private submitTo(key: string, run: Omit<BoardEntry, 'tag' | 'at'>): number {
     const entry: BoardEntry = { ...run, tag: this.tag, at: Date.now() };
     const all = [...this.read(key), entry]
@@ -71,6 +82,16 @@ export class Leaderboard {
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const k = localStorage.key(i);
       if (k && k.startsWith(DAILY_PREFIX) && k !== DAILY_PREFIX + today) {
+        localStorage.removeItem(k);
+      }
+    }
+  }
+
+  /** Last week's cup boards are dead weight — drop any that aren't this week's. */
+  private pruneWeekly(week: string): void {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(WEEKLY_PREFIX) && k !== WEEKLY_PREFIX + week) {
         localStorage.removeItem(k);
       }
     }

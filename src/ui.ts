@@ -1,17 +1,22 @@
 import { AudioManager } from './audio';
 import { CARS } from './cars';
 import { dailyMapIndex, dayKey } from './daily';
+import { weekKey, weeklyMapIndex, weeklyModeIndex, WEEKLY_PRIZES } from './weekly';
 import { bank, owned, unlock } from './economy';
 import { Leaderboard } from './leaderboard';
 import { MAPS } from './maps';
 import { MODES } from './modes';
-import { mapUnlocked } from './passport';
+import { mapUnlocked, stamps } from './passport';
 import { playerId, remoteEnabled, submitDaily, topDaily } from './remoteBoard';
+import { shareUrl } from './referral';
 import { RunCard, shareRun } from './share';
+import { activeSkinIndex, buySkin, CAR_SKINS, equipSkin, skinOwned } from './skins';
+import { favoriteMode, getStats, winRate } from './stats';
+import { currentStreak, weekProgress } from './streak';
 import {
   applyUpgrades, buyTier, MAX_TIER, TIER_COST, tier, UPGRADE_LABEL, UpgradeStat
 } from './upgrades';
-import { Wallet } from './wallet';
+import { BADGES, Wallet } from './wallet';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T =>
   document.getElementById(id) as T;
@@ -29,11 +34,15 @@ const MODE_RISK: Record<string, string> = {
   gunrun: 'ARMED',
   timeattack: 'GHOST',
   eliminator: 'KNOCKOUT',
-  trafficjam: 'DENSE'
+  trafficjam: 'DENSE',
+  heist: 'HEIST',
+  infected: 'VIRUS',
+  voltage: 'SURGE'
 };
 
 export class UI {
   onPlay: () => void = () => {};
+  onRetrySame: () => void = () => {};
   onBrake: (down: boolean) => void = () => {};
   onGas: (down: boolean) => void = () => {};
   onCamera: () => void = () => {};
@@ -45,6 +54,8 @@ export class UI {
   onNitroPress: () => void = () => {}; // the pill itself — needed when tap = shoot
   onDaily: () => void = () => {};      // daily challenge picked from the menu
   onDailyExit: () => void = () => {};  // backed out of / done with the daily
+  onWeekly: () => void = () => {};     // Weekly Cup picked from the menu
+  onWeeklyExit: () => void = () => {}; // backed out of / done with the Weekly Cup
 
   private menu = $('menu');
   private results = $('results');
@@ -60,6 +71,8 @@ export class UI {
   private combo = $('combo');
   private countdownEl = $('countdown');
   private progress = $('progress');
+  private driftUi = $('drift-ui');
+  private driftTime = $('drift-time');
   private modeButtons: HTMLElement[] = [];
   private modeCards: HTMLElement[] = [];
   private dots: HTMLElement[] = [];
@@ -68,6 +81,7 @@ export class UI {
   private mapIndex = 0;
   private pickedLaps = 2; // the user's own choice, restored when a lock lifts
   private dailyUi = false; // garage reached via DAILY RUN, not the tour flow
+  private weeklyUi = false; // garage reached via WEEKLY CUP, not the tour flow
   private tutTimers: number[] = [];
   private modeIndex = 0;
   private lastRun: RunCard | null = null;
@@ -80,18 +94,29 @@ export class UI {
         fn();
       });
     on('btn-retry', () => this.onPlay());
+    on('btn-retry-same', () => this.onRetrySame());
     on('btn-share', () => {
-      if (this.lastRun) void shareRun(this.lastRun);
+      if (this.lastRun) void shareRun(this.lastRun, shareUrl(this.wallet.address));
     });
     on('btn-menu', () => {
       this.audio.play('back');
       this.results.classList.add('hidden');
       this.menu.classList.remove('hidden');
       this.exitDaily();
+      this.exitWeekly();
       this.refreshDaily();
+      this.refreshWeekly();
       this.refreshBank();
     });
-    void this.autoConnect(); // inside MiniPay the wallet just connects
+    void this.autoConnect(); // MiniPay connects silently; other wallets get a CONNECT chip
+
+    // wallet chip → driver card (connecting first if needed)
+    on('wallet-chip', () => void this.onWalletChip());
+    on('btn-profile-close', () => {
+      this.audio.play('back');
+      $('profile').classList.add('hidden');
+      this.menu.classList.remove('hidden');
+    });
 
     // race setup flow: RACE → city (tour flyby) → car (garage turntable)
     // + laps → START. The game camera follows each step via onPage.
@@ -135,9 +160,10 @@ export class UI {
     on('tour-back', () => goto('tour', 'menu', 'back'));
     on('btn-tour-done', () => goto('tour', 'garage'));
     on('garage-back', () => {
-      // the daily skips the tour, so backing out returns to the menu
-      if (this.dailyUi) {
+      // the daily / weekly skip the tour, so backing out returns to the menu
+      if (this.dailyUi || this.weeklyUi) {
         this.exitDaily();
+        this.exitWeekly();
         goto('garage', 'menu', 'back');
       } else {
         goto('garage', 'tour', 'back');
@@ -157,6 +183,15 @@ export class UI {
       this.dailyUi = true;
       this.onDaily();
       this.selectLapChip(2, false);
+      $('lap-select').classList.add('locked');
+      goto('menu', 'garage');
+    });
+
+    // weekly cup: one shared circuit + mode all week, coin prizes — to the garage
+    on('btn-weekly', () => {
+      this.audio.unlock();
+      this.weeklyUi = true;
+      this.onWeekly();
       $('lap-select').classList.add('locked');
       goto('menu', 'garage');
     });
@@ -250,7 +285,7 @@ export class UI {
     let muted = localStorage.getItem(MUTE_KEY) === '1';
     const applyMute = () => {
       this.audio.setMuted(muted);
-      $('btn-mute').textContent = muted ? '🔇 MUTED' : '🔊 SOUND';
+      $('btn-mute').textContent = muted ? '🔇' : '🔊';
       $('btn-mute-race').textContent = muted ? '🔇' : '🔊';
     };
     applyMute();
@@ -264,6 +299,12 @@ export class UI {
         this.audio.play('click'); // audible confirmation only when unmuting
       });
     }
+
+    // master volume slider (menu) — reflects and drives audio.level
+    const vol = $<HTMLInputElement>('vol-slider');
+    vol.value = String(Math.round(this.audio.level * 100));
+    vol.addEventListener('pointerdown', (e) => e.stopPropagation());
+    vol.addEventListener('input', () => this.audio.setVolume(Number(vol.value) / 100));
 
     // the nitro pill doubles as a button (gun modes claim the tap for shooting)
     this.nitroUi.addEventListener('pointerdown', (e) => {
@@ -346,6 +387,7 @@ export class UI {
     this.refreshBest();
     this.refreshBank();
     this.refreshDaily();
+    this.refreshWeekly();
   }
 
   /** Leaving the daily flow: unlock the lap picker and tell the game. */
@@ -355,6 +397,15 @@ export class UI {
     $('lap-select').classList.remove('locked');
     this.selectLapChip(this.pickedLaps, false);
     this.onDailyExit();
+  }
+
+  /** Leaving the Weekly Cup flow: unlock the lap picker and tell the game. */
+  private exitWeekly(): void {
+    if (!this.weeklyUi) return;
+    this.weeklyUi = false;
+    $('lap-select').classList.remove('locked');
+    this.selectLapChip(this.pickedLaps, false);
+    this.onWeeklyExit();
   }
 
   private refreshBank(): void {
@@ -370,6 +421,33 @@ export class UI {
     $('btn-daily').innerHTML =
       `⚡ DAILY RUN — ${m.flag} ${m.name}` +
       (best ? `<small>today's top: ${best.score} (${best.tag})</small>` : '');
+    this.refreshStreak();
+  }
+
+  /** The Weekly Cup button shows this week's city + mode and top prize. */
+  private refreshWeekly(): void {
+    const m = MAPS[weeklyMapIndex(MAPS.length)];
+    const mode = MODES[weeklyModeIndex(MODES.length)];
+    const best = this.board.weeklyEntries(weekKey())[0];
+    $('btn-weekly').innerHTML =
+      `🏆 WEEKLY CUP — ${m.flag} ${m.name} · ${mode.icon} ${mode.name}` +
+      (best
+        ? `<small>this week's top: ${best.score} (${best.tag}) · win ⬤ ${WEEKLY_PRIZES[1]}</small>`
+        : `<small>place top 3 to win up to ⬤ ${WEEKLY_PRIZES[1]} coins</small>`);
+  }
+
+  /** Flame + day count next to the daily; hidden until a streak exists. */
+  private refreshStreak(): void {
+    const streak = currentStreak();
+    const line = $('streak-line');
+    if (streak <= 0) {
+      line.classList.add('hidden');
+      return;
+    }
+    const week = weekProgress();
+    const dots = week.map((done) => (done ? '●' : '○')).join('');
+    line.textContent = `🔥 ${streak}-day streak ${dots}`;
+    line.classList.remove('hidden');
   }
 
   /** Progress-bar dots for player + rivals; grid size varies per mode. */
@@ -560,6 +638,49 @@ export class UI {
         btn.disabled = maxed || bank() < TIER_COST[t];
       }
     }
+
+    this.renderSkins(isOwned);
+  }
+
+  /** Paint-job dots under the car. Tap an owned skin to equip, a locked one to buy. */
+  private renderSkins(carOwned: boolean): void {
+    const row = $('skin-row');
+    row.innerHTML = '';
+    const car = CARS[this.carIndex];
+    const skins = CAR_SKINS[car.id];
+    // skins only make sense once the car itself is owned
+    if (!carOwned || !skins || skins.length <= 1) return;
+
+    const label = document.createElement('span');
+    label.className = 'skin-label';
+    label.textContent = 'SKIN';
+    row.appendChild(label);
+
+    const active = activeSkinIndex(car.id);
+    skins.forEach((skin, i) => {
+      const dot = document.createElement('button');
+      const owned = skinOwned(car.id, i);
+      dot.className = 'skin-dot' + (i === active ? ' sel' : '') + (owned ? '' : ' locked');
+      const hex = `#${skin.color.toString(16).padStart(6, '0')}`;
+      dot.style.background = hex;
+      dot.style.color = hex; // drives the currentColor glow
+      dot.title = owned ? skin.name : `${skin.name} · ⬤ ${skin.price}`;
+      dot.addEventListener('click', () => {
+        dot.blur();
+        if (owned) {
+          equipSkin(car.id, i);
+          this.audio.play('select');
+        } else if (buySkin(car.id, i)) {
+          this.audio.play('buy');
+          this.refreshBank();
+        } else {
+          return; // can't afford
+        }
+        this.renderCar();
+        this.onCar(this.carIndex); // rebuild the preview with the new paint
+      });
+      row.appendChild(dot);
+    });
   }
 
   private renderBoard(): void {
@@ -649,22 +770,124 @@ export class UI {
   }
 
   /**
-   * MiniPay hands over the account without a dialog, so there's no Connect
-   * button — the chip quietly fills in with the address and cUSD balance.
-   * In a plain browser nothing shows at all.
+   * MiniPay hands over the account without a dialog, so the chip quietly
+   * fills in with the address and cUSD balance. Any other injected wallet
+   * gets an explicit CONNECT chip instead — connecting is never required
+   * to play. In a plain browser with no wallet nothing shows at all.
    */
   private async autoConnect(): Promise<void> {
-    if (!this.wallet.isMiniPay) return;
-    const chip = $('wallet-chip');
-    try {
-      await this.wallet.connect();
-      chip.textContent = this.wallet.shortAddress();
+    if (this.wallet.isMiniPay) {
       try {
-        chip.textContent = `${this.wallet.shortAddress()} · ${await this.wallet.cusdBalance()} cUSD`;
-      } catch { /* balance is best-effort */ }
-      // Register the player on-chain (idempotent, fire-and-forget).
+        await this.wallet.connect();
+        await this.refreshChip();
+        // Register the player on-chain (idempotent, fire-and-forget).
+        void this.wallet.signUp();
+      } catch { /* stay hidden */ }
+    } else if (this.wallet.available) {
+      const chip = $('wallet-chip');
+      chip.classList.add('connectable');
+      chip.textContent = '🔗 CONNECT';
+    }
+  }
+
+  private async refreshChip(): Promise<void> {
+    const chip = $('wallet-chip');
+    chip.classList.remove('connectable');
+    chip.textContent = this.wallet.shortAddress();
+    try {
+      chip.textContent = `${this.wallet.shortAddress()} · ${await this.wallet.cusdBalance()} cUSD`;
+    } catch { /* balance is best-effort */ }
+  }
+
+  /** Chip tap: connect first if needed, then open the driver card. */
+  private async onWalletChip(): Promise<void> {
+    if (!this.wallet.address) {
+      if (!this.wallet.available) return;
+      try {
+        await this.wallet.connect();
+      } catch {
+        return; // dialog dismissed — stay on the menu, chip keeps offering
+      }
       void this.wallet.signUp();
-    } catch { /* stay hidden */ }
+      void this.refreshChip();
+    }
+    this.audio.play('open');
+    this.renderProfile();
+    this.menu.classList.add('hidden');
+    $('profile').classList.remove('hidden');
+  }
+
+  /** The driver card: identity + local progress; on-chain stats fill in async. */
+  private renderProfile(): void {
+    $('profile-tag').textContent = this.board.tag;
+    $('profile-addr').textContent = this.wallet.shortAddress();
+    $('profile-balance').textContent = '';
+    void this.wallet.cusdBalance()
+      .then((b) => { $('profile-balance').textContent = `${b} cUSD`; })
+      .catch(() => { /* balance is best-effort */ });
+
+    $('p-best').textContent = String(this.best);
+    $('p-coins').textContent = String(bank());
+    const cars = CARS.filter((c) => c.price === 0 || owned().has(c.id)).length;
+    $('p-cars').textContent = `${cars}/${CARS.length}`;
+    const got = stamps();
+    $('p-stamps').textContent = `${got.size}/${MAPS.length}`;
+
+    const strip = $('profile-stamps');
+    strip.innerHTML = '';
+    for (const m of MAPS) {
+      const s = document.createElement('span');
+      s.className = got.has(m.id) ? 'pstamp got' : 'pstamp';
+      s.textContent = m.flag;
+      s.title = m.name;
+      strip.appendChild(s);
+    }
+
+    // career stats (local, lifetime)
+    const ls = getStats();
+    $('p-lraces').textContent = String(ls.totalRaces);
+    $('p-winrate').textContent = winRate();
+    const favMode = MODES.find((m) => m.id === favoriteMode());
+    $('p-favmode').textContent = ls.totalRaces > 0 && favMode ? favMode.icon : '—';
+    $('p-zombies').textContent = String(ls.zombiesTotal);
+    $('p-drift').textContent = ls.driftBest > 0 ? `${ls.driftBest.toFixed(1)}s` : '—';
+    $('p-boss').textContent = String(ls.bossKills);
+
+    // badges — all shown dim, earned ones lit once V2 reports the bitfield
+    const badgeRow = $('profile-badges');
+    badgeRow.innerHTML = '';
+    const badgeEls = BADGES.map((b) => {
+      const el = document.createElement('span');
+      el.className = 'badge locked';
+      el.textContent = b.icon;
+      el.title = b.label;
+      badgeRow.appendChild(el);
+      return el;
+    });
+    void this.wallet.badges().then((bits) => {
+      if (bits === null) return; // V2 off or unavailable — leave all dim
+      BADGES.forEach((b, i) => {
+        if (bits & (1 << b.bit)) badgeEls[i].classList.remove('locked');
+      });
+    });
+
+    const note = $('profile-chain-note');
+    $('p-races').textContent = '…';
+    $('p-chain-best').textContent = '…';
+    note.textContent = '';
+    void this.wallet.stats().then((s) => {
+      if (!s) {
+        $('p-races').textContent = '—';
+        $('p-chain-best').textContent = '—';
+        note.textContent = 'On-chain stats unavailable right now.';
+        return;
+      }
+      $('p-races').textContent = String(s.races);
+      $('p-chain-best').textContent = String(s.bestScore);
+      note.textContent = s.registered
+        ? 'Synced to MiniRushTracker on Celo mainnet — your record follows this wallet everywhere.'
+        : 'Finish a race to write your first stats to Celo.';
+    });
   }
 
   showRace(): void {
@@ -739,6 +962,16 @@ export class UI {
     });
   }
 
+  /** Live drift-chain readout on the HUD. Pass null (or ≤0) to hide it. */
+  showDrift(seconds: number | null): void {
+    if (!seconds || seconds < 0.35) {
+      this.driftUi.classList.remove('on');
+      return;
+    }
+    this.driftTime.textContent = `${seconds.toFixed(1)}s`;
+    this.driftUi.classList.add('on');
+  }
+
   popText(text: string, color = '#fcff52'): void {
     this.combo.textContent = text;
     this.combo.style.color = color;
@@ -749,16 +982,24 @@ export class UI {
 
   showResults(
     place: number, time: number, zombies: number, coins: number, score: number,
-    laps: number, car: string, busted = false, style = 0, daily = false
+    laps: number, car: string, busted = false, style = 0, daily = false, weekly = false
   ): void {
     const best = Math.max(this.best, score);
     localStorage.setItem(BEST_KEY, String(best));
-    // daily runs rank on today's shared-circuit board, not the all-time one
-    const rank = daily
-      ? this.board.submitDaily(dayKey(), { score, place, time, laps, car })
-      : this.board.submit({ score, place, time, laps, car });
-    $('r-rank').textContent =
-      rank > 0 ? (daily ? `#${rank} ON TODAY'S DAILY` : `#${rank} ON THE LEADERBOARD`) : '';
+    // daily / weekly runs rank on their own shared-circuit boards, not all-time
+    let rank: number;
+    if (weekly) {
+      rank = this.board.submitWeekly(weekKey(), { score, place, time, laps, car });
+    } else if (daily) {
+      rank = this.board.submitDaily(dayKey(), { score, place, time, laps, car });
+    } else {
+      rank = this.board.submit({ score, place, time, laps, car });
+    }
+    $('r-rank').textContent = rank > 0
+      ? weekly ? `#${rank} IN THE WEEKLY CUP`
+        : daily ? `#${rank} ON TODAY'S DAILY`
+        : `#${rank} ON THE LEADERBOARD`
+      : '';
     // …and race the world when the global board is configured
     if (daily && !busted) {
       void submitDaily(
@@ -795,6 +1036,7 @@ export class UI {
     this.refreshBest();
     this.refreshBank();
     this.refreshDaily();
+    this.refreshWeekly();
   }
 
   private refreshBest(): void {

@@ -44,6 +44,7 @@ const HAPTICS: Partial<Record<SfxName, number | number[]>> = {
   squish: 14,
   blowout: 70,
   shot: 20,
+  nitro: 30,
   go: 45,
   finish: [40, 60, 120]
 };
@@ -89,7 +90,33 @@ export class AudioManager {
   private musicName: string | null = null;
   private synthTimer: number | null = null;
   private musicVol = 0.3;
+  private masterGain: GainNode | null = null;
+  private volume = AudioManager.loadVolume();
   muted = false;
+
+  private static loadVolume(): number {
+    const v = Number(localStorage.getItem('minirush.volume'));
+    return Number.isFinite(v) && v >= 0 && v <= 1 ? v : 1;
+  }
+
+  /** All sound routes through here; null until the context is unlocked. */
+  private get out(): AudioNode {
+    return this.masterGain ?? this.ctx!.destination;
+  }
+
+  /** Current master volume (0..1), for the UI slider to reflect. */
+  get level(): number {
+    return this.volume;
+  }
+
+  /** Set master volume 0..1, applied live and persisted. */
+  setVolume(level: number): void {
+    this.volume = Math.min(1, Math.max(0, level));
+    localStorage.setItem('minirush.volume', String(this.volume));
+    if (this.masterGain && this.ctx) {
+      this.masterGain.gain.setTargetAtTime(this.volume, this.ctx.currentTime, 0.03);
+    }
+  }
 
   /** Mute/unmute everything live — running music and engine included. */
   setMuted(m: boolean): void {
@@ -114,6 +141,9 @@ export class AudioManager {
   unlock(): void {
     if (!this.ctx) {
       this.ctx = new AudioContext();
+      this.masterGain = this.ctx.createGain();
+      this.masterGain.gain.value = this.volume;
+      this.masterGain.connect(this.ctx.destination);
       void this.preload();
     }
     if (this.ctx.state === 'suspended') void this.ctx.resume();
@@ -154,7 +184,7 @@ export class AudioManager {
     src.loop = true;
     const gain = this.ctx.createGain();
     gain.gain.value = 0;
-    src.connect(gain).connect(this.ctx.destination);
+    src.connect(gain).connect(this.out);
     src.start();
     this.engineSrc = src;
     this.engineGain = gain;
@@ -203,7 +233,7 @@ export class AudioManager {
     const gain = this.ctx.createGain();
     gain.gain.setValueAtTime(0, this.ctx.currentTime);
     gain.gain.linearRampToValueAtTime(volume, this.ctx.currentTime + 1.2);
-    src.connect(gain).connect(this.ctx.destination);
+    src.connect(gain).connect(this.out);
     src.start();
     this.musicSrc = src;
     this.musicGain = gain;
@@ -259,7 +289,7 @@ export class AudioManager {
     g.gain.setValueAtTime(0, at);
     g.gain.linearRampToValueAtTime(peak, at + 0.015);
     g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
-    osc.connect(g).connect(ctx.destination);
+    osc.connect(g).connect(this.out);
     osc.start(at);
     osc.stop(at + dur + 0.05);
   }
@@ -273,7 +303,7 @@ export class AudioManager {
     osc.frequency.exponentialRampToValueAtTime(42, at + 0.11);
     g.gain.setValueAtTime(0.12, at);
     g.gain.exponentialRampToValueAtTime(0.0001, at + 0.13);
-    osc.connect(g).connect(ctx.destination);
+    osc.connect(g).connect(this.out);
     osc.start(at);
     osc.stop(at + 0.15);
   }
@@ -291,7 +321,7 @@ export class AudioManager {
     filter.frequency.value = 6500;
     const g = ctx.createGain();
     g.gain.value = 0.03;
-    noise.connect(filter).connect(g).connect(ctx.destination);
+    noise.connect(filter).connect(g).connect(this.out);
     noise.start(at);
   }
 
@@ -312,7 +342,7 @@ export class AudioManager {
       src.buffer = buf;
       const gain = this.ctx.createGain();
       gain.gain.value = volume;
-      src.connect(gain).connect(this.ctx.destination);
+      src.connect(gain).connect(this.out);
       src.start();
     } else {
       this.synth(name, volume);
@@ -323,7 +353,7 @@ export class AudioManager {
     const ctx = this.ctx!;
     const t = ctx.currentTime;
     const gain = ctx.createGain();
-    gain.connect(ctx.destination);
+    gain.connect(this.out);
 
     const tone = (freq: number, at: number, dur: number, type: OscillatorType = 'square', peak = 0.12) => {
       const osc = ctx.createOscillator();
@@ -333,7 +363,7 @@ export class AudioManager {
       g.gain.setValueAtTime(0, t + at);
       g.gain.linearRampToValueAtTime(peak * volume, t + at + 0.01);
       g.gain.exponentialRampToValueAtTime(0.0001, t + at + dur);
-      osc.connect(g).connect(ctx.destination);
+      osc.connect(g).connect(this.out);
       osc.start(t + at);
       osc.stop(t + at + dur + 0.02);
     };
@@ -359,7 +389,7 @@ export class AudioManager {
         filter.frequency.exponentialRampToValueAtTime(2200, t + len);
         const g = ctx.createGain();
         g.gain.value = 0.1 * volume;
-        noise.connect(filter).connect(g).connect(ctx.destination);
+        noise.connect(filter).connect(g).connect(this.out);
         noise.start(t);
         break;
       }
@@ -376,7 +406,7 @@ export class AudioManager {
         filter.frequency.exponentialRampToValueAtTime(180, t + len);
         const g = ctx.createGain();
         g.gain.value = 0.3 * volume;
-        noise.connect(filter).connect(g).connect(ctx.destination);
+        noise.connect(filter).connect(g).connect(this.out);
         noise.start(t);
         tone(90, 0, 0.4, 'sawtooth', 0.18);
         break;
@@ -404,7 +434,7 @@ export class AudioManager {
         filter.frequency.exponentialRampToValueAtTime(140, t + len);
         const g = ctx.createGain();
         g.gain.value = 0.22 * volume;
-        noise.connect(filter).connect(g).connect(ctx.destination);
+        noise.connect(filter).connect(g).connect(this.out);
         noise.start(t);
         tone(120, 0, 0.1, 'sine', 0.14);
         break;
@@ -423,7 +453,7 @@ export class AudioManager {
         filter.frequency.exponentialRampToValueAtTime(3600, t + len);
         const g = ctx.createGain();
         g.gain.value = 0.16 * volume;
-        noise.connect(filter).connect(g).connect(ctx.destination);
+        noise.connect(filter).connect(g).connect(this.out);
         noise.start(t);
         break;
       }
@@ -446,7 +476,7 @@ export class AudioManager {
         filter.frequency.exponentialRampToValueAtTime(1100, t + len);
         const g = ctx.createGain();
         g.gain.value = 0.08 * volume;
-        noise.connect(filter).connect(g).connect(ctx.destination);
+        noise.connect(filter).connect(g).connect(this.out);
         noise.start(t);
         break;
       }
@@ -463,7 +493,7 @@ export class AudioManager {
         filter.frequency.value = 1400;
         const g = ctx.createGain();
         g.gain.value = 0.28 * volume;
-        noise.connect(filter).connect(g).connect(ctx.destination);
+        noise.connect(filter).connect(g).connect(this.out);
         noise.start(t);
         tone(110, 0, 0.07, 'square', 0.14);
         break;
@@ -483,7 +513,7 @@ export class AudioManager {
         filter.frequency.exponentialRampToValueAtTime(700, t + len);
         const g = ctx.createGain();
         g.gain.value = 0.14 * volume;
-        noise.connect(filter).connect(g).connect(ctx.destination);
+        noise.connect(filter).connect(g).connect(this.out);
         noise.start(t + 0.04);
         break;
       }

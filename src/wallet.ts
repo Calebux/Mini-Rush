@@ -16,8 +16,34 @@ const TRACKER: Address =
   ((import.meta.env.VITE_TRACKER_ADDRESS as string | undefined) as Address) ||
   '0x51F572dF0C722DA24cFf02B5FddC949AEe6F293d'; // MiniRushTracker, Celo mainnet
 
+// MiniRushTrackerV2 — badges, per-mode counters, referrals. Deployed alongside
+// V1 (which is owner-less and can't be upgraded). Zero ⇒ V2 features simply off;
+// V1 remains the source of truth for the core race counter. Set via VITE_TRACKER_V2_ADDRESS.
+const TRACKER_V2: Address =
+  ((import.meta.env.VITE_TRACKER_V2_ADDRESS as string | undefined) as Address) ||
+  '0x0000000000000000000000000000000000000000';
+
 const trackingEnabled = (): boolean =>
   TRACKER !== '0x0000000000000000000000000000000000000000';
+
+const v2Enabled = (): boolean =>
+  TRACKER_V2 !== '0x0000000000000000000000000000000000000000';
+
+// Badge catalog — bit positions match MiniRushTrackerV2's bitfield. The contract
+// auto-awards these in recordRace(); the UI renders earned ones lit, the rest dim.
+export interface BadgeDef {
+  bit: number;
+  icon: string;
+  label: string;
+}
+export const BADGES: BadgeDef[] = [
+  { bit: 0, icon: '🥉', label: '10 races' },
+  { bit: 1, icon: '🥈', label: '50 races' },
+  { bit: 2, icon: '🥇', label: '100 races' },
+  { bit: 3, icon: '⚡', label: '5k score' },
+  { bit: 4, icon: '🔥', label: '10k score' },
+  { bit: 5, icon: '💎', label: '15k score' }
+];
 
 const ERC20_BALANCE_ABI = [
   {
@@ -49,6 +75,36 @@ const TRACKER_ABI = [
   },
   { name: 'totalPlayers', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
   { name: 'totalRaces', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] }
+] as const;
+
+const TRACKER_V2_ABI = [
+  {
+    name: 'recordRace', type: 'function', stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'score', type: 'uint32' }, { name: 'place', type: 'uint16' },
+      { name: 'mapId', type: 'uint16' }, { name: 'modeId', type: 'uint16' }
+    ],
+    outputs: []
+  },
+  {
+    name: 'recordReferral', type: 'function', stateMutability: 'nonpayable',
+    inputs: [{ name: 'referrer', type: 'address' }], outputs: []
+  },
+  { name: 'badgesOf', type: 'function', stateMutability: 'view', inputs: [{ name: 'player', type: 'address' }], outputs: [{ type: 'uint32' }] },
+  { name: 'referralsOf', type: 'function', stateMutability: 'view', inputs: [{ name: 'player', type: 'address' }], outputs: [{ type: 'uint32' }] },
+  {
+    name: 'statsOf', type: 'function', stateMutability: 'view',
+    inputs: [{ name: 'player', type: 'address' }],
+    outputs: [
+      { name: 'registered', type: 'bool' }, { name: 'races', type: 'uint32' },
+      { name: 'bestScore', type: 'uint32' }, { name: 'lastPlayed', type: 'uint64' }
+    ]
+  },
+  {
+    name: 'modeRacesOf', type: 'function', stateMutability: 'view',
+    inputs: [{ name: 'player', type: 'address' }, { name: 'modeId', type: 'uint16' }],
+    outputs: [{ type: 'uint32' }]
+  }
 ] as const;
 
 export interface RaceRecord {
@@ -139,25 +195,70 @@ export class Wallet {
     return this.write(encodeFunctionData({ abi: TRACKER_ABI, functionName: 'signUp' }));
   }
 
-  /** Record a finished race on-chain. Auto-signs-up on the player's first race. */
+  /**
+   * Record a finished race on-chain. Auto-signs-up on the player's first race.
+   * When V2 is configured the game cuts over to it (V2 reads V1 as a baseline,
+   * so race counts and badges stay continuous); otherwise it writes V1.
+   */
   async recordRace(run: RaceRecord): Promise<Hex | null> {
     const clamp = (n: number, max: number) => Math.max(0, Math.min(max, Math.round(n)));
+    const args = [
+      clamp(run.score, 0xffffffff), clamp(run.place, 0xffff),
+      clamp(run.mapId, 0xffff), clamp(run.modeId, 0xffff)
+    ] as const;
+    if (v2Enabled()) {
+      return this.write(
+        encodeFunctionData({ abi: TRACKER_V2_ABI, functionName: 'recordRace', args }),
+        TRACKER_V2
+      );
+    }
     return this.write(
-      encodeFunctionData({
-        abi: TRACKER_ABI,
-        functionName: 'recordRace',
-        args: [clamp(run.score, 0xffffffff), clamp(run.place, 0xffff), clamp(run.mapId, 0xffff), clamp(run.modeId, 0xffff)]
-      })
+      encodeFunctionData({ abi: TRACKER_ABI, functionName: 'recordRace', args })
     );
   }
 
-  /** This wallet's on-chain stats, or null if unavailable. */
+  /** Credit a referrer on-chain once (V2 only). Fails soft everywhere else. */
+  async recordReferral(referrer: string): Promise<Hex | null> {
+    if (!v2Enabled()) return null;
+    if (!/^0x[0-9a-fA-F]{40}$/.test(referrer)) return null;
+    if (this.address && referrer.toLowerCase() === this.address.toLowerCase()) return null; // no self-referral
+    return this.write(
+      encodeFunctionData({
+        abi: TRACKER_V2_ABI, functionName: 'recordReferral', args: [referrer as Address]
+      }),
+      TRACKER_V2
+    );
+  }
+
+  /** Earned-badge bitfield from V2, or null when V2 isn't configured/available. */
+  async badges(): Promise<number | null> {
+    if (!v2Enabled() || !this.address) return null;
+    try {
+      const bits = await this.reader().readContract({
+        address: TRACKER_V2, abi: TRACKER_V2_ABI, functionName: 'badgesOf', args: [this.address]
+      });
+      return Number(bits);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * This wallet's on-chain stats, or null if unavailable. Reads V2 when it's
+   * configured (its statsOf folds in the V1 baseline for a continuous number),
+   * otherwise V1.
+   */
   async stats(): Promise<PlayerStats | null> {
     if (!trackingEnabled() || !this.address) return null;
     try {
-      const [registered, races, bestScore] = await this.reader().readContract({
-        address: TRACKER, abi: TRACKER_ABI, functionName: 'statsOf', args: [this.address]
-      });
+      const client = this.reader();
+      const [registered, races, bestScore] = v2Enabled()
+        ? await client.readContract({
+            address: TRACKER_V2, abi: TRACKER_V2_ABI, functionName: 'statsOf', args: [this.address]
+          })
+        : await client.readContract({
+            address: TRACKER, abi: TRACKER_ABI, functionName: 'statsOf', args: [this.address]
+          });
       return { registered, races: Number(races), bestScore: Number(bestScore) };
     } catch {
       return null;
@@ -180,14 +281,14 @@ export class Wallet {
   }
 
   /** Send a tracker write: append the attribution suffix, pay fees in USDm. */
-  private async write(callData: Hex): Promise<Hex | null> {
+  private async write(callData: Hex, to: Address = TRACKER): Promise<Hex | null> {
     const provider = getProvider();
-    if (!trackingEnabled() || !this.address || !provider) return null;
+    if (to === '0x0000000000000000000000000000000000000000' || !this.address || !provider) return null;
     try {
       const client = createWalletClient({ chain: celo, transport: custom(provider) });
       return await client.sendTransaction({
         account: this.address,
-        to: TRACKER,
+        to,
         data: concat([callData, suffix()]),
         feeCurrency: CUSD
       });
