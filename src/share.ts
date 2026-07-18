@@ -20,25 +20,27 @@ export interface RunCard {
 const FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
 const SUFFIX = ['st', 'nd', 'rd', 'th'];
 
-export async function shareRun(run: RunCard): Promise<void> {
+export async function shareRun(run: RunCard, shareLink?: string): Promise<void> {
   const canvas = document.createElement('canvas');
   canvas.width = 1080;
   canvas.height = 1080;
   const ctx = canvas.getContext('2d')!;
-  draw(ctx, run);
+  draw(ctx, run, !!shareLink);
 
   const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/png'));
   if (!blob) return;
   const title = run.daily ? 'MiniRush — Daily Run' : 'MiniRush — Outbreak GP';
-  const text = run.busted
+  const brag = run.busted
     ? `I got BUSTED after ${run.time.toFixed(1)}s in MiniRush 🚔 — think you can escape?`
     : `${run.place}${SUFFIX[Math.min(run.place, 4) - 1]} in ${run.map} — ${run.time.toFixed(1)}s, ` +
       `${run.zombies} zombies, score ${run.score}. Beat that! 🏁`;
+  // the link carries the caller's ?ref= code — friends who tap it credit them
+  const text = shareLink ? `${brag}\nPlay free: ${shareLink}` : brag;
   const file = new File([blob], 'minirush-run.png', { type: 'image/png' });
 
   if (navigator.canShare?.({ files: [file] })) {
     try {
-      await navigator.share({ files: [file], title, text });
+      await navigator.share({ files: [file], title, text, url: shareLink });
       return;
     } catch { /* user closed the sheet — fall through to nothing */ }
     return;
@@ -51,7 +53,7 @@ export async function shareRun(run: RunCard): Promise<void> {
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 
-function draw(ctx: CanvasRenderingContext2D, run: RunCard): void {
+function draw(ctx: CanvasRenderingContext2D, run: RunCard, hasRefLink = false): void {
   const W = 1080, H = 1080;
 
   // night-race gradient + vignette
@@ -144,4 +146,11 @@ function draw(ctx: CanvasRenderingContext2D, run: RunCard): void {
   ctx.fillStyle = 'rgba(255,255,255,.45)';
   ctx.font = `700 28px ${FONT}`;
   ctx.fillText('🧟 CAN YOU BEAT IT? 🏁', W / 2, 980);
+
+  // referral hint — the tappable link rides in the post text, not the image
+  if (hasRefLink) {
+    ctx.fillStyle = '#00ffcc';
+    ctx.font = `800 30px ${FONT}`;
+    ctx.fillText('▶ PLAY FREE — LINK IN POST', W / 2, 1032);
+  }
 }

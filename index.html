@@ -297,6 +297,27 @@
       letter-spacing: .5px; color: #fff; opacity: .7;
     }
 
+    /* weekly cup — gold trophy event card, non-staked coin prizes */
+    #btn-weekly {
+      appearance: none; cursor: pointer; font-family: inherit; margin-top: 8px;
+      width: 100%; padding: 12px 14px; border-radius: 9px;
+      display: flex; flex-direction: column; align-items: center; gap: 3px;
+      font-size: 12.5px; font-weight: 900; font-style: italic; letter-spacing: .6px;
+      color: #fcd34d;
+      background: linear-gradient(100deg, rgba(252,211,77,.16), rgba(255,138,61,.16));
+      border: 1px solid rgba(252,211,77,.55);
+      box-shadow: 0 4px 22px rgba(252,211,77,.16);
+      transition: all .15s ease;
+    }
+    #btn-weekly:hover {
+      border-color: #fcd34d; box-shadow: 0 6px 28px rgba(252,211,77,.32); transform: translateY(-1.5px);
+    }
+    #btn-weekly:active { transform: scale(.97); }
+    #btn-weekly small {
+      display: block; font-size: 10.5px; font-weight: 700; font-style: normal;
+      letter-spacing: .5px; color: #fff; opacity: .72;
+    }
+
     /* best + coins as one stat strip */
     #menu-stats {
       display: flex; flex-direction: column; justify-content: center; gap: 2px;
@@ -652,6 +673,64 @@
     }
     button#btn-mute { font: inherit; cursor: pointer; }
 
+    /* ---------- weather ---------- */
+    #weather-label {
+      font-size: 11px; font-weight: 800; letter-spacing: 1px; color: #9fd8ff;
+      margin-top: 3px; text-shadow: 0 2px 6px rgba(0,0,0,.6);
+    }
+    #weather-label.hidden { display: none; }
+    #rain-overlay {
+      position: fixed; inset: 0; z-index: 4; pointer-events: none; opacity: 0;
+      background: repeating-linear-gradient(105deg,
+        transparent 0 7px, rgba(170,200,255,.16) 7px 8.5px, transparent 8.5px 14px);
+      animation: rain-shift .5s linear infinite;
+      transition: opacity .8s ease;
+    }
+    @keyframes rain-shift {
+      from { background-position: 0 0; }
+      to { background-position: -30px 120px; }
+    }
+
+    /* ---------- drift chain indicator ---------- */
+    #drift-ui {
+      position: absolute; right: 18px;
+      bottom: max(168px, calc(env(safe-area-inset-bottom) + 148px));
+      text-align: right; font-size: 16px; font-weight: 900; font-style: italic;
+      color: #ffb84a; letter-spacing: 1px; text-shadow: 0 2px 8px rgba(0,0,0,.7);
+      opacity: 0; transition: opacity .15s ease; pointer-events: none;
+    }
+    #drift-ui.on { opacity: 1; }
+    #drift-ui small { display: block; font-size: 9.5px; font-style: normal; letter-spacing: 2px; opacity: .7; }
+
+    /* ---------- garage skin picker ---------- */
+    #skin-row { display: flex; gap: 9px; margin-top: 4px; align-items: center; }
+    .skin-dot {
+      width: 22px; height: 22px; border-radius: 50%; cursor: pointer; padding: 0;
+      border: 2px solid rgba(255,255,255,.25); position: relative;
+      box-shadow: 0 0 8px currentColor;
+    }
+    .skin-dot.sel { border-color: #fcff52; transform: scale(1.18); }
+    .skin-dot.locked::after {
+      content: '🔒'; position: absolute; inset: 0; font-size: 10px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .skin-label { font-size: 10px; font-weight: 800; letter-spacing: .5px; color: #fcff52; opacity: .85; }
+
+    /* ---------- volume ---------- */
+    #vol-row { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+    #vol-slider { width: 72px; height: 4px; accent-color: #fcff52; cursor: pointer; }
+    #streak-line { color: #00ffcc; opacity: 1; }
+    #streak-line.hidden { display: none; }
+
+    /* ---------- profile badges ---------- */
+    .profile-badges { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+    .badge {
+      font-size: 16px; width: 30px; height: 30px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.18);
+    }
+    .badge.locked { filter: grayscale(1); opacity: .35; }
+
     #tutorial {
       position: fixed; top: max(118px, calc(env(safe-area-inset-top) + 104px));
       left: 50%; transform: translateX(-50%);
@@ -722,6 +801,7 @@
         <div id="hud-pos">P1<small>/4</small></div>
         <div id="hud-lap">LAP 1/2</div>
         <div id="hud-time">0.00</div>
+        <div id="weather-label" class="hidden"></div>
       </div>
       <div id="hud-right">
         <div id="hud-coins">⬤ 0</div>
@@ -754,7 +834,9 @@
     </div>
     <div id="btn-cam">📷</div>
     <div id="btn-mute-race">🔊</div>
+    <div id="drift-ui"><small>DRIFT</small><span id="drift-time">0.0s</span></div>
   </div>
+  <div id="rain-overlay"></div>
   <div id="speedlines"></div>
   <div id="combo"></div>
   <div id="countdown"></div>
@@ -801,10 +883,15 @@
       </div>
       <div class="menu-secondary">
         <button id="btn-daily">⚡ DAILY RUN</button>
+        <button id="btn-weekly">🏆 WEEKLY CUP</button>
         <div id="menu-stats">
           <span class="mstat" id="best-line">Best score: 0</span>
           <span class="mstat" id="bank-line">⬤ 0 coins</span>
-          <button class="mstat" id="btn-mute">🔊 SOUND</button>
+          <span class="mstat hidden" id="streak-line"></span>
+          <div id="vol-row">
+            <button class="mstat" id="btn-mute">🔊</button>
+            <input type="range" id="vol-slider" min="0" max="100" aria-label="Volume" />
+          </div>
         </div>
       </div>
     </div>
@@ -844,6 +931,7 @@
         <div class="cstat"><span>GRP</span><div class="bar"><i id="st-grp"></i></div></div>
         <div class="cstat"><span>NOS</span><div class="bar"><i id="st-nos"></i></div></div>
       </div>
+      <div id="skin-row"></div>
       <div id="upgrade-row">
         <button class="upg" id="upg-speed"></button>
         <button class="upg" id="upg-grip"></button>
@@ -875,6 +963,7 @@
       <div class="stat"><span class="v" id="r-score">0</span><span class="k">Score</span></div>
     </div>
     <button class="btn" id="btn-retry">RACE AGAIN</button>
+    <button class="btn ghost" id="btn-retry-same">🔁 SAME TRACK</button>
     <button class="btn ghost" id="btn-share">📤 Share</button>
     <button class="btn ghost" id="btn-menu">Menu</button>
   </div>
@@ -907,6 +996,17 @@
       </div>
       <div class="profile-head">🛂 WORLD TOUR PASSPORT</div>
       <div class="profile-stamps" id="profile-stamps"></div>
+      <div class="profile-head">📈 CAREER</div>
+      <div class="profile-grid">
+        <div class="pstat"><span class="v" id="p-lraces">0</span><span class="k">Races</span></div>
+        <div class="pstat"><span class="v" id="p-winrate">—</span><span class="k">Win rate</span></div>
+        <div class="pstat"><span class="v" id="p-favmode">—</span><span class="k">Fav mode</span></div>
+        <div class="pstat"><span class="v" id="p-zombies">0</span><span class="k">Zombies</span></div>
+        <div class="pstat"><span class="v" id="p-drift">—</span><span class="k">Top drift</span></div>
+        <div class="pstat"><span class="v" id="p-boss">0</span><span class="k">Boss kills</span></div>
+      </div>
+      <div class="profile-head">🎖 BADGES</div>
+      <div class="profile-badges" id="profile-badges"></div>
       <div class="profile-head">⛓ ON-CHAIN · CELO</div>
       <div class="profile-grid two">
         <div class="pstat"><span class="v" id="p-races">—</span><span class="k">Races on-chain</span></div>
