@@ -39,5 +39,20 @@ export const CARS: CarSpec[] = [
     id: 'volt', name: 'THUNDERVOLT', blurb: 'Nothing outruns it — eventually',
     color: 0x00d9ff, model: 0, speed: 1.08, accel: 0.82, grip: 0.92, nitro: 1.0,
     price: 500
+  },
+  {
+    id: 'juggernaut', name: 'JUGGERNAUT', blurb: 'Bulldoze everything. Unstoppable.',
+    color: 0x556b2f, model: 4, speed: 0.88, accel: 0.9, grip: 1.35, nitro: 0.85,
+    price: 400
+  },
+  {
+    id: 'sidewinder', name: 'SIDEWINDER', blurb: 'Born to slide — drift king',
+    color: 0xff6ec7, model: 5, speed: 0.97, accel: 1.0, grip: 0.78, nitro: 1.1,
+    price: 250
+  },
+  {
+    id: 'glasscannon', name: 'GLASS CANNON', blurb: 'Fragile speed demon',
+    color: 0xffd700, model: 1, speed: 1.15, accel: 0.88, grip: 0.75, nitro: 0.9,
+    price: 600
   }
 ];

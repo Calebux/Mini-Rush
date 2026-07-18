@@ -33,6 +33,7 @@ export class Player {
 
   airH = 0;             // metres above the road; > 0 = airborne off a ramp
   landed = false;       // per-frame: true on the single frame the car touches down
+  gripMul = 1;          // weather grip modifier (<1 = slippery), set per race
   private airV = 0;     // vertical velocity while airborne
 
   private rollA = 0;
@@ -217,12 +218,13 @@ export class Player {
 
     // lateral: direct drag + held keys + centrifugal push in corners.
     // +x is the driver's LEFT, so screen-right input subtracts.
-    const dragMeters = (driving ? dragPx : 0) * (13 / window.innerWidth) * this.spec.grip;
+    const grip = this.spec.grip * this.gripMul;
+    const dragMeters = (driving ? dragPx : 0) * (13 / window.innerWidth) * grip;
     const f = this.track.frame(this.s);
     // grippy cars steer harder AND shrug off more of the corner push
-    const cornerPush = f.curvature * this.v * this.v * CENTRIFUGAL * (2 - this.spec.grip) * dt;
+    const cornerPush = f.curvature * this.v * this.v * CENTRIFUGAL * (2 - grip) * dt;
     this.xVel += cornerPush;
-    this.xVel -= keySteer * 55 * this.spec.grip * dt;
+    this.xVel -= keySteer * 55 * grip * dt;
     this.xVel *= Math.exp(-6 * dt);
     // driftV shadows xVel but only ever hears the corner force — at the wall
     // it tells "thrown wide by speed" (crash) apart from "steered into it"

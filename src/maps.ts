@@ -150,5 +150,58 @@ export const MAPS: MapSpec[] = [
       { label: 'Giza Excavation', flavor: 'pyramids',
         skyTop: 0x4b6e8a, skyBottom: 0xffd285, fog: 0xcaa67e, ground: 0xc8aa78, road: 0x9c988c, hemi: 0xfff4d6, dust: 0xd0b484 }
     ]
+  },
+  {
+    id: 'nairobi', name: 'NAIROBI', flag: '🇰🇪',
+    blurb: 'Savanna sun, downtown glass and dusty market alleys — Kenyan speed.',
+    ctlMin: 11, ctlVar: 3, rMin: 0.65, rVar: 0.55, fogNear: 40, fogFar: 195,
+    districts: [
+      { label: 'Uhuru Gardens', flavor: 'palms',
+        skyTop: 0x2a88c8, skyBottom: 0xffe4a0, fog: 0xd0b888, ground: 0x7a9a52, road: 0x969892, hemi: 0xfff6d8, dust: 0x9a8a5a },
+      { label: 'Westlands', flavor: 'towers',
+        skyTop: 0x2e5a8f, skyBottom: 0xa8c8e8, fog: 0x98b0c8, ground: 0x4a524a, road: 0x8e929a, hemi: 0xd8e6f2, dust: 0x707868 },
+      { label: 'Gikomba Market', flavor: 'market',
+        skyTop: 0x6a3e28, skyBottom: 0xffa858, fog: 0xc88858, ground: 0x6e5a3a, road: 0x8a8480, hemi: 0xffd0a0, dust: 0xa88850 }
+    ]
+  },
+  {
+    id: 'seoul', name: 'SEOUL', flag: '🇰🇷',
+    blurb: 'K-pop neon meets ancient palace walls. Tight alleys, wide boulevards.',
+    ctlMin: 14, ctlVar: 4, rMin: 0.5, rVar: 0.85, fogNear: 28, fogFar: 155,
+    skyline: 'skyline_neon',
+    districts: [
+      { label: 'Gangnam', flavor: 'towers',
+        skyTop: 0x1a1040, skyBottom: 0xff4488, fog: 0x4a2058, ground: 0x1e1a30, road: 0x3e3a50, hemi: 0xcc80ff, dust: 0x5a4870 },
+      { label: 'Gyeongbok Palace', flavor: 'pagoda',
+        skyTop: 0x2a5a7a, skyBottom: 0xd8e0c8, fog: 0xa0b8a0, ground: 0x506a48, road: 0x8a9088, hemi: 0xe0f0d8, dust: 0x708858 },
+      { label: 'Hongdae Arcade', flavor: 'cyberarcade',
+        skyTop: 0x0e1838, skyBottom: 0x00ffaa, fog: 0x1a4858, ground: 0x141e30, road: 0x3a4250, hemi: 0x88ffe0, dust: 0x3a7a68 }
+    ]
+  },
+  {
+    id: 'accra', name: 'ACCRA', flag: '🇬🇭',
+    blurb: 'Sun-drenched coastal city — Osu palms, Jamestown bricks and Makola chaos.',
+    ctlMin: 10, ctlVar: 3, rMin: 0.7, rVar: 0.5, fogNear: 42, fogFar: 190,
+    districts: [
+      { label: 'Osu Beach', flavor: 'palms',
+        skyTop: 0x2590c8, skyBottom: 0xffe898, fog: 0xc8c098, ground: 0xd0b480, road: 0x949690, hemi: 0xfff8e0, dust: 0xc0a870 },
+      { label: 'Jamestown', flavor: 'terrace',
+        skyTop: 0x5a6880, skyBottom: 0xe8d0b0, fog: 0xb0a890, ground: 0x605848, road: 0x7e807a, hemi: 0xe8e0d0, dust: 0x806a50 },
+      { label: 'Makola Market', flavor: 'market',
+        skyTop: 0x6e4028, skyBottom: 0xffb050, fog: 0xc09050, ground: 0x685838, road: 0x888480, hemi: 0xffd8a0, dust: 0x9a7a48 }
+    ]
+  },
+  {
+    id: 'saopaulo', name: 'SÃO PAULO', flag: '🇧🇷',
+    blurb: 'Paulista boulevards to painted Vila favelas — concrete jungle alive.',
+    ctlMin: 13, ctlVar: 4, rMin: 0.55, rVar: 0.75, fogNear: 32, fogFar: 170,
+    districts: [
+      { label: 'Av. Paulista', flavor: 'towers',
+        skyTop: 0x2a4878, skyBottom: 0xa0b8d0, fog: 0x90a8b8, ground: 0x404848, road: 0x8a8e98, hemi: 0xd0dce8, dust: 0x686e78 },
+      { label: 'Vila Madalena', flavor: 'favela',
+        skyTop: 0x4a6a9a, skyBottom: 0xffa060, fog: 0xc09068, ground: 0x6a5a4a, road: 0x868480, hemi: 0xffe0c0, dust: 0x987a5a },
+      { label: 'Liberdade', flavor: 'pagoda',
+        skyTop: 0x5a2848, skyBottom: 0xff6870, fog: 0xb86068, ground: 0x584a48, road: 0x8a8488, hemi: 0xffc8c8, dust: 0x8a6a68 }
+    ]
   }
 ];

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { AssetLibrary } from './assets';
 import { districtIndexAt, ROAD_HALF_WIDTH } from './constants';
 import { Flavor, MapSpec } from './maps';
-import { buildCoin, buildNitro, buildZombie, mulberry32 } from './meshes';
+import { buildBossZombie, buildCoin, buildNitro, buildZombie, mulberry32 } from './meshes';
 import { toonMat } from './toon';
 import { Track } from './track';
 
@@ -31,6 +31,21 @@ interface Obstacle {
   hit: boolean;
 }
 
+interface Boss {
+  s: number;
+  x: number;
+  obj: THREE.Object3D;
+  hp: number;
+  lastHitAt: number; // i-frame window start; -10 = never hit
+  deadAt: number;    // -1 = alive
+  baseHp: number;
+}
+
+// A boss shrugs off repeated drive-overs within this window (prevents one pass
+// counting as three hits across consecutive frames).
+const BOSS_IFRAME = 0.6;
+const BOSS_HP = 3;
+
 const ZOMBIE_DENSITY: Record<Flavor, number> = {
   towers: 0.85, palms: 0.6, pagoda: 0.9, park: 0.7, terrace: 1, market: 0.95,
   pyramids: 0.65, favela: 0.95, cyberarcade: 0.9
@@ -44,6 +59,7 @@ export class Entities {
   private zombies: Zombie[] = [];
   private pickups: Pickup[] = [];
   private obstacles: Obstacle[] = [];
+  private boss: Boss | null = null;
   private group = new THREE.Group();
   private zLo = 0;
   private pLo = 0;
@@ -54,6 +70,19 @@ export class Entities {
     seed: number, map: MapSpec, zombieMul = 1, latchers = false
   ) {
     const rand = mulberry32(seed ^ 0xb10b);
+
+    // horde modes (Outbreak / high zombieMul) get a mini-boss per lap, parked
+    // near 60% of the circuit. Not in latcher modes — the cling mechanic there
+    // already fills the road.
+    if (zombieMul >= 2 && !latchers) {
+      const bs = track.length * 0.6;
+      const bx = (rand() * 2 - 1) * (ROAD_HALF_WIDTH - 1.6);
+      const obj = buildBossZombie(rand);
+      track.place(obj, bs, bx);
+      obj.visible = false;
+      this.group.add(obj);
+      this.boss = { s: bs, x: bx, obj, hp: BOSS_HP, lastHitAt: -10, deadAt: -1, baseHp: BOSS_HP };
+    }
 
     // zombie clusters — the mode scales cluster odds and size (Outbreak horde)
     let s = latchers ? 42 : 130;
@@ -142,6 +171,13 @@ export class Entities {
       o.hit = false;
       o.obj.visible = false;
     }
+    if (this.boss) {
+      this.boss.hp = this.boss.baseHp;
+      this.boss.lastHitAt = -10;
+      this.boss.deadAt = -1;
+      this.boss.obj.scale.setScalar(1.35);
+      this.boss.obj.visible = false;
+    }
   }
 
   /**
@@ -184,6 +220,50 @@ export class Entities {
       if (o.s > playerS + 175) break;
       if (!o.hit && !o.obj.visible) o.obj.visible = true;
     }
+
+    const b = this.boss;
+    if (b) {
+      const near = b.s > playerS - 35 && b.s < playerS + 175;
+      if (b.deadAt >= 0) {
+        const t = Math.min(1, (elapsed - b.deadAt) / 0.4);
+        b.obj.scale.setScalar(1.35 * Math.max(0.1, 1 - t));
+        if (elapsed - b.deadAt > 3) b.obj.visible = false;
+      } else if (near) {
+        b.obj.visible = true;
+        // menacing sway + a red flash during i-frames
+        b.obj.position.y = Math.abs(Math.sin(elapsed * 4)) * 0.14;
+        b.obj.rotation.y = Math.sin(elapsed * 1.5) * 0.25 + Math.PI;
+        const flashing = elapsed - b.lastHitAt < BOSS_IFRAME;
+        this.track.place(b.obj, b.s, b.x, b.obj.position.y);
+        b.obj.visible = flashing ? Math.floor(elapsed * 20) % 2 === 0 : true;
+      } else {
+        b.obj.visible = false;
+      }
+    }
+  }
+
+  /**
+   * Boss collision. A nitro drive-over is an instant kill; otherwise each pass
+   * chips one HP, but only once per i-frame window. Returns what happened so the
+   * game can pop text, shake, and award points/coins.
+   */
+  trySquashBoss(
+    s: number, x: number, elapsed: number, nitro: boolean
+  ): { hit: boolean; killed: boolean; coins: number; s: number; x: number } | null {
+    const b = this.boss;
+    if (!b || b.deadAt >= 0) return null;
+    if (Math.abs(b.s - s) > 4 || Math.abs(b.x - x) > 2.2) return null;
+    if (!nitro && elapsed - b.lastHitAt < BOSS_IFRAME) return null; // still invulnerable
+
+    b.lastHitAt = elapsed;
+    if (nitro) b.hp = 0;
+    else b.hp -= 1;
+
+    if (b.hp <= 0) {
+      b.deadAt = elapsed;
+      return { hit: true, killed: true, coins: 5, s: b.s, x: b.x };
+    }
+    return { hit: true, killed: false, coins: 0, s: b.s, x: b.x };
   }
 
   private advance(items: { s: number; obj: THREE.Object3D }[], lo: number, playerS: number): number {

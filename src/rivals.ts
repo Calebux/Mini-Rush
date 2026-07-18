@@ -29,6 +29,7 @@ const TUMBLE_TIME = 1.4;
 export class RivalManager {
   rivals: Rival[] = [];
   raceLength = 0; // laps × track length; set by the game each race
+  gripMul = 1;    // weather grip modifier (<1 = slippery), set per race
 
   constructor(
     scene: THREE.Scene, assets: AssetLibrary, private track: Track,
@@ -125,13 +126,16 @@ export class RivalManager {
         for (const look of [8, 18, 30]) {
           k = Math.max(k, Math.abs(this.track.frame(r.s + look).curvature));
         }
+        // weather cuts the AI's cornering grip just like it does the player's,
+        // so rain/sandstorm slows the whole field, not only the human
+        const grip = RIVAL_LAT_GRIP * this.gripMul;
         if (k > 1e-4) {
-          target = Math.min(target, Math.sqrt((RIVAL_LAT_GRIP * r.skill) / k));
+          target = Math.min(target, Math.sqrt((grip * r.skill) / k));
         }
         // already past the limit mid-corner (rubber-band shove, late braking):
         // the overcooked ones spin out — same rules as the player at the wall
         const kNow = Math.abs(this.track.frame(r.s).curvature);
-        if (!this.pursuit && kNow * r.v * r.v > RIVAL_LAT_GRIP * r.skill * 2.1) {
+        if (!this.pursuit && kNow * r.v * r.v > grip * r.skill * 2.1) {
           this.wreck(r);
           continue;
         }
