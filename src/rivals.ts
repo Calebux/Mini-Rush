@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { AssetLibrary } from './assets';
 import { BASE_SPEED, END_SPEED_BONUS, RIVAL_LAT_GRIP, ROAD_HALF_WIDTH } from './constants';
+import { Entities } from './entities';
 import { buildCar } from './meshes';
 import { Track } from './track';
 
@@ -123,7 +124,8 @@ export class RivalManager {
 
   update(
     dt: number, elapsed: number, raceTime: number, playerS: number,
-    driving: boolean, playerX = 0, aggression = 0, playerV = 0
+    driving: boolean, playerX = 0, aggression = 0, playerV = 0,
+    entities?: Entities
   ): void {
     const total = this.raceLength || this.track.length;
     for (const r of this.rivals) {
@@ -193,6 +195,19 @@ export class RivalManager {
       // racing line: personality-modulated weave
       const wAmp = (ROAD_HALF_WIDTH - 1.8) * r.tune.wobbleAmp;
       let line = Math.sin(r.s * 0.015 * r.tune.wobbleFreq + r.wobblePhase) * wAmp;
+
+      // zombie dodge: cautious/balanced rivals swerve away from clusters ahead
+      if (entities && !this.pursuit && r.tune.brakeLookahead >= 1.0) {
+        const zombie = entities.nearestZombieAhead(this.track.wrap(r.s), 18);
+        if (zombie && Math.abs(zombie.zx - r.x) < 2.2) {
+          const dodgeDir = zombie.zx > 0 ? -1 : 1;
+          const dodgeLine = THREE.MathUtils.clamp(
+            zombie.zx + dodgeDir * 2.8,
+            -(ROAD_HALF_WIDTH - 1), ROAD_HALF_WIDTH - 1
+          );
+          line = THREE.MathUtils.lerp(line, dodgeLine, 0.4 * r.tune.brakeLookahead);
+        }
+      }
 
       // overtaking: if a rival is close ahead and slower, swerve around it
       if (driving && !this.pursuit && r.overtakeCooldown <= 0) {

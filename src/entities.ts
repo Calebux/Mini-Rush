@@ -340,6 +340,21 @@ export class Entities {
     return n;
   }
 
+  /**
+   * Query the lateral position of the nearest alive zombie ahead of s within
+   * `range` metres. Returns null if the lane is clear — used by rival AI to
+   * dodge clusters instead of mindlessly plowing through them.
+   */
+  nearestZombieAhead(s: number, range: number): { zs: number; zx: number } | null {
+    for (let i = this.zLo; i < this.zombies.length; i++) {
+      const z = this.zombies[i];
+      if (z.s > s + range) break;
+      if (z.s < s + 2 || z.squashedAt >= 0) continue;
+      return { zs: z.s, zx: z.x };
+    }
+    return null;
+  }
+
   dispose(scene: THREE.Scene): void {
     scene.remove(this.group);
   }

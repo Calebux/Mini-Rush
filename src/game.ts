@@ -870,7 +870,8 @@ export class Game {
         this.handleWall(elapsed);
         this.rivals.update(
           dt, elapsed, this.raceTime, this.player.s, true,
-          this.player.x, MODES[this.modeIndex].aggression, this.player.v
+          this.player.x, MODES[this.modeIndex].aggression, this.player.v,
+          this.entities
         );
 
         // Slipstream drafting: check if player is directly behind a rival inside draft cone
