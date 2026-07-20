@@ -8,7 +8,9 @@ type SfxName =
   | 'squish' | 'nitro' | 'bump' | 'count' | 'go' | 'finish' | 'skid'
   | 'shot' | 'blowout' | 'empty'
   | 'select' | 'back' | 'buy' | 'open' // menu foley — each action has a voice
-  | 'ignition'; // engine turnover during the countdown
+  | 'ignition'  // engine turnover during the countdown
+  | 'wall_grind' | 'draft' | 'land' | 'rev' | 'overtake' // juicier gameplay SFX
+  | 'zombie_splat_multi' | 'boss_roar' | 'virus_cure'; // combo/boss/mode SFX
 
 const FILES: Record<SfxName, string> = {
   select: 'select',
@@ -31,7 +33,15 @@ const FILES: Record<SfxName, string> = {
   shot: 'gun_shot',
   blowout: 'tire_blowout',
   empty: 'gun_empty',
-  ignition: 'engine_start'
+  ignition: 'engine_start',
+  wall_grind: 'wall_grind',
+  draft: 'draft_whoosh',
+  land: 'land_thump',
+  rev: 'engine_rev',
+  overtake: 'overtake_whoosh',
+  zombie_splat_multi: 'splat_multi',
+  boss_roar: 'boss_roar',
+  virus_cure: 'virus_cure'
 };
 
 const EXTENSIONS = ['ogg', 'mp3', 'wav'];
@@ -46,7 +56,13 @@ const HAPTICS: Partial<Record<SfxName, number | number[]>> = {
   shot: 20,
   nitro: 30,
   go: 45,
-  finish: [40, 60, 120]
+  finish: [40, 60, 120],
+  wall_grind: [15, 10, 15],
+  land: 50,
+  overtake: 18,
+  zombie_splat_multi: [20, 15, 20],
+  boss_roar: [60, 30, 60],
+  virus_cure: [30, 40, 80]
 };
 
 /**
@@ -548,6 +564,113 @@ export class AudioManager {
         tone(659, 0.12, 0.12, 'square', 0.1);
         tone(784, 0.24, 0.12, 'square', 0.1);
         tone(1047, 0.36, 0.3, 'square', 0.12);
+        break;
+      case 'wall_grind': {
+        // metallic scrape: filtered noise with resonance
+        const wgLen = 0.28;
+        const wgNoise = ctx.createBufferSource();
+        const wgBuf = ctx.createBuffer(1, ctx.sampleRate * wgLen, ctx.sampleRate);
+        const wgData = wgBuf.getChannelData(0);
+        for (let i = 0; i < wgData.length; i++) wgData[i] = (Math.random() * 2 - 1) * (1 - i / wgData.length) ** 0.6;
+        wgNoise.buffer = wgBuf;
+        const wgFilter = ctx.createBiquadFilter();
+        wgFilter.type = 'bandpass';
+        wgFilter.Q.value = 6;
+        wgFilter.frequency.setValueAtTime(1800, t);
+        wgFilter.frequency.exponentialRampToValueAtTime(600, t + wgLen);
+        const wgG = ctx.createGain();
+        wgG.gain.value = 0.1 * volume;
+        wgNoise.connect(wgFilter).connect(wgG).connect(this.out);
+        wgNoise.start(t);
+        tone(140, 0, 0.15, 'sawtooth', 0.08);
+        break;
+      }
+      case 'draft': {
+        // airy whoosh: sweeping bandpass noise
+        const dLen = 0.32;
+        const dNoise = ctx.createBufferSource();
+        const dBuf = ctx.createBuffer(1, ctx.sampleRate * dLen, ctx.sampleRate);
+        const dData = dBuf.getChannelData(0);
+        for (let i = 0; i < dData.length; i++) {
+          const env = Math.sin((i / dData.length) * Math.PI);
+          dData[i] = (Math.random() * 2 - 1) * env;
+        }
+        dNoise.buffer = dBuf;
+        const dFilter = ctx.createBiquadFilter();
+        dFilter.type = 'bandpass';
+        dFilter.Q.value = 3;
+        dFilter.frequency.setValueAtTime(400, t);
+        dFilter.frequency.exponentialRampToValueAtTime(2800, t + dLen);
+        const dG = ctx.createGain();
+        dG.gain.value = 0.06 * volume;
+        dNoise.connect(dFilter).connect(dG).connect(this.out);
+        dNoise.start(t);
+        break;
+      }
+      case 'land':
+        // punchy impact thud
+        tone(65, 0, 0.2, 'sine', 0.25);
+        tone(130, 0, 0.08, 'square', 0.08);
+        break;
+      case 'rev':
+        // quick engine blip
+        tone(110, 0, 0.06, 'sawtooth', 0.12);
+        tone(165, 0.04, 0.06, 'sawtooth', 0.1);
+        tone(220, 0.08, 0.1, 'sawtooth', 0.08);
+        break;
+      case 'overtake': {
+        // fast side-swoosh
+        const oLen = 0.2;
+        const oNoise = ctx.createBufferSource();
+        const oBuf = ctx.createBuffer(1, ctx.sampleRate * oLen, ctx.sampleRate);
+        const oData = oBuf.getChannelData(0);
+        for (let i = 0; i < oData.length; i++) {
+          const env = Math.sin((i / oData.length) * Math.PI);
+          oData[i] = (Math.random() * 2 - 1) * env;
+        }
+        oNoise.buffer = oBuf;
+        const oFilter = ctx.createBiquadFilter();
+        oFilter.type = 'bandpass';
+        oFilter.frequency.setValueAtTime(1200, t);
+        oFilter.frequency.exponentialRampToValueAtTime(3200, t + oLen);
+        const oG = ctx.createGain();
+        oG.gain.value = 0.08 * volume;
+        oNoise.connect(oFilter).connect(oG).connect(this.out);
+        oNoise.start(t);
+        break;
+      }
+      case 'zombie_splat_multi': {
+        // wet multi-splat: layered squishes
+        const smLen = 0.22;
+        const smNoise = ctx.createBufferSource();
+        const smBuf = ctx.createBuffer(1, ctx.sampleRate * smLen, ctx.sampleRate);
+        const smData = smBuf.getChannelData(0);
+        for (let i = 0; i < smData.length; i++) smData[i] = (Math.random() * 2 - 1) * (1 - i / smData.length);
+        smNoise.buffer = smBuf;
+        const smFilter = ctx.createBiquadFilter();
+        smFilter.type = 'lowpass';
+        smFilter.frequency.setValueAtTime(1200, t);
+        smFilter.frequency.exponentialRampToValueAtTime(180, t + smLen);
+        const smG = ctx.createGain();
+        smG.gain.value = 0.28 * volume;
+        smNoise.connect(smFilter).connect(smG).connect(this.out);
+        smNoise.start(t);
+        tone(100, 0, 0.08, 'sine', 0.16);
+        tone(80, 0.06, 0.1, 'sine', 0.14);
+        break;
+      }
+      case 'boss_roar':
+        // deep growl + overtone
+        tone(55, 0, 0.4, 'sawtooth', 0.2);
+        tone(82, 0.02, 0.35, 'sawtooth', 0.12);
+        tone(110, 0.05, 0.3, 'square', 0.06);
+        break;
+      case 'virus_cure':
+        // ascending chime — cleansing
+        tone(523, 0, 0.1, 'triangle', 0.1);
+        tone(659, 0.08, 0.1, 'triangle', 0.1);
+        tone(784, 0.16, 0.1, 'triangle', 0.1);
+        tone(1047, 0.24, 0.22, 'triangle', 0.12);
         break;
     }
     gain.disconnect();
