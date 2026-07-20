@@ -1179,6 +1179,27 @@ export class Game {
       this.entities.trySquash(this.track.wrap(r.s), r.x, elapsed);
     }
 
+    // rival-to-rival jostling: when two AI cars overlap, the slower one
+    // gets shoved sideways. This makes the pack fight for position instead
+    // of ghosting through each other.
+    const rivals = this.rivals.rivals;
+    for (let a = 0; a < rivals.length; a++) {
+      for (let b = a + 1; b < rivals.length; b++) {
+        const ra = rivals[a], rb = rivals[b];
+        if (ra.tumbleT > 0 || rb.tumbleT > 0) continue;
+        if (Math.abs(ra.s - rb.s) < 3.5 && Math.abs(ra.x - rb.x) < 1.6) {
+          const dir = Math.sign(ra.x - rb.x) || 1;
+          const faster = ra.v >= rb.v ? ra : rb;
+          const slower = faster === ra ? rb : ra;
+          // shove the slower one aside
+          slower.x += dir * (slower === rb ? -1 : 1) * 0.8 * dt * 10;
+          slower.v *= 0.97;
+          // the faster one nudges slightly the other way
+          faster.x -= dir * (faster === ra ? -1 : 1) * 0.3 * dt * 10;
+        }
+      }
+    }
+
     // car-to-car contact. Grand Prix: trade paint. Burnout: the faster car
     // deals damage — three hits inside the decay window rolls the victim.
     // Cop Chase: every cop touch is heat; heat 3 = BUSTED, race over.
