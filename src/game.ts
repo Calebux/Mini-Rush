@@ -888,6 +888,7 @@ export class Game {
           this.player.draftGauge = Math.min(1, this.player.draftGauge + dt * 0.55);
           if (this.player.draftGauge >= 1) {
             if (this.player.triggerDraftBoost()) {
+              this.audio.play('draft');
               this.audio.play('combo');
               this.ui.popText('SLIPSTREAM SLINGSHOT!', '#00ffcc');
             }
@@ -911,7 +912,7 @@ export class Game {
         }
         if (this.player.landed) {
           this.shake = Math.max(this.shake, 0.7);
-          this.audio.play('bump');
+          this.audio.play('land');
           if (navigator.vibrate) navigator.vibrate(40);
         }
 
@@ -1028,7 +1029,7 @@ export class Game {
       p.v *= 0.93; // scraping the wall bleeds speed — get off it
       if (elapsed - this.lastWallGrindAt > 0.8) {
         this.lastWallGrindAt = elapsed;
-        this.audio.play('skid', 0.4);
+        this.audio.play('wall_grind', 0.5);
         this.shake = Math.max(this.shake, 0.25);
         if (navigator.vibrate) navigator.vibrate(20);
       }
@@ -1121,14 +1122,14 @@ export class Game {
         this.zombiesSquashed += squashed;
         this.style.stoke(0.12 * squashed);
         p.v = Math.max(10, p.v - 1.4 * squashed); // gore is not aerodynamic
-        this.audio.play('squish');
+        this.audio.play(squashed >= 3 ? 'zombie_splat_multi' : 'squish');
         this.ui.popText(`SPLAT x${this.zombieCombo}`, '#7fae5a');
-        if (navigator.vibrate) navigator.vibrate(30);
+        if (navigator.vibrate) navigator.vibrate(squashed >= 3 ? [20, 15, 20] : 30);
 
         if (mode.infected && p.infected && this.zombiesSquashed % 10 < squashed) {
           p.infected = false;
           this.ui.popText('VIRUS CURED! EMP SHOCKWAVE!', '#00ffcc');
-          this.audio.play('combo');
+          this.audio.play('virus_cure');
           for (const r of this.rivals.rivals) {
             if (Math.abs(this.track.wrap(r.s) - this.track.wrap(p.s)) < 24) {
               this.rivals.wreck(r);
@@ -1155,7 +1156,7 @@ export class Game {
       } else {
         p.v = Math.max(9, p.v - 4); // brute shrugs you off
         this.shake = Math.max(this.shake, 0.7);
-        this.audio.play('bump');
+        this.audio.play('boss_roar');
         this.ui.popText('BOSS HIT!', '#ff8a3d');
         if (navigator.vibrate) navigator.vibrate(45);
       }
