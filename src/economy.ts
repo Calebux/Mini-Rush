@@ -37,3 +37,19 @@ export function unlock(id: string, price: number): boolean {
   localStorage.setItem(OWNED_KEY, JSON.stringify([...o]));
   return true;
 }
+
+/**
+ * Guaranteed finish payout, banked on top of coins grabbed on track. Coin arcs
+ * alone make earnings hinge on threading pickups — this gives the garage curve a
+ * floor so showing up, finishing, splatting and placing all pay. Tuned against
+ * car prices (60–600) and upgrade tiers (60/120/240): a clean race adds ~25–45.
+ */
+export function racePayout(p: {
+  place: number; field: number; zombies: number; laps: number;
+}): number {
+  const finish = 12;                                    // reached the line
+  const podium = Math.max(0, 20 - (p.place - 1) * 6);   // 1st 20 · 2nd 14 · 3rd 8 · 4th 2
+  const splats = Math.floor(p.zombies / 4);             // horde laps reward the grind
+  const laps = Math.max(0, p.laps - 1) * 5;             // multi-lap modes pay more
+  return finish + podium + splats + laps;
+}

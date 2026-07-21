@@ -4,7 +4,7 @@ import { AudioManager } from './audio';
 import { CARS } from './cars';
 import { districtIndexAt, TRACK_LENGTH_DEFAULT } from './constants';
 import { dailyMapIndex, dailySeed } from './daily';
-import { deposit } from './economy';
+import { deposit, racePayout } from './economy';
 import { Entities } from './entities';
 import {
   GhostData, GhostRecorder, ghostKey, ghostMesh, ghostPos, loadGhost, saveGhost
@@ -51,6 +51,12 @@ export class Game {
   private scene = new THREE.Scene();
   private camera: THREE.PerspectiveCamera;
   private clock = new THREE.Clock();
+  // Adaptive render resolution — holds ~60fps on weak GPUs by trading pixels
+  // under load (horde draw-call spikes) and reclaiming them when there's slack.
+  private dprCap = Math.min(window.devicePixelRatio, 2);
+  private curDpr = Math.min(window.devicePixelRatio, 2);
+  private frameEma = 1 / 60; // smoothed frame time (s)
+  private dprCooldown = 0;    // frames to wait between resolution changes
   private hemi: THREE.HemisphereLight;
   private ground: THREE.Mesh;
   private groundMat: THREE.MeshToonMaterial;
@@ -738,6 +744,16 @@ export class Game {
       if (next) this.ui.popText(`🛂 ${next.flag} ${next.name} UNLOCKED!`, '#9adfff');
     }
 
+    // Guaranteed finish payout on top of coins grabbed on track — keeps the
+    // garage curve moving even on a pickup-light run (economy floor).
+    const payout = racePayout({
+      place: this.playerPlace,
+      field: this.rivals.rivals.length + 1,
+      zombies: this.zombiesSquashed,
+      laps: this.raceLaps
+    });
+    this.coins += payout;
+    if (payout > 0) setTimeout(() => this.ui.popText(`+${payout} COINS`, '#fcff52'), 1600);
     deposit(this.coins); // race coins bank for the garage
 
     // Record local stats
@@ -819,9 +835,31 @@ export class Game {
 
   // ---------- per-frame ----------
 
+  /**
+   * Nudge render resolution toward a 60fps budget. Only while racing (menus are
+   * cheap): steps down to 0.75x when frames run long, climbs back to the device
+   * cap when there's headroom. A cooldown guards against resolution oscillation.
+   */
+  private adaptResolution(dt: number): void {
+    if (this.state !== 'racing') return;
+    this.frameEma += (dt - this.frameEma) * 0.1;
+    if (this.dprCooldown > 0) { this.dprCooldown--; return; }
+    const fps = 1 / this.frameEma;
+    const MIN = 0.75, STEP = 0.25;
+    let next = this.curDpr;
+    if (fps < 50 && this.curDpr > MIN) next = Math.max(MIN, this.curDpr - STEP);
+    else if (fps > 58 && this.curDpr < this.dprCap) next = Math.min(this.dprCap, this.curDpr + STEP);
+    if (next !== this.curDpr) {
+      this.curDpr = next;
+      this.renderer.setPixelRatio(next);
+      this.dprCooldown = 90; // ~1.5s before the next change
+    }
+  }
+
   private tick(): void {
     const dt = Math.min(this.clock.getDelta(), 0.05);
     const elapsed = this.clock.elapsedTime;
+    this.adaptResolution(dt);
     const dragPx = this.input.consumeDrag();
 
     switch (this.state) {
@@ -916,7 +954,7 @@ export class Game {
           if (navigator.vibrate) navigator.vibrate(40);
         }
 
-        this.simulateContacts(elapsed);
+        this.simulateContacts(dt, elapsed);
         this.updateStyle(dt, elapsed);
         this.updateGhost(dt);
         this.emitSmoke(dt, elapsed);
@@ -1068,9 +1106,12 @@ export class Game {
     const pursuit = !!MODES[this.modeIndex].pursuit;
     this.rivals.rivals.forEach((r, i) => {
       const gap = r.s - p.s;
-      const crossed = Math.sign(gap) !== Math.sign(this.prevGap[i]) && Math.abs(gap) < 8;
+      const prev = this.prevGap[i];
+      const crossed = Math.sign(gap) !== Math.sign(prev) && Math.abs(gap) < 8;
       this.prevGap[i] = gap;
       if (!crossed || pursuit) return; // dodging the cop is just Tuesday
+      // clean pass — rival was ahead, now behind, at speed = OVERTAKE
+      if (prev > 0 && gap < 0 && p.v > 20 && p.tumbleT <= 0) this.audio.play('overtake');
       const dx = Math.abs(r.x - p.x);
       if (
         dx > 1.6 && dx < 3.4 && p.v > 20 &&
@@ -1097,7 +1138,7 @@ export class Game {
     this.ghostObj.rotation.y += Math.PI; // cars face +z; flip down-track
   }
 
-  private simulateContacts(elapsed: number): void {
+  private simulateContacts(dt: number, elapsed: number): void {
     const p = this.player;
     const ws = this.track.wrap(p.s);
     const mode = MODES[this.modeIndex];
