@@ -514,7 +514,7 @@ export class Game {
   }
 
   private startRace(): void {
-    this.audio.play('click');
+    this.audio.play('start'); // race-start fanfare on the START RACE launch
     this.disposeRace();
     this.buildRace();
     this.raceLaps = MODES[this.modeIndex].lapsLocked ?? this.laps;
