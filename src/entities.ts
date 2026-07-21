@@ -46,6 +46,13 @@ interface Boss {
 const BOSS_IFRAME = 0.6;
 const BOSS_HP = 3;
 
+// Draw-call budget for the horde: each zombie is a 2-plane crossed billboard,
+// so a dense Outbreak cluster can otherwise push 80+ zombies (160+ draw calls)
+// into view at once. Zombies are sorted by track distance, so rendering only
+// the nearest N — the ones you actually see and collide with — bounds the cost
+// on low-end MiniPay GPUs with no visible change in the near field.
+const MAX_VISIBLE_ZOMBIES = 32;
+
 const ZOMBIE_DENSITY: Record<Flavor, number> = {
   towers: 0.85, palms: 0.6, pagoda: 0.9, park: 0.7, terrace: 1, market: 0.95,
   pyramids: 0.65, favela: 0.95, cyberarcade: 0.9
@@ -189,23 +196,32 @@ export class Entities {
     this.pLo = this.advance(this.pickups, this.pLo, playerS);
     this.oLo = this.advance(this.obstacles, this.oLo, playerS);
 
+    let shown = 0;
     for (let i = this.zLo; i < this.zombies.length; i++) {
       const z = this.zombies[i];
       if (z.s > playerS + 175) break;
-      if (!z.obj.visible) z.obj.visible = true;
       if (z.squashedAt >= 0) {
+        // a squash is right under the player — always animate it out, never cap
+        if (!z.obj.visible) z.obj.visible = true;
         const t = Math.min(1, (elapsed - z.squashedAt) / 0.25);
         z.obj.scale.y = Math.max(0.12, 1 - t);
         z.obj.position.y = z.baseY * (1 - t);
         if (elapsed - z.squashedAt > 3) z.obj.visible = false;
-      } else {
-        // shamble: bob + sway + slow shuffle across the road
-        z.obj.position.y = Math.abs(Math.sin(elapsed * 6 + z.phase)) * 0.09;
-        z.obj.rotation.z = Math.sin(elapsed * 3 + z.phase) * 0.12;
-        z.x += Math.sin(elapsed * 0.6 + z.phase) * 0.35 * dt;
-        this.track.place(z.obj, z.s, z.x, z.obj.position.y);
-        z.obj.rotation.y += z.facing;
+        continue;
       }
+      // draw-call budget: only the nearest MAX_VISIBLE_ZOMBIES render
+      if (shown >= MAX_VISIBLE_ZOMBIES) {
+        if (z.obj.visible) z.obj.visible = false;
+        continue;
+      }
+      shown++;
+      if (!z.obj.visible) z.obj.visible = true;
+      // shamble: bob + sway + slow shuffle across the road
+      z.obj.position.y = Math.abs(Math.sin(elapsed * 6 + z.phase)) * 0.09;
+      z.obj.rotation.z = Math.sin(elapsed * 3 + z.phase) * 0.12;
+      z.x += Math.sin(elapsed * 0.6 + z.phase) * 0.35 * dt;
+      this.track.place(z.obj, z.s, z.x, z.obj.position.y);
+      z.obj.rotation.y += z.facing;
     }
 
     for (let i = this.pLo; i < this.pickups.length; i++) {
