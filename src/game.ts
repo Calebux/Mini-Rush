@@ -876,6 +876,7 @@ export class Game {
           if (n > 0) {
             this.ui.countdown(String(n));
             this.audio.play('count');
+            this.audio.play('rev'); // blip the throttle on each beat at the line
           }
         }
         this.audio.engine(0.55, 0.12); // idling on the grid
