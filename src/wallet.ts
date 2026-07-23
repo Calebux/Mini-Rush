@@ -158,6 +158,13 @@ export class Wallet {
     return address;
   }
 
+  /** Native CELO balance, formatted to 2 decimals. */
+  async celoBalance(): Promise<string> {
+    if (!this.address) throw new Error('Not connected');
+    const raw = await this.reader().getBalance({ address: this.address });
+    return Number(formatUnits(raw, 18)).toFixed(2);
+  }
+
   /** cUSD balance, formatted to 2 decimals. */
   async cusdBalance(): Promise<string> {
     if (!this.address) throw new Error('Not connected');

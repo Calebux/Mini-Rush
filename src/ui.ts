@@ -25,6 +25,8 @@ const BEST_KEY = 'minirush.best';
 const PLACE_SUFFIX = ['st', 'nd', 'rd', 'th'];
 const suffix = (place: number) => PLACE_SUFFIX[Math.min(place, 4) - 1];
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+// mouse + hover ⇒ a physical keyboard is almost certainly attached
+const hasKeyboard = () => matchMedia('(any-hover: hover) and (any-pointer: fine)').matches;
 const MODE_RISK: Record<string, string> = {
   gp: 'RACE',
   burnout: 'WILD',
@@ -83,6 +85,7 @@ export class UI {
   private dailyUi = false; // garage reached via DAILY RUN, not the tour flow
   private weeklyUi = false; // garage reached via WEEKLY CUP, not the tour flow
   private tutTimers: number[] = [];
+  private keyHintTimer = 0;
   private modeIndex = 0;
   private lastRun: RunCard | null = null;
 
@@ -134,12 +137,11 @@ export class UI {
       this.exitDaily();
       goto('menu', 'tour');
     });
-    // driver card → straight into the race setup flow (city → car → race)
+    // driver card → back to the lobby menu, ready to hit RACE
     on('btn-profile-race', () => {
-      this.audio.unlock();
-      this.exitDaily();
+      this.audio.play('click');
       $('profile').classList.add('hidden');
-      goto('menu', 'tour');
+      this.menu.classList.remove('hidden');
     });
     on('pill-city', () => {
       this.audio.unlock();
@@ -802,7 +804,7 @@ export class UI {
     chip.classList.remove('connectable');
     chip.textContent = this.wallet.shortAddress();
     try {
-      chip.textContent = `${this.wallet.shortAddress()} · ${await this.wallet.cusdBalance()} cUSD`;
+      chip.textContent = `${this.wallet.shortAddress()} · ${await this.wallet.celoBalance()} CELO`;
     } catch { /* balance is best-effort */ }
   }
 
@@ -829,8 +831,8 @@ export class UI {
     $('profile-tag').textContent = this.board.tag;
     $('profile-addr').textContent = this.wallet.shortAddress();
     $('profile-balance').textContent = '';
-    void this.wallet.cusdBalance()
-      .then((b) => { $('profile-balance').textContent = `${b} cUSD`; })
+    void this.wallet.celoBalance()
+      .then((b) => { $('profile-balance').textContent = `${b} CELO`; })
       .catch(() => { /* balance is best-effort */ });
 
     $('p-best').textContent = String(this.best);
@@ -901,10 +903,21 @@ export class UI {
     this.menu.classList.add('hidden');
     this.results.classList.add('hidden');
     this.hud.classList.add('visible');
+    this.showKeyHints();
+  }
+
+  /** Keyboard players get the controls flashed for the first 5s of each race. */
+  private showKeyHints(): void {
+    if (!hasKeyboard()) return;
+    const el = $('key-hints');
+    el.classList.remove('hidden');
+    window.clearTimeout(this.keyHintTimer);
+    this.keyHintTimer = window.setTimeout(() => el.classList.add('hidden'), 5000);
   }
 
   /** First race ever: three timed control tips. Marked seen once all ran. */
   startTutorial(): void {
+    if (hasKeyboard()) return; // desktop gets the key cheatsheet instead
     if (localStorage.getItem('minirush.tutorial')) return;
     const el = $('tutorial');
     const tips = [
@@ -991,6 +1004,8 @@ export class UI {
     place: number, time: number, zombies: number, coins: number, score: number,
     laps: number, car: string, busted = false, style = 0, daily = false, weekly = false
   ): void {
+    window.clearTimeout(this.keyHintTimer);
+    $('key-hints').classList.add('hidden');
     const best = Math.max(this.best, score);
     localStorage.setItem(BEST_KEY, String(best));
     // daily / weekly runs rank on their own shared-circuit boards, not all-time

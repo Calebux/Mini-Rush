@@ -396,12 +396,13 @@ export class Game {
     (this.scene.fog as THREE.Fog).near = fogNear;
     (this.scene.fog as THREE.Fog).far = fogFar;
 
-    // rain overlay
+    // rain overlay — the CSS streaks only fall while racing; the menu-backdrop
+    // world keeps the weather's fog mood but stays clean of screen-wide lines
     if (!this.rainOverlay) {
       this.rainOverlay = document.getElementById('rain-overlay');
     }
     if (this.rainOverlay) {
-      this.rainOverlay.style.opacity = String(this.weather.rainIntensity);
+      this.rainOverlay.style.opacity = '0';
     }
     // weather label
     if (!this.weatherLabel) {
@@ -574,6 +575,11 @@ export class Game {
         this.ghostObj.rotation.y += Math.PI;
       }
       this.ui.popText(`GHOST: ${this.ghostData.time.toFixed(1)}s — BEAT IT`, '#9adfff');
+    }
+
+    // now that we're really racing, let the weather's rain streaks fall
+    if (this.rainOverlay && this.weather) {
+      this.rainOverlay.style.opacity = String(this.weather.rainIntensity);
     }
 
     this.ui.showRace();

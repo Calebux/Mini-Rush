@@ -747,6 +747,23 @@
       50% { transform: translateX(-50%) scale(1.05); }
     }
 
+    /* desktop-only keyboard cheatsheet — first 5s of every race */
+    #key-hints {
+      position: fixed; top: max(118px, calc(env(safe-area-inset-top) + 104px));
+      left: 50%; transform: translateX(-50%);
+      display: flex; gap: 14px; max-width: 92vw; white-space: nowrap;
+      padding: 10px 20px; border-radius: 999px; z-index: 5; pointer-events: none;
+      background: rgba(6,8,20,.85); border: 1px solid rgba(255,255,255,.25);
+      font-size: 12px; font-weight: 700; letter-spacing: .5px; color: rgba(255,255,255,.85);
+      transition: opacity .4s ease;
+    }
+    #key-hints.hidden { opacity: 0; }
+    #key-hints b {
+      font-weight: 900; color: #fcff52; padding: 1px 6px; margin-right: 2px;
+      border: 1px solid rgba(252,255,82,.5); border-radius: 5px;
+      background: rgba(252,255,82,.1);
+    }
+
     #combo {
       position: fixed; top: 32%; left: 50%; transform: translateX(-50%);
       z-index: 6; font-size: 22px; font-weight: 900; color: #fcff52;
@@ -841,6 +858,13 @@
   <div id="combo"></div>
   <div id="countdown"></div>
   <div id="tutorial" class="hidden"></div>
+  <div id="key-hints" class="hidden">
+    <span><b>W</b><b>↑</b> GAS</span>
+    <span><b>S</b><b>↓</b> BRAKE</span>
+    <span><b>A</b><b>D</b> STEER</span>
+    <span><b>SPACE</b> NITRO / FIRE</span>
+    <span><b>C</b> CAMERA</span>
+  </div>
 
   <div class="overlay" id="menu">
     <div class="menu-top">
