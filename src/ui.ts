@@ -134,6 +134,13 @@ export class UI {
       this.exitDaily();
       goto('menu', 'tour');
     });
+    // driver card → straight into the race setup flow (city → car → race)
+    on('btn-profile-race', () => {
+      this.audio.unlock();
+      this.exitDaily();
+      $('profile').classList.add('hidden');
+      goto('menu', 'tour');
+    });
     on('pill-city', () => {
       this.audio.unlock();
       this.exitDaily();
@@ -786,7 +793,7 @@ export class UI {
     } else if (this.wallet.available) {
       const chip = $('wallet-chip');
       chip.classList.add('connectable');
-      chip.textContent = '🔗 CONNECT';
+      chip.textContent = '🔗 CONNECT & COMPETE';
     }
   }
 

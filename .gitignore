@@ -13,7 +13,7 @@ contracts/broadcast/
 .env.local
 .env.*.local
 # generated throwaway wallet keys (stress test)
-scripts/.stress-wallets.json
+scripts/.stress-wallets*.json
 
 # editor / OS
 .DS_Store
