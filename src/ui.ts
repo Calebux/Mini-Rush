@@ -137,12 +137,6 @@ export class UI {
       this.exitDaily();
       goto('menu', 'tour');
     });
-    // driver card → back to the lobby menu, ready to hit RACE
-    on('btn-profile-race', () => {
-      this.audio.play('click');
-      $('profile').classList.add('hidden');
-      this.menu.classList.remove('hidden');
-    });
     on('pill-city', () => {
       this.audio.unlock();
       this.exitDaily();
