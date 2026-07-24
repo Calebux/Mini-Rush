@@ -10,7 +10,7 @@ export const bank = (): number => {
 };
 
 export const deposit = (coins: number): void => {
-  if (coins > 0) localStorage.setItem(BANK_KEY, String(bank() + Math.floor(coins)));
+  if (Number.isFinite(coins) && coins > 0) localStorage.setItem(BANK_KEY, String(bank() + Math.floor(coins)));
 };
 
 export function owned(): Set<string> {
@@ -24,6 +24,8 @@ export function owned(): Set<string> {
 
 /** Take coins out of the bank. False = can't afford (nothing deducted). */
 export function spend(amount: number): boolean {
+  if (!Number.isFinite(amount) || amount < 0) return false;
+  amount = Math.floor(amount);
   if (bank() < amount) return false;
   localStorage.setItem(BANK_KEY, String(bank() - amount));
   return true;
