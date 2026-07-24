@@ -583,8 +583,10 @@
     #car-lock.hidden { display: none; }
     #car-price { font-size: 15px; font-weight: 800; color: #fcff52; }
     #btn-unlock { padding: 8px 18px; font-size: 13px; }
-    #btn-unlock:disabled { opacity: .35; pointer-events: none; }
-    #btn-garage-done.locked, #btn-tour-done.locked { opacity: .35; pointer-events: none; }
+    #btn-unlock:disabled { opacity: .35; pointer-events: none; cursor: not-allowed; }
+    #btn-garage-done.locked, #btn-tour-done.locked {
+      opacity: .35; pointer-events: none; cursor: not-allowed;
+    }
     #bank-line, #garage-bank { color: #fcff52; opacity: .8; }
     #btn-daily small { display: block; font-size: 10px; opacity: .65; font-weight: 600; letter-spacing: .5px; }
 
