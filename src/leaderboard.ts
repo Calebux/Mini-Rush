@@ -20,9 +20,14 @@ export const BOARD_SIZE = 10;
 const sanitizeTag = (t: string): string =>
   t.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 3);
 
+const toFiniteNumber = (value: unknown, fallback = 0): number => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+
 export class Leaderboard {
   get tag(): string {
-    return localStorage.getItem(TAG_KEY) || 'ACE';
+    return sanitizeTag(localStorage.getItem(TAG_KEY) || '') || 'ACE';
   }
 
   set tag(t: string) {
@@ -71,7 +76,20 @@ export class Leaderboard {
   private read(key: string): BoardEntry[] {
     try {
       const raw = JSON.parse(localStorage.getItem(key) ?? '[]') as BoardEntry[];
-      return Array.isArray(raw) ? raw : [];
+      if (!Array.isArray(raw)) return [];
+      return raw
+        .filter((entry) => entry && typeof entry === 'object')
+        .map((entry) => ({
+          tag: sanitizeTag(entry.tag ?? '') || 'ACE',
+          score: Math.max(0, Math.floor(toFiniteNumber(entry.score))),
+          place: Math.max(1, Math.floor(toFiniteNumber(entry.place, 4))),
+          time: Math.max(0, toFiniteNumber(entry.time)),
+          laps: Math.max(1, Math.floor(toFiniteNumber(entry.laps, 1))),
+          car: String(entry.car ?? 'Unknown'),
+          at: Math.max(0, Math.floor(toFiniteNumber(entry.at)))
+        }))
+        .sort((a, b) => b.score - a.score || a.time - b.time)
+        .slice(0, BOARD_SIZE);
     } catch {
       return [];
     }
