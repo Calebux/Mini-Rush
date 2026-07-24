@@ -30,6 +30,7 @@ export const RIVAL_COUNT = 3;
 export const DISTRICTS_PER_MAP = 3;
 
 export function districtIndexAt(s: number, trackLength: number): number {
+  if (!Number.isFinite(s) || !Number.isFinite(trackLength) || trackLength <= 0) return 0;
   const t = Math.max(0, Math.min(0.999, s / trackLength));
   return Math.floor(t * DISTRICTS_PER_MAP);
 }
