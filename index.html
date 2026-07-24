@@ -103,6 +103,7 @@
       display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;
     }
     .setup-pill {
+      appearance: none; font: inherit; color: #fff; text-align: left;
       min-width: 0; padding: 10px 11px; border-radius: 9px; cursor: pointer;
       background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.16);
       box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
@@ -113,6 +114,9 @@
       transform: translateY(-1.5px); box-shadow: 0 4px 14px rgba(0,0,0,.25);
     }
     .setup-pill:active { transform: translateY(0) scale(.98); }
+    button:focus-visible, .setup-pill:focus-visible {
+      outline: 2px solid #fcff52; outline-offset: 3px;
+    }
     .setup-pill span {
       display: block; font-size: 8px; font-weight: 900; letter-spacing: 1.6px;
       color: rgba(255,255,255,.55); margin-bottom: 3px;
@@ -849,8 +853,8 @@
         <path d="M11 18.6l-1.6 2.8" />
       </svg>
     </div>
-    <div id="btn-cam">📷</div>
-    <div id="btn-mute-race">🔊</div>
+    <div id="btn-cam" role="button" tabindex="0" aria-label="Change camera">📷</div>
+    <div id="btn-mute-race" role="button" tabindex="0" aria-label="Toggle sound">🔊</div>
     <div id="drift-ui"><small>DRIFT</small><span id="drift-time">0.0s</span></div>
   </div>
   <div id="rain-overlay"></div>
@@ -883,16 +887,16 @@
     </div>
     <div class="menu-panel">
       <div class="setup-strip">
-        <div class="setup-pill" id="pill-city"><span>CITY</span><strong id="menu-city">LAGOS</strong></div>
-        <div class="setup-pill" id="pill-car"><span>CAR</span><strong id="menu-car">VIPER GT</strong></div>
-        <div class="setup-pill" id="pill-laps"><span>LAPS</span><strong id="menu-laps">2 LAPS</strong></div>
+        <button class="setup-pill" id="pill-city" type="button"><span>CITY</span><strong id="menu-city">LAGOS</strong></button>
+        <button class="setup-pill" id="pill-car" type="button"><span>CAR</span><strong id="menu-car">VIPER GT</strong></button>
+        <button class="setup-pill" id="pill-laps" type="button"><span>LAPS</span><strong id="menu-laps">2 LAPS</strong></button>
       </div>
       <div class="menu-label-row">
         <span class="menu-label">PICK YOUR CHAOS</span>
         <div class="mode-nav">
-          <button class="mode-arrow" id="mode-left" aria-label="Previous modes">‹</button>
+        <button class="mode-arrow" id="mode-left" type="button" aria-label="Previous modes">‹</button>
           <span class="mode-hint">SWIPE ⇄</span>
-          <button class="mode-arrow" id="mode-right" aria-label="Next modes">›</button>
+        <button class="mode-arrow" id="mode-right" type="button" aria-label="Next modes">›</button>
         </div>
       </div>
       <div id="mode-select"></div>
@@ -922,13 +926,13 @@
   </div>
 
   <div class="overlay stage hidden" id="tour">
-    <button class="stage-back" id="tour-back">‹</button>
+      <button class="stage-back" id="tour-back" type="button" aria-label="Back to menu">‹</button>
     <div class="stage-head">
       <div class="stage-title">WORLD <em>TOUR</em></div>
       <div class="stage-step">STEP 1 / 2 — PICK YOUR CITY</div>
     </div>
-    <button class="stage-arrow left" id="map-prev">‹</button>
-    <button class="stage-arrow right" id="map-next">›</button>
+    <button class="stage-arrow left" id="map-prev" type="button" aria-label="Previous city">‹</button>
+    <button class="stage-arrow right" id="map-next" type="button" aria-label="Next city">›</button>
     <div class="stage-card">
       <div class="stage-name" id="map-name-t">🇳🇬 LAGOS</div>
       <canvas id="map-canvas" width="340" height="200"></canvas>
@@ -939,13 +943,13 @@
   </div>
 
   <div class="overlay stage hidden" id="garage">
-    <button class="stage-back" id="garage-back">‹</button>
+    <button class="stage-back" id="garage-back" type="button" aria-label="Back">‹</button>
     <div class="stage-head">
       <div class="stage-title">GAR<em>AGE</em></div>
       <div class="stage-step">STEP 2 / 2 — PICK YOUR RIDE</div>
     </div>
-    <button class="stage-arrow left" id="car-prev">‹</button>
-    <button class="stage-arrow right" id="car-next">›</button>
+    <button class="stage-arrow left" id="car-prev" type="button" aria-label="Previous car">‹</button>
+    <button class="stage-arrow right" id="car-next" type="button" aria-label="Next car">›</button>
     <div class="stage-card">
       <div class="stage-name" id="car-name"><i id="car-chip"></i><span id="car-name-t">VIPER GT</span></div>
       <div id="car-blurb">Balanced all-rounder</div>
