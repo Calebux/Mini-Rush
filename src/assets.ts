@@ -151,7 +151,8 @@ export class AssetLibrary {
 
   /** Clone the garage pick for the player; procedural fallback if missing. */
   cloneCar(spec: CarSpec): THREE.Group {
-    const src = spec.model < 0 ? this.playerCar : this.trafficCars[spec.model];
+    const model = Number.isSafeInteger(spec.model) ? spec.model : -1;
+    const src = model < 0 ? this.playerCar : this.trafficCars[model] ?? null;
     if (!src) return buildCar(Math.max(0, CAR_COLORS.indexOf(spec.color)));
     const g = src.clone(true);
     g.add(carGroundFx(spec.color));
