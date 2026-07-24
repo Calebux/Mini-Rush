@@ -46,6 +46,11 @@ const CAMS = [
   { back: 14.0, h: 11.0, ahead: 19, fov: 57 }
 ];
 
+const numberParam = (qp: URLSearchParams, key: string, fallback: number): number => {
+  const n = Number(qp.get(key));
+  return Number.isFinite(n) ? n : fallback;
+};
+
 export class Game {
   private renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
@@ -143,9 +148,9 @@ export class Game {
     (window as unknown as { __game: Game }).__game = this;
     captureReferrer();
     const qp = new URLSearchParams(location.search);
-    this.trackLength = Number(qp.get('len')) || TRACK_LENGTH_DEFAULT;
-    this.seedCounter = Number(qp.get('seed')) || Math.floor(Math.random() * 1e9);
-    this.laps = Number(qp.get('laps')) || 2;
+    this.trackLength = THREE.MathUtils.clamp(Math.floor(numberParam(qp, 'len', TRACK_LENGTH_DEFAULT)), 600, 5000);
+    this.seedCounter = Math.floor(numberParam(qp, 'seed', Math.floor(Math.random() * 1e9)));
+    this.laps = THREE.MathUtils.clamp(Math.floor(numberParam(qp, 'laps', 2)), 1, 4);
     const car = Number(qp.get('car') ?? localStorage.getItem('minirush.car'));
     this.carIndex = THREE.MathUtils.clamp(Math.floor(car) || 0, 0, CARS.length - 1);
     // ?map= takes a city id ("beijing") or an index; falls back to the saved pick
@@ -460,6 +465,7 @@ export class Game {
 
   /** Garage pick: persist, and swap the parked car live while in the menu. */
   private setCar(i: number): void {
+    if (!Number.isSafeInteger(i) || i < 0 || i >= CARS.length) return;
     this.carIndex = i;
     localStorage.setItem('minirush.car', String(i));
     if (this.state === 'menu') {
@@ -471,6 +477,7 @@ export class Game {
 
   /** Tour stop pick: persist, and rebuild the menu backdrop in the new city. */
   private setMap(i: number): void {
+    if (!Number.isSafeInteger(i) || i < 0 || i >= MAPS.length) return;
     this.mapIndex = i;
     localStorage.setItem('minirush.map', MAPS[i].id);
     if (this.state === 'menu') {
@@ -481,6 +488,7 @@ export class Game {
 
   /** Mode pick: persist, and rebuild so the menu grid shows the new field. */
   private setMode(i: number): void {
+    if (!Number.isSafeInteger(i) || i < 0 || i >= MODES.length) return;
     this.modeIndex = i;
     localStorage.setItem('minirush.mode', MODES[i].id);
     if (this.state === 'menu') {
