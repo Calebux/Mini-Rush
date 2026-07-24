@@ -10,11 +10,19 @@ interface StreakData {
 }
 
 const MILESTONES: [number, number][] = [[3, 25], [5, 50], [7, 100]];
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function normalizeDays(days: unknown): string[] {
+  if (!Array.isArray(days)) return [];
+  return Array.from(new Set(days.filter((d): d is string => typeof d === 'string' && DAY_RE.test(d))))
+    .sort()
+    .slice(-14);
+}
 
 function load(): StreakData {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) ?? '{"days":[]}') as StreakData;
-    return raw && Array.isArray(raw.days) ? raw : { days: [] };
+    return raw && typeof raw === 'object' ? { days: normalizeDays(raw.days) } : { days: [] };
   } catch {
     return { days: [] };
   }
@@ -31,7 +39,7 @@ function today(): string {
 function claimedSet(): Set<string> {
   try {
     const raw = JSON.parse(localStorage.getItem(CLAIMED_KEY) ?? '[]') as string[];
-    return new Set(Array.isArray(raw) ? raw : []);
+    return new Set(Array.isArray(raw) ? raw.filter((k): k is string => typeof k === 'string') : []);
   } catch {
     return new Set();
   }
@@ -48,7 +56,7 @@ export function recordDay(): void {
   if (d.days.includes(t)) return;
   d.days.push(t);
   // keep only the last 14 days to prevent unbounded growth
-  if (d.days.length > 14) d.days = d.days.slice(-14);
+  d.days = normalizeDays(d.days);
   save(d);
 }
 
