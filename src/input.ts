@@ -57,21 +57,29 @@ export class InputManager {
     target.addEventListener('pointercancel', () => (this.down = false));
 
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'ArrowLeft' || e.key === 'a') this.leftHeld = true;
-      else if (e.key === 'ArrowRight' || e.key === 'd') this.rightHeld = true;
-      else if (e.key === 'ArrowDown' || e.key === 's') this.brakeHeld = true;
-      else if (e.key === 'ArrowUp' || e.key === 'w') this.gasHeld = true;
-      else if (!e.repeat && e.key === 'c') this.onCamera();
-      else if (!e.repeat && e.key === 'n') this.onNitroKey();
-      else if (!e.repeat && (e.key === ' ' || e.key === 'Enter')) this.onTap();
+      if (this.isEditableTarget(e.target)) return;
+      const key = e.key.toLowerCase();
+      if (this.isControlKey(key)) e.preventDefault();
+      if (key === 'arrowleft' || key === 'a') this.leftHeld = true;
+      else if (key === 'arrowright' || key === 'd') this.rightHeld = true;
+      else if (key === 'arrowdown' || key === 's') this.brakeHeld = true;
+      else if (key === 'arrowup' || key === 'w') this.gasHeld = true;
+      else if (!e.repeat && key === 'c') this.onCamera();
+      else if (!e.repeat && key === 'n') this.onNitroKey();
+      else if (!e.repeat && (key === ' ' || key === 'enter')) this.onTap();
       this.keySteer = (this.leftHeld ? -1 : 0) + (this.rightHeld ? 1 : 0);
     });
     window.addEventListener('keyup', (e) => {
-      if (e.key === 'ArrowLeft' || e.key === 'a') this.leftHeld = false;
-      else if (e.key === 'ArrowRight' || e.key === 'd') this.rightHeld = false;
-      else if (e.key === 'ArrowDown' || e.key === 's') this.brakeHeld = false;
-      else if (e.key === 'ArrowUp' || e.key === 'w') this.gasHeld = false;
+      const key = e.key.toLowerCase();
+      if (key === 'arrowleft' || key === 'a') this.leftHeld = false;
+      else if (key === 'arrowright' || key === 'd') this.rightHeld = false;
+      else if (key === 'arrowdown' || key === 's') this.brakeHeld = false;
+      else if (key === 'arrowup' || key === 'w') this.gasHeld = false;
       this.keySteer = (this.leftHeld ? -1 : 0) + (this.rightHeld ? 1 : 0);
+    });
+    window.addEventListener('blur', () => this.releaseHeldInputs());
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) this.releaseHeldInputs();
     });
   }
 
@@ -80,5 +88,25 @@ export class InputManager {
     const dx = this.dragDx;
     this.dragDx = 0;
     return dx;
+  }
+
+  private releaseHeldInputs(): void {
+    this.down = false;
+    this.dragDx = 0;
+    this.leftHeld = false;
+    this.rightHeld = false;
+    this.brakeHeld = false;
+    this.gasHeld = false;
+    this.keySteer = 0;
+  }
+
+  private isControlKey(key: string): boolean {
+    return ['arrowleft', 'arrowright', 'arrowdown', 'arrowup', ' ', 'a', 'd', 's', 'w'].includes(key);
+  }
+
+  private isEditableTarget(target: EventTarget | null): boolean {
+    const el = target as HTMLElement | null;
+    if (!el) return false;
+    return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable;
   }
 }
