@@ -37,7 +37,7 @@ type State = 'boot' | 'menu' | 'countdown' | 'racing' | 'finished';
 
 // P1 gets 400, last gets 0, linear in between — works for any grid size
 const placeBonus = (place: number, total: number): number =>
-  Math.round(400 * Math.max(0, 1 - (place - 1) / Math.max(1, total - 1)));
+  Math.round(400 * Math.max(0, 1 - (Math.max(1, place) - 1) / Math.max(1, total - 1)));
 
 // chase / low bumper / high TV — cycled with the 📷 button or C key
 const CAMS = [
