@@ -111,8 +111,12 @@ export class AudioManager {
   muted = false;
 
   private static loadVolume(): number {
-    const v = Number(localStorage.getItem('minirush.volume'));
-    return Number.isFinite(v) && v >= 0 && v <= 1 ? v : 1;
+    try {
+      const v = Number(localStorage.getItem('minirush.volume'));
+      return Number.isFinite(v) && v >= 0 && v <= 1 ? v : 1;
+    } catch {
+      return 1;
+    }
   }
 
   /** All sound routes through here; null until the context is unlocked. */
@@ -127,8 +131,10 @@ export class AudioManager {
 
   /** Set master volume 0..1, applied live and persisted. */
   setVolume(level: number): void {
-    this.volume = Math.min(1, Math.max(0, level));
-    localStorage.setItem('minirush.volume', String(this.volume));
+    this.volume = Number.isFinite(level) ? Math.min(1, Math.max(0, level)) : 1;
+    try {
+      localStorage.setItem('minirush.volume', String(this.volume));
+    } catch { /* persistence is best-effort */ }
     if (this.masterGain && this.ctx) {
       this.masterGain.gain.setTargetAtTime(this.volume, this.ctx.currentTime, 0.03);
     }
@@ -342,6 +348,7 @@ export class AudioManager {
   }
 
   play(name: SfxName, volume = 1): void {
+    volume = Number.isFinite(volume) ? Math.max(0, volume) : 1;
     const buzz = HAPTICS[name];
     if (buzz) {
       try {
