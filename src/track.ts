@@ -34,6 +34,8 @@ export interface TrackShape {
 }
 
 const DEFAULT_SHAPE: TrackShape = { ctlMin: 11, ctlVar: 4, rMin: 0.6, rVar: 0.75 };
+const safeNumber = (value: number, fallback: number): number =>
+  Number.isFinite(value) ? value : fallback;
 
 export class Track {
   readonly length: number;
@@ -44,12 +46,16 @@ export class Track {
 
   constructor(seed: number, targetLength: number, shape: TrackShape = DEFAULT_SHAPE) {
     const rand = mulberry32(seed);
-    const nCtl = shape.ctlMin + Math.floor(rand() * shape.ctlVar);
-    const R = targetLength / (2 * Math.PI);
+    const ctlMin = Math.max(4, Math.floor(safeNumber(shape.ctlMin, DEFAULT_SHAPE.ctlMin)));
+    const ctlVar = Math.max(1, Math.floor(safeNumber(shape.ctlVar, DEFAULT_SHAPE.ctlVar)));
+    const rMin = Math.max(0.1, safeNumber(shape.rMin, DEFAULT_SHAPE.rMin));
+    const rVar = Math.max(0, safeNumber(shape.rVar, DEFAULT_SHAPE.rVar));
+    const nCtl = ctlMin + Math.floor(rand() * ctlVar);
+    const R = Math.max(600, safeNumber(targetLength, 1800)) / (2 * Math.PI);
     const cx: number[] = [], cz: number[] = [];
     for (let i = 0; i < nCtl; i++) {
       const a = (i / nCtl) * Math.PI * 2 + (rand() - 0.5) * (2.2 / nCtl);
-      const r = R * (shape.rMin + rand() * shape.rVar);
+      const r = R * (rMin + rand() * rVar);
       cx.push(Math.sin(a) * r);
       cz.push(-Math.cos(a) * r);
     }
