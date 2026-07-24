@@ -25,6 +25,15 @@ const BEST_KEY = 'minirush.best';
 const PLACE_SUFFIX = ['st', 'nd', 'rd', 'th'];
 const suffix = (place: number) => PLACE_SUFFIX[Math.min(place, 4) - 1];
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+const activateOnEnter = (el: HTMLElement, fn: () => void): void => {
+  el.addEventListener('click', fn);
+  if (el.tagName === 'BUTTON') return;
+  el.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    fn();
+  });
+};
 // mouse + hover ⇒ a physical keyboard is almost certainly attached
 const hasKeyboard = () => matchMedia('(any-hover: hover) and (any-pointer: fine)').matches;
 const MODE_RISK: Record<string, string> = {
@@ -281,7 +290,7 @@ export class UI {
 
     const cam = $('btn-cam');
     cam.addEventListener('pointerdown', (e) => e.stopPropagation());
-    cam.addEventListener('click', () => this.onCamera());
+    activateOnEnter(cam, () => this.onCamera());
 
     // mute lives in two places (menu chip + race HUD) but is one setting
     const MUTE_KEY = 'minirush.muted';
@@ -295,7 +304,7 @@ export class UI {
     for (const id of ['btn-mute', 'btn-mute-race']) {
       const el = $(id);
       el.addEventListener('pointerdown', (e) => e.stopPropagation());
-      el.addEventListener('click', () => {
+      activateOnEnter(el, () => {
         muted = !muted;
         localStorage.setItem(MUTE_KEY, muted ? '1' : '0');
         applyMute();
@@ -330,6 +339,8 @@ export class UI {
       const m = MODES[i];
       const b = document.createElement('button');
       b.className = className;
+      b.type = 'button';
+      b.setAttribute('aria-label', `Select ${m.name} mode`);
       b.innerHTML =
         `<span class="mi">${m.icon}</span>` +
         `<span class="mn">${m.name}</span>` +
@@ -345,6 +356,8 @@ export class UI {
     MODES.forEach((m, i) => {
       const card = document.createElement('button');
       card.className = 'mode-card';
+      card.type = 'button';
+      card.setAttribute('aria-label', `Select ${m.name} mode`);
       const laps = m.lapsLocked ? `${m.lapsLocked} LAP${m.lapsLocked === 1 ? '' : 'S'}` : 'OPEN LAPS';
       card.innerHTML =
         `<div class="mode-card-top">` +
@@ -377,6 +390,8 @@ export class UI {
     });
     const more = document.createElement('button');
     more.className = 'mode-chip more';
+    more.type = 'button';
+    more.setAttribute('aria-label', 'Open all modes');
     more.innerHTML = '<span class="mi">▦</span><span class="mn">ALL MODES</span><span class="mr">MORE</span>';
     more.addEventListener('click', () => {
       more.blur();
@@ -470,10 +485,14 @@ export class UI {
     this.modeIndex = i;
     const m = MODES[i];
     this.modeButtons.forEach((c, ci) => {
-      if (c) c.classList.toggle('sel', ci === i);
+      if (c) {
+        c.classList.toggle('sel', ci === i);
+        c.setAttribute('aria-pressed', String(ci === i));
+      }
     });
     this.modeCards.forEach((c, ci) => {
       c.classList.toggle('sel', ci === i);
+      c.setAttribute('aria-pressed', String(ci === i));
     });
     $('mode-tag').textContent = m.tagline;
     $('mode-name-line').textContent = `${m.icon} ${m.name} · ${MODE_RISK[m.id] ?? 'MODE'}`;
@@ -484,7 +503,8 @@ export class UI {
   }
 
   get best(): number {
-    return Number(localStorage.getItem(BEST_KEY) ?? '0');
+    const n = Number(localStorage.getItem(BEST_KEY) ?? '0');
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
   }
 
   /** Reflect an externally-set lap count (e.g. ?laps= query param). */
@@ -547,6 +567,7 @@ export class UI {
       minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
       minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z);
     }
+    if (!Number.isFinite(minX + maxX + minZ + maxZ) || maxX === minX || maxZ === minZ) return;
     const pad = 16;
     const sc = Math.min((W - 2 * pad) / (maxX - minX), (H - 2 * pad) / (maxZ - minZ));
     const ox = (W - (maxX - minX) * sc) / 2 - minX * sc;
@@ -664,6 +685,9 @@ export class UI {
       const dot = document.createElement('button');
       const owned = skinOwned(car.id, i);
       dot.className = 'skin-dot' + (i === active ? ' sel' : '') + (owned ? '' : ' locked');
+      dot.type = 'button';
+      dot.setAttribute('aria-label', owned ? `Equip ${skin.name} paint` : `Buy ${skin.name} paint for ${skin.price} coins`);
+      dot.setAttribute('aria-pressed', String(i === active));
       const hex = `#${skin.color.toString(16).padStart(6, '0')}`;
       dot.style.background = hex;
       dot.style.color = hex; // drives the currentColor glow
@@ -763,7 +787,9 @@ export class UI {
 
   private selectLapChip(n: number, notify = true): void {
     document.querySelectorAll<HTMLElement>('.lap-chip').forEach((c) => {
-      c.classList.toggle('sel', Number(c.dataset.laps) === n);
+      const selected = Number(c.dataset.laps) === n;
+      c.classList.toggle('sel', selected);
+      c.setAttribute('aria-pressed', String(selected));
     });
     $('menu-laps').textContent = `${n} LAP${n === 1 ? '' : 'S'}`;
     if (notify) {
@@ -972,7 +998,9 @@ export class UI {
     this.nitroUi.textContent = nitroActive ? 'NITRO!!' : `NITRO ×${nitroTanks} — TAP`;
 
     progress.forEach((p, i) => {
-      this.dots[i].style.left = `${Math.min(100, p * 100)}%`;
+      if (!this.dots[i]) return;
+      const pct = Number.isFinite(p) ? Math.min(100, Math.max(0, p * 100)) : 0;
+      this.dots[i].style.left = `${pct}%`;
     });
   }
 
