@@ -65,7 +65,10 @@ interface ClaimData {
 function loadClaim(): ClaimData {
   try {
     const raw = JSON.parse(localStorage.getItem(CLAIM_KEY) ?? 'null') as ClaimData | null;
-    if (raw && raw.week === weekKey()) return raw;
+    if (raw && raw.week === weekKey()) {
+      const bestPlace = Math.max(1, Math.min(99, Math.floor(Number(raw.bestPlace) || 99)));
+      return { week: raw.week, bestPlace };
+    }
   } catch { /* fall through */ }
   return { week: weekKey(), bestPlace: 99 };
 }
