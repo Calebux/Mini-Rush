@@ -72,7 +72,11 @@ interface SkinStore {
 function load(): SkinStore {
   try {
     const raw = JSON.parse(localStorage.getItem(ACTIVE_KEY) ?? '{}') as SkinStore;
-    return raw && typeof raw === 'object' && raw.active ? raw : { active: {}, owned: {} };
+    if (!raw || typeof raw !== 'object') return { active: {}, owned: {} };
+    return {
+      active: raw.active && typeof raw.active === 'object' ? raw.active : {},
+      owned: raw.owned && typeof raw.owned === 'object' ? raw.owned : {}
+    };
   } catch {
     return { active: {}, owned: {} };
   }
@@ -84,7 +88,9 @@ function save(store: SkinStore): void {
 
 /** Index of the currently active skin for a car. */
 export function activeSkinIndex(carId: string): number {
-  return load().active[carId] ?? 0;
+  const skins = CAR_SKINS[carId];
+  const index = Math.floor(load().active[carId] ?? 0);
+  return skins && index >= 0 && index < skins.length ? index : 0;
 }
 
 /** Whether a specific skin is owned. Index 0 (stock) is always owned. */
@@ -101,7 +107,7 @@ export function buySkin(carId: string, index: number): boolean {
   if (!spend(skins[index].price)) return false;
   const store = load();
   if (!store.owned[carId]) store.owned[carId] = [];
-  store.owned[carId].push(index);
+  store.owned[carId] = Array.from(new Set([...store.owned[carId], index]));
   store.active[carId] = index;
   save(store);
   return true;
