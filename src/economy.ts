@@ -49,9 +49,12 @@ export function unlock(id: string, price: number): boolean {
 export function racePayout(p: {
   place: number; field: number; zombies: number; laps: number;
 }): number {
+  const place = Number.isFinite(p.place) ? Math.max(1, Math.floor(p.place)) : 1;
+  const zombies = Number.isFinite(p.zombies) ? Math.max(0, Math.floor(p.zombies)) : 0;
+  const lapsRun = Number.isFinite(p.laps) ? Math.max(1, Math.floor(p.laps)) : 1;
   const finish = 12;                                    // reached the line
-  const podium = Math.max(0, 20 - (p.place - 1) * 6);   // 1st 20 · 2nd 14 · 3rd 8 · 4th 2
-  const splats = Math.floor(p.zombies / 4);             // horde laps reward the grind
-  const laps = Math.max(0, p.laps - 1) * 5;             // multi-lap modes pay more
+  const podium = Math.max(0, 20 - (place - 1) * 6);      // 1st 20 · 2nd 14 · 3rd 8 · 4th 2
+  const splats = Math.floor(zombies / 4);                // horde laps reward the grind
+  const laps = Math.max(0, lapsRun - 1) * 5;             // multi-lap modes pay more
   return finish + podium + splats + laps;
 }
