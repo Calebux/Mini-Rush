@@ -542,6 +542,8 @@ export class UI {
       ? m.blurb
       : `🛂 Finish a race in ${MAPS[this.mapIndex - 1].name} to stamp your passport.`;
     $('btn-tour-done').classList.toggle('locked', !open);
+    $<HTMLButtonElement>('btn-tour-done').disabled = !open;
+    $('btn-tour-done').setAttribute('aria-disabled', String(!open));
   }
 
   /** Circuit minimap on the tour page — the actual spline, one color per district. */
@@ -638,6 +640,8 @@ export class UI {
     const isOwned = c.price === 0 || owned().has(c.id);
     $('car-lock').classList.toggle('hidden', isOwned);
     $('btn-garage-done').classList.toggle('locked', !isOwned);
+    $<HTMLButtonElement>('btn-garage-done').disabled = !isOwned;
+    $('btn-garage-done').setAttribute('aria-disabled', String(!isOwned));
     if (!isOwned) {
       $('car-price').textContent = `🔒 ⬤ ${c.price}`;
       $<HTMLButtonElement>('btn-unlock').disabled = bank() < c.price;
@@ -735,6 +739,7 @@ export class UI {
       });
     };
     const daily = this.board.dailyEntries(dayKey());
+    const weekly = this.board.weeklyEntries(weekKey());
     const allTime = this.board.entries();
 
     // global daily first — it's the board that matters
@@ -776,8 +781,9 @@ export class UI {
     }
 
     if (daily.length > 0) section("⚡ TODAY'S DAILY (THIS PHONE)", daily.slice(0, 5));
+    if (weekly.length > 0) section("🏆 THIS WEEK'S CUP (THIS PHONE)", weekly.slice(0, 5));
     if (allTime.length > 0) section('ALL TIME', allTime);
-    if (daily.length === 0 && allTime.length === 0 && !remoteEnabled()) {
+    if (daily.length === 0 && weekly.length === 0 && allTime.length === 0 && !remoteEnabled()) {
       const empty = document.createElement('div');
       empty.className = 'board-empty';
       empty.textContent = 'No runs yet — go set a score!';
