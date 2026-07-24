@@ -22,12 +22,35 @@ function defaultStats(): LocalStats {
   };
 }
 
+function whole(n: unknown): number {
+  return Number.isFinite(Number(n)) ? Math.max(0, Math.floor(Number(n))) : 0;
+}
+
+function countMap(raw: unknown): Record<string, number> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out: Record<string, number> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    const n = whole(value);
+    if (key && n > 0) out[key] = n;
+  }
+  return out;
+}
+
 function load(): LocalStats {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) ?? 'null') as LocalStats | null;
-    return raw && typeof raw === 'object' && typeof raw.totalRaces === 'number'
-      ? { ...defaultStats(), ...raw }
-      : defaultStats();
+    if (!raw || typeof raw !== 'object') return defaultStats();
+    return {
+      totalRaces: whole(raw.totalRaces),
+      wins: whole(raw.wins),
+      zombiesTotal: whole(raw.zombiesTotal),
+      coinsTotal: whole(raw.coinsTotal),
+      bestScore: whole(raw.bestScore),
+      modeRaces: countMap(raw.modeRaces),
+      mapRaces: countMap(raw.mapRaces),
+      driftBest: Number.isFinite(Number(raw.driftBest)) ? Math.max(0, Number(raw.driftBest)) : 0,
+      bossKills: whole(raw.bossKills)
+    };
   } catch {
     return defaultStats();
   }
@@ -51,9 +74,9 @@ export function recordLocalRace(data: {
   const s = load();
   s.totalRaces++;
   if (data.place === 1) s.wins++;
-  s.zombiesTotal += data.zombies;
-  s.coinsTotal += data.coins;
-  if (data.score > s.bestScore) s.bestScore = data.score;
+  s.zombiesTotal += whole(data.zombies);
+  s.coinsTotal += whole(data.coins);
+  if (data.score > s.bestScore) s.bestScore = whole(data.score);
   s.modeRaces[data.modeId] = (s.modeRaces[data.modeId] ?? 0) + 1;
   s.mapRaces[data.mapId] = (s.mapRaces[data.mapId] ?? 0) + 1;
   if (data.driftBest && data.driftBest > s.driftBest) s.driftBest = data.driftBest;
