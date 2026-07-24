@@ -13,8 +13,9 @@ export function dailySeed(): number {
 
 /** Today's tour stop rotates through the map list by day-of-year. */
 export function dailyMapIndex(mapCount: number): number {
+  if (!Number.isFinite(mapCount) || mapCount <= 0) return 0;
   const d = new Date();
   const start = Date.UTC(d.getUTCFullYear(), 0, 0);
   const doy = Math.floor((Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - start) / 864e5);
-  return doy % mapCount;
+  return doy % Math.floor(mapCount);
 }
