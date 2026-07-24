@@ -8,7 +8,8 @@ const KEY = 'minirush.stamps';
 export function stamps(): Set<string> {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) ?? '[]') as string[];
-    return new Set(Array.isArray(raw) ? raw : []);
+    const known = new Set(MAPS.map((m) => m.id));
+    return new Set(Array.isArray(raw) ? raw.filter((id) => known.has(id)) : []);
   } catch {
     return new Set();
   }
@@ -16,6 +17,7 @@ export function stamps(): Set<string> {
 
 /** Stamp a city. Returns true only the first time. */
 export function stamp(id: string): boolean {
+  if (!MAPS.some((m) => m.id === id)) return false;
   const s = stamps();
   if (s.has(id)) return false;
   s.add(id);
@@ -25,5 +27,6 @@ export function stamp(id: string): boolean {
 
 /** First city is always open; each later one needs the previous stamped. */
 export function mapUnlocked(index: number): boolean {
+  if (!Number.isSafeInteger(index) || index < 0 || index >= MAPS.length) return false;
   return index <= 0 || stamps().has(MAPS[index - 1].id);
 }
