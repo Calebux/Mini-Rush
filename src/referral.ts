@@ -6,12 +6,13 @@ import { deposit } from './economy';
 const REF_KEY = 'minirush.referrer';
 const REF_CREDITED_KEY = 'minirush.ref.credited';
 const REWARD_COINS = 50;
+const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 
 /** Called on game load — captures the referrer from the URL. */
 export function captureReferrer(): void {
   const params = new URLSearchParams(window.location.search);
   const ref = params.get('ref');
-  if (ref && ref.startsWith('0x') && ref.length === 42) {
+  if (ref && ADDRESS_RE.test(ref)) {
     // only store if we don't already have one (first-touch attribution)
     if (!localStorage.getItem(REF_KEY)) {
       localStorage.setItem(REF_KEY, ref);
@@ -21,7 +22,8 @@ export function captureReferrer(): void {
 
 /** Get the stored referrer address, or null. */
 export function getReferrer(): string | null {
-  return localStorage.getItem(REF_KEY);
+  const ref = localStorage.getItem(REF_KEY);
+  return ref && ADDRESS_RE.test(ref) ? ref : null;
 }
 
 /**
@@ -41,7 +43,7 @@ export function creditReferral(): boolean {
 /** Build a share URL with the referral code appended. */
 export function shareUrl(walletAddress: string | null): string {
   const base = window.location.origin + window.location.pathname;
-  if (walletAddress) {
+  if (walletAddress && ADDRESS_RE.test(walletAddress)) {
     return `${base}?ref=${walletAddress}`;
   }
   return base;
