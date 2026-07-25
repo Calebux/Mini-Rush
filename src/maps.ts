@@ -39,6 +39,7 @@ export interface MapSpec {
   fogNear: number;
   fogFar: number;
   skyline?: string; // horizon panorama sprite (assets/sprites/<name>.png)
+  music?: string;   // optional /assets/music/<name> race loop
   districts: [District, District, District];
 }
 
@@ -202,6 +203,76 @@ export const MAPS: MapSpec[] = [
         skyTop: 0x4a6a9a, skyBottom: 0xffa060, fog: 0xc09068, ground: 0x6a5a4a, road: 0x868480, hemi: 0xffe0c0, dust: 0x987a5a },
       { label: 'Liberdade', flavor: 'pagoda',
         skyTop: 0x5a2848, skyBottom: 0xff6870, fog: 0xb86068, ground: 0x584a48, road: 0x8a8488, hemi: 0xffc8c8, dust: 0x8a6a68 }
+    ]
+  },
+  {
+    id: 'norway', name: 'NORWAY', flag: '🇳🇴',
+    blurb: 'Dusk mountain roads under a rising moon — wide sweepers, cold air, no guard rails.',
+    ctlMin: 10, ctlVar: 4, rMin: 0.72, rVar: 0.55, fogNear: 42, fogFar: 210,
+    skyline: 'skyline_mountain_dusk', music: 'offroad',
+    districts: [
+      { label: 'Fjord Road', flavor: 'park',
+        skyTop: 0x263c6f, skyBottom: 0xc07c6a, fog: 0x8e7994, ground: 0x3f5f48, road: 0x737986, hemi: 0xe2c7b8, dust: 0x66745e },
+      { label: 'Moon Pass', flavor: 'terrace',
+        skyTop: 0x1d2752, skyBottom: 0x815c86, fog: 0x6e668c, ground: 0x35464e, road: 0x666d7a, hemi: 0xc9c2ee, dust: 0x58646e },
+      { label: 'Pine Ridge', flavor: 'park',
+        skyTop: 0x24375f, skyBottom: 0xa07669, fog: 0x828090, ground: 0x344f3f, road: 0x707782, hemi: 0xd6d4ea, dust: 0x5e6f58 }
+    ]
+  },
+  {
+    id: 'iceland', name: 'ICELAND', flag: '🇮🇸',
+    blurb: 'Glacial switchbacks across blue ice, black gravel and volcanic frost.',
+    ctlMin: 12, ctlVar: 4, rMin: 0.55, rVar: 0.85, fogNear: 30, fogFar: 165,
+    skyline: 'skyline_glacial_mountains', music: 'offroad',
+    districts: [
+      { label: 'Glacier Tongue', flavor: 'pyramids',
+        skyTop: 0x5f94c6, skyBottom: 0xd9f2ff, fog: 0xb7d7e6, ground: 0xbfd4dc, road: 0x8c969d, hemi: 0xf4fbff, dust: 0xd6e8ee },
+      { label: 'Basalt Flats', flavor: 'towers',
+        skyTop: 0x3f607c, skyBottom: 0xb9d2e1, fog: 0x9eb3c0, ground: 0x3c4348, road: 0x70777d, hemi: 0xe4f2ff, dust: 0x6d7478 },
+      { label: 'Frost Valley', flavor: 'park',
+        skyTop: 0x446f9f, skyBottom: 0xe1f7ff, fog: 0xc8e4ef, ground: 0x8fa8aa, road: 0x89949a, hemi: 0xf5fdff, dust: 0xc6d6d8 }
+    ]
+  },
+  {
+    id: 'canada', name: 'CANADA', flag: '🇨🇦',
+    blurb: 'Tall-forest rally lanes through cedar shade, lakeside cabins and mossy cutbacks.',
+    ctlMin: 13, ctlVar: 4, rMin: 0.58, rVar: 0.78, fogNear: 36, fogFar: 185,
+    skyline: 'skyline_tall_forest', music: 'offroad',
+    districts: [
+      { label: 'Cedar Run', flavor: 'park',
+        skyTop: 0x3d9ad0, skyBottom: 0xbbe8b7, fog: 0x9fcaad, ground: 0x4f7a3c, road: 0x7d8279, hemi: 0xe2f9dc, dust: 0x708a50 },
+      { label: 'Lake Cabins', flavor: 'terrace',
+        skyTop: 0x508fc4, skyBottom: 0xc7efcf, fog: 0xa7cdbf, ground: 0x4a6840, road: 0x858a80, hemi: 0xe9f8e4, dust: 0x697b52 },
+      { label: 'Moss Market', flavor: 'market',
+        skyTop: 0x2f6f82, skyBottom: 0x9edfb3, fog: 0x88b596, ground: 0x4e6840, road: 0x757c74, hemi: 0xd7f0d2, dust: 0x657653 }
+    ]
+  },
+  {
+    id: 'newzealand', name: 'NEW ZEALAND', flag: '🇳🇿',
+    blurb: 'Bright nature-stage racing over green hills, coastal cliffs and alpine straights.',
+    ctlMin: 11, ctlVar: 4, rMin: 0.68, rVar: 0.62, fogNear: 45, fogFar: 205,
+    skyline: 'skyline_nature_landscapes', music: 'offroad',
+    districts: [
+      { label: 'Rolling Hills', flavor: 'palms',
+        skyTop: 0x32a4dc, skyBottom: 0xd8f6ff, fog: 0xb8d8d2, ground: 0x68a84e, road: 0x91988e, hemi: 0xf3ffe4, dust: 0x8daa62 },
+      { label: 'Coastal Cliffs', flavor: 'pyramids',
+        skyTop: 0x2588c8, skyBottom: 0xbfefff, fog: 0x9fcbd8, ground: 0x7f8a5e, road: 0x8d928a, hemi: 0xe7fbff, dust: 0xa59c70 },
+      { label: 'Alpine Cut', flavor: 'park',
+        skyTop: 0x4a83bd, skyBottom: 0xe6f5ff, fog: 0xb7cedc, ground: 0x5b8a54, road: 0x858d88, hemi: 0xf5fbff, dust: 0x809068 }
+    ]
+  },
+  {
+    id: 'finland', name: 'FINLAND', flag: '🇫🇮',
+    blurb: 'Star-lit forest roads with glowing fields, quiet lakes and sharp midnight corners.',
+    ctlMin: 14, ctlVar: 4, rMin: 0.5, rVar: 0.82, fogNear: 28, fogFar: 160,
+    skyline: 'skyline_stringstar_fields', music: 'offroad',
+    districts: [
+      { label: 'Stringstar Grove', flavor: 'park',
+        skyTop: 0x100f2d, skyBottom: 0x3f2c74, fog: 0x2c2456, ground: 0x293d36, road: 0x4b4f62, hemi: 0x7f8cff, dust: 0x4d5b54 },
+      { label: 'Lantern Lake', flavor: 'pagoda',
+        skyTop: 0x15163a, skyBottom: 0x5f3d86, fog: 0x3d3164, ground: 0x324842, road: 0x56586a, hemi: 0x9c94ff, dust: 0x53645d },
+      { label: 'Midnight Fields', flavor: 'market',
+        skyTop: 0x0e122c, skyBottom: 0x6f4a8f, fog: 0x3b2a5c, ground: 0x3c4435, road: 0x575866, hemi: 0xa58cff, dust: 0x5e6048 }
     ]
   }
 ];

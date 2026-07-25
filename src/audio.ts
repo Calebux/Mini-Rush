@@ -283,7 +283,7 @@ export class AudioManager {
   private startSynthMusic(name: string): void {
     this.stopMusicSource();
     const ctx = this.ctx!;
-    const tune = name === 'race' ? RACE_TUNE : MENU_TUNE;
+    const tune = name === 'menu' ? MENU_TUNE : RACE_TUNE;
     const stepDur = 60 / tune.bpm / 2; // 8th notes
     let step = 0;
     let nextT = ctx.currentTime + 0.08;

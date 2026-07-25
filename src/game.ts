@@ -535,7 +535,7 @@ export class Game {
     this.lastCount = -1;
     this.audio.play('ignition');
     this.audio.startEngine();
-    void this.audio.playMusic('race');
+    void this.audio.playMusic(MAPS[this.mapIndex].music ?? 'race');
     this.raceTime = 0;
     this.playerTime = 0;
     this.coins = 0;

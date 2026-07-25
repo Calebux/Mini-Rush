@@ -46,7 +46,12 @@ const MAP_POOL: Record<string, WeatherType[]> = {
   nairobi: ['clear', 'clear', 'clear', 'night'],
   seoul:   ['clear', 'rain', 'night'],
   accra:   ['clear', 'clear', 'rain'],
-  saopaulo:['clear', 'rain', 'night']
+  saopaulo:['clear', 'rain', 'night'],
+  norway:  ['clear', 'night', 'night', 'rain'],
+  iceland: ['clear', 'rain', 'night'],
+  canada:  ['clear', 'clear', 'rain'],
+  newzealand: ['clear', 'clear', 'rain'],
+  finland: ['night', 'night', 'clear']
 };
 
 /** Deterministic weather for a map+seed. */
