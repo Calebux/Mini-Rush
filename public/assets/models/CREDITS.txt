@@ -3,6 +3,9 @@ License: CC0 1.0 Universal (public domain)
 
 City buildings: "Downtown City MegaKit" (Standard/free) by Quaternius (quaternius.itch.io/downtown-city-megakit)
 Player car: Audi R8 model downloaded by the user from cgtrader (converted + restyled)
+Super garage cars:
+- car_super_1.glb: user-downloaded Audi R8 OBJ, converted to GLB and restyled in-game
+- car_super_2.fbx..car_super_5.fbx: user-downloaded super cars package templates FBX models, restyled in-game
 
 Sprites & audio (../sprites, ../sfx):
 - UI sounds: "Universal UI Soundpack" by Cyrex Studios (cyrex-studios.itch.io/universal-ui-soundpack) — CC0

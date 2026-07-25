@@ -34,10 +34,15 @@ export function spend(amount: number): boolean {
 /** Spend from the bank to unlock a car. False = can't afford. */
 export function unlock(id: string, price: number): boolean {
   if (!spend(price)) return false;
+  grantCar(id);
+  return true;
+}
+
+/** Unlock a car without spending coins, e.g. after a stablecoin market purchase. */
+export function grantCar(id: string): void {
   const o = owned();
   o.add(id);
   localStorage.setItem(OWNED_KEY, JSON.stringify([...o]));
-  return true;
 }
 
 /**

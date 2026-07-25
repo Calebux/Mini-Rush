@@ -27,10 +27,12 @@ const ROOT = join(HERE, '..');
 const KEYS_FILE = join(HERE, '.stress-wallets.json');
 
 // ---- knobs -----------------------------------------------------------------
-const WALLETS = Number(process.env.WALLETS ?? 12);
-const RACES_PER_WALLET = Number(process.env.RACES ?? 10);
+const WALLETS = Number(process.env.WALLETS ?? 29);
+const RACES_PER_WALLET = Number(process.env.RACES ?? 3);
 // Fund must cover RACES x (GAS_LIMIT x gasPrice) reserved up front, + sweep gas.
-const FUND_PER_WALLET = parseEther(process.env.FUND ?? '0.20');
+// By default this is calculated from the current buffered gas price. Set FUND
+// to override it, for example FUND=0.10.
+const FUND_PER_WALLET_OVERRIDE = process.env.FUND ? parseEther(process.env.FUND) : null;
 const GAS_LIMIT = BigInt(process.env.GAS_LIMIT ?? 110_000); // ~90k first call, ~65k after; headroom
 const GAS_PRICE_BUFFER_BPS = 12_500n;        // 1.25x current gasPrice
 const RPC = 'https://forno.celo.org';
@@ -71,19 +73,58 @@ async function gasPrice() {
   return (gp * GAS_PRICE_BUFFER_BPS) / 10_000n;
 }
 
-function loadOrCreateWallets() {
+function fundPerWallet(gp) {
+  if (FUND_PER_WALLET_OVERRIDE !== null) return FUND_PER_WALLET_OVERRIDE;
+  const maxRaceGas = GAS_LIMIT * BigInt(RACES_PER_WALLET);
+  const sweepGas = 21_000n;
+  return ((maxRaceGas + sweepGas) * gp * 11n) / 10n;
+}
+
+function assertPositiveInteger(name, value) {
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new Error(`${name} must be a positive integer, got ${value}`);
+  }
+}
+
+function newWallet() {
+  const pk = generatePrivateKey();
+  const account = privateKeyToAccount(pk);
+  return { pk, address: account.address, account };
+}
+
+function saveWallets(wallets) {
+  writeFileSync(KEYS_FILE, JSON.stringify(wallets.map(({ pk, address }) => ({ pk, address })), null, 2));
+}
+
+function loadOrCreateWallets(targetCount = WALLETS) {
   if (existsSync(KEYS_FILE)) {
     const saved = JSON.parse(readFileSync(KEYS_FILE, 'utf8'));
-    console.log(`Reusing ${saved.length} existing wallets from ${KEYS_FILE}`);
-    return saved.map((w) => ({ ...w, account: privateKeyToAccount(w.pk) }));
+    const wallets = saved.map((w) => ({ ...w, account: privateKeyToAccount(w.pk) }));
+    if (targetCount === null) {
+      console.log(`Reusing all ${wallets.length} existing wallets from ${KEYS_FILE}`);
+      return wallets;
+    }
+    if (wallets.length < targetCount) {
+      const missing = targetCount - wallets.length;
+      for (let i = 0; i < missing; i++) wallets.push(newWallet());
+      saveWallets(wallets);
+      console.log(`Reusing ${saved.length} existing wallets and added ${missing} new wallets -> ${KEYS_FILE}`);
+      return wallets;
+    }
+    if (wallets.length > targetCount) {
+      console.log(`Reusing first ${targetCount}/${wallets.length} existing wallets from ${KEYS_FILE}`);
+      return wallets.slice(0, targetCount);
+    }
+    console.log(`Reusing ${wallets.length} existing wallets from ${KEYS_FILE}`);
+    return wallets;
+  }
+  if (targetCount === null) {
+    console.log(`No existing wallets at ${KEYS_FILE}`);
+    return [];
   }
   const wallets = [];
-  for (let i = 0; i < WALLETS; i++) {
-    const pk = generatePrivateKey();
-    const account = privateKeyToAccount(pk);
-    wallets.push({ pk, address: account.address, account });
-  }
-  writeFileSync(KEYS_FILE, JSON.stringify(wallets.map(({ pk, address }) => ({ pk, address })), null, 2));
+  for (let i = 0; i < targetCount; i++) wallets.push(newWallet());
+  saveWallets(wallets);
   console.log(`Created ${wallets.length} wallets -> ${KEYS_FILE}`);
   return wallets;
 }
@@ -114,11 +155,16 @@ async function waitAll(hashes, label) {
 
 async function fundPhase(wallets, gp) {
   const bal = await pub.getBalance({ address: deployer.address });
-  const needed = FUND_PER_WALLET * BigInt(wallets.length);
-  console.log(`\n== FUND ==\nDeployer ${deployer.address} balance ${celoStr(bal)}; funding ${wallets.length} x ${celoStr(FUND_PER_WALLET)} = ${celoStr(needed)}`);
-  if (bal < needed + parseEther('0.05')) throw new Error(`deployer balance too low for funding + gas`);
+  const perWallet = fundPerWallet(gp);
+  const fundingNeeded = perWallet * BigInt(wallets.length);
+  const fundingGasNeeded = 21_000n * gp * BigInt(wallets.length);
+  const reserve = parseEther('0.05');
+  const needed = fundingNeeded + fundingGasNeeded + reserve;
+  console.log(`\n== FUND ==\nDeployer ${deployer.address} balance ${celoStr(bal)}; funding ${wallets.length} x ${celoStr(perWallet)} = ${celoStr(fundingNeeded)}`);
+  console.log(`  deployer funding tx gas: ~${celoStr(fundingGasNeeded)}; reserve: ${celoStr(reserve)}; needed: ~${celoStr(needed)}`);
+  if (bal < needed) throw new Error(`deployer balance too low: need ~${celoStr(needed)}, have ${celoStr(bal)}`);
   const startNonce = await pub.getTransactionCount({ address: deployer.address, blockTag: 'pending' });
-  const txs = wallets.map((w) => ({ to: w.address, value: FUND_PER_WALLET, gas: 21_000n }));
+  const txs = wallets.map((w) => ({ to: w.address, value: perWallet, gas: 21_000n }));
   const sent = await fireBurst(deployer, txs, startNonce, gp);
   const hashes = sent.filter((s) => s.hash).map((s) => s.hash);
   sent.forEach((s, i) => { if (s.error) console.log(`  fund ${wallets[i].address} FAILED to send: ${s.error}`); });
@@ -180,10 +226,13 @@ async function sweepPhase(wallets, gp) {
 }
 
 async function main() {
+  assertPositiveInteger('WALLETS', WALLETS);
+  assertPositiveInteger('RACES', RACES_PER_WALLET);
+
   const mode = process.argv[2];
   const gp = await gasPrice();
   console.log(`Chain: Celo mainnet | V2: ${V2} | gasPrice(buffered): ${celoStr(gp * 1_000_000_000n)}/Ggas`);
-  const wallets = loadOrCreateWallets();
+  const wallets = mode === 'sweep' ? loadOrCreateWallets(null) : loadOrCreateWallets();
 
   if (mode === 'sweep') { await sweepPhase(wallets, gp); return; }
   if (mode === 'fund') { await fundPhase(wallets, gp); return; }

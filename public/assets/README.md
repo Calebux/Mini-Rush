@@ -14,6 +14,8 @@ Scale doesn't matter — the loader auto-normalizes size and grounds each model.
 |---|---|---|
 | `car_player.glb` | PSX-style cars (ggbot) or RCP4 (jreo) | the coolest car — this is the hero |
 | `car_traffic_1.glb` … `car_traffic_6.glb` | PSX-style cars / RCP4 | any 6 different cars |
+| `car_super_1.glb` | user-downloaded OBJ supercar | R8 V10 premium garage car |
+| `car_super_2.fbx` … `car_super_5.fbx` | user-downloaded super cars package templates | premium garage cars |
 | `city_building_1.glb` … `city_building_8.glb` | Downtown City MegaKit (Quaternius) | varied building blocks |
 | `desert_building_1.glb` … `desert_building_8.glb` | Voxel Desert Town (maxparata) | houses, market stalls |
 | `prop_streetlight.glb` | Downtown City MegaKit | streetlight/lamp prop |

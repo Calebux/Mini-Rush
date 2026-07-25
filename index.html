@@ -79,6 +79,12 @@
       display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
       padding-top: 4px;
     }
+    .top-status {
+      padding: 8px 10px; border-radius: 8px;
+      background: rgba(6,8,20,.52); border: 1px solid rgba(255,255,255,.15);
+      box-shadow: 0 10px 28px rgba(0,0,0,.18);
+      backdrop-filter: blur(4px);
+    }
     .menu-track {
       width: 112px; padding: 8px 9px 9px; border-radius: 8px;
       background: rgba(6,8,20,.48); border: 1px solid rgba(255,255,255,.16);
@@ -130,7 +136,7 @@
       margin: 1px 0;
     }
     .menu-actions {
-      display: grid; grid-template-columns: 1fr auto; gap: 9px; align-items: stretch;
+      display: grid; grid-template-columns: 1fr auto auto; gap: 9px; align-items: stretch;
     }
     .menu-secondary {
       display: grid; grid-template-columns: 1.2fr .8fr; gap: 8px;
@@ -324,13 +330,14 @@
 
     /* best + coins as one stat strip */
     #menu-stats {
-      display: flex; flex-direction: column; justify-content: center; gap: 2px;
-      min-width: 0; padding: 8px 10px; border-radius: 8px;
+      display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px;
+      min-width: 0; padding: 10px 12px; border-radius: 8px;
       background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.12);
     }
+    .stat-stack { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
     .mstat {
       display: block; font-size: 11px; font-weight: 800; padding: 0; border-radius: 0;
-      background: transparent; border: 0; opacity: .78; white-space: nowrap; text-align: right;
+      background: transparent; border: 0; opacity: .78; white-space: nowrap; text-align: left;
     }
     #bank-line { color: #fcff52; opacity: 1; }
 
@@ -501,6 +508,7 @@
     }
 
     @media (max-width: 390px) {
+      .menu-top { flex-wrap: wrap; }
       #mode-select { gap: 5px; }
       .mode-chip { padding-left: 3px; padding-right: 3px; }
       .mode-chip .mi { font-size: 22px; }
@@ -584,6 +592,29 @@
     #car-price { font-size: 15px; font-weight: 800; color: #fcff52; }
     #btn-unlock { padding: 8px 18px; font-size: 13px; }
     #btn-unlock:disabled { opacity: .35; pointer-events: none; cursor: not-allowed; }
+    #car-market {
+      width: 100%; display: flex; flex-direction: column; gap: 7px;
+      margin-top: 2px; padding: 9px 10px; border-radius: 8px;
+      background: rgba(255,255,255,.07); border: 1px solid rgba(252,255,82,.22);
+      text-align: left;
+    }
+    #car-market.hidden { display: none; }
+    .market-head {
+      display: flex; justify-content: space-between; gap: 10px; align-items: center;
+      font-size: 9px; font-weight: 900; letter-spacing: 1.5px; color: #fcff52;
+    }
+    .market-perks {
+      display: flex; flex-wrap: wrap; gap: 5px;
+    }
+    .market-perks span {
+      font-size: 8px; font-weight: 900; letter-spacing: .6px;
+      padding: 4px 6px; border-radius: 999px;
+      background: rgba(255,255,255,.08); color: rgba(255,255,255,.72);
+    }
+    .market-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+    #market-status { font-size: 9.5px; line-height: 1.25; opacity: .65; }
+    #btn-market-usdt { padding: 8px 12px; font-size: 12px; white-space: nowrap; }
+    #btn-market-usdt:disabled { opacity: .45; pointer-events: none; cursor: not-allowed; }
     #btn-garage-done.locked, #btn-tour-done.locked {
       opacity: .35; pointer-events: none; cursor: not-allowed;
     }
@@ -724,6 +755,8 @@
 
     /* ---------- volume ---------- */
     #vol-row { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+    #menu-stats #vol-row { justify-self: end; }
+    #streak-line.hidden { display: none; }
     #vol-slider { width: 72px; height: 4px; accent-color: #fcff52; cursor: pointer; }
     #streak-line { color: #00ffcc; opacity: 1; }
     #streak-line.hidden { display: none; }
@@ -918,19 +951,22 @@
       <div class="menu-divider"></div>
       <div class="menu-actions">
         <button class="btn" id="btn-play" type="button"><span>RACE&nbsp;▸</span></button>
+        <button class="btn ghost" id="btn-garage-menu" type="button" aria-label="Open garage">GARAGE</button>
         <button class="btn ghost" id="btn-board" type="button" aria-label="Open leaderboard">🏆 Board</button>
       </div>
       <div class="menu-secondary">
         <button id="btn-daily" type="button">⚡ DAILY RUN</button>
         <button id="btn-weekly" type="button">🏆 WEEKLY CUP</button>
-        <div id="menu-stats">
+      </div>
+      <div id="menu-stats">
+        <div class="stat-stack">
           <span class="mstat" id="best-line">Best score: 0</span>
           <span class="mstat" id="bank-line">⬤ 0 coins</span>
           <span class="mstat hidden" id="streak-line"></span>
-          <div id="vol-row">
-            <button class="mstat" id="btn-mute" type="button" aria-label="Toggle sound">🔊</button>
-            <input type="range" id="vol-slider" min="0" max="100" aria-label="Volume" />
-          </div>
+        </div>
+        <div id="vol-row">
+          <button class="mstat" id="btn-mute" type="button" aria-label="Toggle sound">🔊</button>
+          <input type="range" id="vol-slider" min="0" max="100" aria-label="Volume" />
         </div>
       </div>
     </div>
@@ -985,6 +1021,18 @@
       <div id="car-lock" class="hidden">
         <span id="car-price">🔒 ⬤ 500</span>
         <button class="btn ghost" id="btn-unlock" type="button">UNLOCK</button>
+      </div>
+      <div id="car-market" class="hidden">
+        <div class="market-head"><span>CAR MARKET</span><strong>FAST PASS</strong></div>
+        <div class="market-perks">
+          <span>Instant unlock</span>
+          <span>No coin grind</span>
+          <span>Hyper class access</span>
+        </div>
+        <div class="market-row">
+          <div id="market-status">USDT payments are not configured yet.</div>
+          <button class="btn ghost" id="btn-market-usdt" type="button">0.1 USDT</button>
+        </div>
       </div>
       <div class="hint" id="garage-bank">⬤ 0 coins</div>
       <button class="btn stage-cta" id="btn-garage-done" type="button">START&nbsp;RACE</button>

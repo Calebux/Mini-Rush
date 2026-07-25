@@ -14,6 +14,8 @@ contracts/broadcast/
 .env.*.local
 # generated throwaway wallet keys (stress test)
 scripts/.stress-wallets*.json
+# local treasury wallet generated for market testing
+.treasury-wallet.json
 
 # editor / OS
 .DS_Store

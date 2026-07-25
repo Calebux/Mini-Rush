@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { CarSpec } from './cars';
 import { buildCar, CAR_COLORS, carGroundFx } from './meshes';
@@ -10,6 +11,8 @@ import { toonify } from './toon';
  *
  *   car_player.glb            — your hero car   (PSX-style cars / RCP4)
  *   car_traffic_1..6.glb      — traffic cars    (PSX-style cars / RCP4)
+ *   car_super_1.glb           — OBJ-converted premium garage car
+ *   car_super_2..5.fbx        — FBX premium garage cars
  *   city_building_1..8.glb    — city blocks     (Downtown City MegaKit)
  *   desert_building_1..8.glb  — desert blocks   (Voxel Desert Town)
  *   prop_streetlight.glb, prop_cactus_1..3.glb, plane_bonus.glb (Voxel Plane)
@@ -19,6 +22,7 @@ export class AssetLibrary {
   // fixed slots (not push) so CarSpec.model indexes stay stable across
   // whichever async load order the GLBs resolve in
   trafficCars: (THREE.Group | null)[] = [null, null, null, null, null, null];
+  superCars: (THREE.Group | null)[] = [null, null, null, null, null];
   cityBuildings: THREE.Group[] = [];
   desertBuildings: THREE.Group[] = [];
   medievalBuildings: THREE.Group[] = [];
@@ -29,6 +33,7 @@ export class AssetLibrary {
   wheel: THREE.Group | null = null;
 
   private loader = new GLTFLoader();
+  private fbxLoader = new FBXLoader();
   private base = `${import.meta.env.BASE_URL}assets/models/`;
 
   async load(): Promise<void> {
@@ -47,6 +52,15 @@ export class AssetLibrary {
         if (m) this.trafficCars[i - 1] = this.addWheels(m);
       }));
     }
+    jobs.push(this.tryLoad('car_super_1.glb', 4.0).then((m) => {
+      if (m) this.superCars[0] = this.addWheels(m);
+    }));
+    ['car_super_2.fbx', 'car_super_3.fbx', 'car_super_4.fbx', 'car_super_5.fbx']
+      .forEach((file, index) => {
+        jobs.push(this.tryLoadFbx(file, 4.0).then((m) => {
+          if (m) this.superCars[index + 1] = this.addWheels(m);
+        }));
+      });
     for (let i = 1; i <= 8; i++) {
       jobs.push(this.tryLoad(`city_building_${i}.glb`, 18, 'y').then((m) => {
         if (m) this.cityBuildings.push(m);
@@ -152,7 +166,11 @@ export class AssetLibrary {
   /** Clone the garage pick for the player; procedural fallback if missing. */
   cloneCar(spec: CarSpec): THREE.Group {
     const model = Number.isSafeInteger(spec.model) ? spec.model : -1;
-    const src = model < 0 ? this.playerCar : this.trafficCars[model] ?? null;
+    const src = model < 0
+      ? this.playerCar
+      : model >= 100
+        ? this.superCars[model - 100] ?? null
+        : this.trafficCars[model] ?? null;
     if (!src) return buildCar(Math.max(0, CAR_COLORS.indexOf(spec.color)));
     const g = src.clone(true);
     g.add(carGroundFx(spec.color));
@@ -166,31 +184,59 @@ export class AssetLibrary {
    * the wrapper; the drive code adds its own π).
    */
   private tryLoad(
-    file: string, targetSize: number, axis: 'max' | 'y' = 'max', flip = false, paint?: number
+    file: string,
+    targetSize: number,
+    axis: 'max' | 'y' = 'max',
+    flip = false,
+    paint?: number,
+    adjust?: { rotateX?: number; stretchY?: number }
   ): Promise<THREE.Group | null> {
     return new Promise((resolve) => {
       this.loader.load(
         this.base + file,
         (gltf) => {
-          const g = gltf.scene;
-          toonify(g, paint); // match the game's cel look
-          if (flip) g.rotation.y = Math.PI; // applied before box math below
-          const box = new THREE.Box3().setFromObject(g);
-          const size = box.getSize(new THREE.Vector3());
-          const dim = axis === 'y' ? size.y : Math.max(size.x, size.y, size.z);
-          const s = dim > 0 ? targetSize / dim : 1;
-          g.scale.setScalar(s);
-          box.setFromObject(g);
-          const center = box.getCenter(new THREE.Vector3());
-          g.position.set(-center.x, -box.min.y, -center.z);
-          const wrapper = new THREE.Group();
-          wrapper.add(g);
-          resolve(wrapper);
+          resolve(this.normalizeModel(gltf.scene, targetSize, axis, flip, paint, adjust));
         },
         undefined,
         () => resolve(null) // missing file → procedural fallback, not an error
       );
     });
+  }
+
+  private tryLoadFbx(file: string, targetSize: number): Promise<THREE.Group | null> {
+    return new Promise((resolve) => {
+      this.fbxLoader.load(
+        this.base + file,
+        (fbx) => resolve(this.normalizeModel(fbx, targetSize)),
+        undefined,
+        () => resolve(null)
+      );
+    });
+  }
+
+  private normalizeModel(
+    g: THREE.Group,
+    targetSize: number,
+    axis: 'max' | 'y' = 'max',
+    flip = false,
+    paint?: number,
+    adjust?: { rotateX?: number; stretchY?: number }
+  ): THREE.Group {
+    toonify(g, paint); // match the game's cel look
+    if (adjust?.rotateX) g.rotation.x = adjust.rotateX;
+    if (flip) g.rotation.y = Math.PI; // applied before box math below
+    const box = new THREE.Box3().setFromObject(g);
+    const size = box.getSize(new THREE.Vector3());
+    const dim = axis === 'y' ? size.y : Math.max(size.x, size.y, size.z);
+    const s = dim > 0 ? targetSize / dim : 1;
+    g.scale.setScalar(s);
+    if (adjust?.stretchY) g.scale.y *= adjust.stretchY;
+    box.setFromObject(g);
+    const center = box.getCenter(new THREE.Vector3());
+    g.position.set(-center.x, -box.min.y, -center.z);
+    const wrapper = new THREE.Group();
+    wrapper.add(g);
+    return wrapper;
   }
 }
 

@@ -2,7 +2,7 @@ import { AudioManager } from './audio';
 import { CARS } from './cars';
 import { dailyMapIndex, dayKey } from './daily';
 import { weekKey, weeklyMapIndex, weeklyModeIndex, WEEKLY_PRIZES } from './weekly';
-import { bank, owned, unlock } from './economy';
+import { bank, grantCar, owned, unlock } from './economy';
 import { Leaderboard } from './leaderboard';
 import { MAPS } from './maps';
 import { MODES } from './modes';
@@ -50,6 +50,8 @@ const MODE_RISK: Record<string, string> = {
   infected: 'VIRUS',
   voltage: 'SURGE'
 };
+const MARKET_USDT_PRICE = 100_000n; // 0.1 USDT, USDT has 6 decimals.
+const isMarketCar = (model: number): boolean => model >= 100;
 
 export class UI {
   onPlay: () => void = () => {};
@@ -156,6 +158,11 @@ export class UI {
       this.exitDaily();
       goto('menu', 'garage');
     });
+    on('btn-garage-menu', () => {
+      this.audio.unlock();
+      this.exitDaily();
+      goto('menu', 'garage');
+    });
     on('pill-laps', () => {
       this.audio.unlock();
       this.exitDaily();
@@ -216,6 +223,7 @@ export class UI {
         this.refreshBank();
       }
     });
+    on('btn-market-usdt', () => void this.buyMarketCar());
 
     // workshop: coins buy stat tiers on the displayed (owned) car
     const upgrades: [string, UpgradeStat][] = [
@@ -639,12 +647,19 @@ export class UI {
     // locked cars preview fine but can't race — coins open the padlock
     const isOwned = c.price === 0 || owned().has(c.id);
     $('car-lock').classList.toggle('hidden', isOwned);
+    $('car-market').classList.toggle('hidden', isOwned || !isMarketCar(c.model));
     $('btn-garage-done').classList.toggle('locked', !isOwned);
     $<HTMLButtonElement>('btn-garage-done').disabled = !isOwned;
     $('btn-garage-done').setAttribute('aria-disabled', String(!isOwned));
     if (!isOwned) {
       $('car-price').textContent = `🔒 ⬤ ${c.price}`;
       $<HTMLButtonElement>('btn-unlock').disabled = bank() < c.price;
+      const pay = $<HTMLButtonElement>('btn-market-usdt');
+      pay.disabled = !this.wallet.marketReady;
+      pay.textContent = this.wallet.marketReady ? '0.1 USDT' : 'USDT OFF';
+      $('market-status').textContent = this.wallet.marketReady
+        ? 'Unlock instantly with USDT, no coin grind.'
+        : 'USDT payments are not configured yet.';
     }
 
     // workshop row — hidden until the car is yours
@@ -668,6 +683,36 @@ export class UI {
     }
 
     this.renderSkins(isOwned);
+  }
+
+  private async buyMarketCar(): Promise<void> {
+    const c = CARS[this.carIndex];
+    if (!isMarketCar(c.model) || c.price === 0 || owned().has(c.id)) return;
+    const button = $<HTMLButtonElement>('btn-market-usdt');
+    const status = $('market-status');
+    if (!this.wallet.marketReady) {
+      status.textContent = 'USDT payments are not configured yet.';
+      return;
+    }
+    button.disabled = true;
+    status.textContent = 'Confirm payment in your wallet.';
+    let tx = null;
+    try {
+      tx = await this.wallet.buyMarketCarUsdt(MARKET_USDT_PRICE);
+    } catch {
+      tx = null;
+    }
+    if (!tx) {
+      status.textContent = 'Payment was not completed.';
+      button.disabled = false;
+      return;
+    }
+    grantCar(c.id);
+    this.audio.play('buy');
+    status.textContent = 'Unlocked. Market perks active.';
+    this.refreshBank();
+    this.renderCar();
+    this.onCar(this.carIndex);
   }
 
   /** Paint-job dots under the car. Tap an owned skin to equip, a locked one to buy. */
