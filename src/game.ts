@@ -4,7 +4,7 @@ import { AudioManager } from './audio';
 import { CARS } from './cars';
 import { districtIndexAt, TRACK_LENGTH_DEFAULT } from './constants';
 import { dailyMapIndex, dailySeed } from './daily';
-import { deposit } from './economy';
+import { deposit, racePayout } from './economy';
 import { Entities } from './entities';
 import {
   GhostData, GhostRecorder, ghostKey, ghostMesh, ghostPos, loadGhost, saveGhost
@@ -37,7 +37,7 @@ type State = 'boot' | 'menu' | 'countdown' | 'racing' | 'finished';
 
 // P1 gets 400, last gets 0, linear in between — works for any grid size
 const placeBonus = (place: number, total: number): number =>
-  Math.round(400 * Math.max(0, 1 - (place - 1) / Math.max(1, total - 1)));
+  Math.round(400 * Math.max(0, 1 - (Math.max(1, place) - 1) / Math.max(1, total - 1)));
 
 // chase / low bumper / high TV — cycled with the 📷 button or C key
 const CAMS = [
@@ -46,11 +46,22 @@ const CAMS = [
   { back: 14.0, h: 11.0, ahead: 19, fov: 57 }
 ];
 
+const numberParam = (qp: URLSearchParams, key: string, fallback: number): number => {
+  const n = Number(qp.get(key));
+  return Number.isFinite(n) ? n : fallback;
+};
+
 export class Game {
   private renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
   private camera: THREE.PerspectiveCamera;
   private clock = new THREE.Clock();
+  // Adaptive render resolution — holds ~60fps on weak GPUs by trading pixels
+  // under load (horde draw-call spikes) and reclaiming them when there's slack.
+  private dprCap = Math.min(window.devicePixelRatio, 2);
+  private curDpr = Math.min(window.devicePixelRatio, 2);
+  private frameEma = 1 / 60; // smoothed frame time (s)
+  private dprCooldown = 0;    // frames to wait between resolution changes
   private hemi: THREE.HemisphereLight;
   private ground: THREE.Mesh;
   private groundMat: THREE.MeshToonMaterial;
@@ -111,6 +122,7 @@ export class Game {
   private lastWallGrindAt = -10;
   private camMode = 0;
   private cam = { ...CAMS[0] };
+  private paused = false;
 
   private style = new StyleMeter();
   private prevGap: number[] = []; // rival s-gaps last frame — sign flip = a pass
@@ -137,9 +149,9 @@ export class Game {
     (window as unknown as { __game: Game }).__game = this;
     captureReferrer();
     const qp = new URLSearchParams(location.search);
-    this.trackLength = Number(qp.get('len')) || TRACK_LENGTH_DEFAULT;
-    this.seedCounter = Number(qp.get('seed')) || Math.floor(Math.random() * 1e9);
-    this.laps = Number(qp.get('laps')) || 2;
+    this.trackLength = THREE.MathUtils.clamp(Math.floor(numberParam(qp, 'len', TRACK_LENGTH_DEFAULT)), 600, 5000);
+    this.seedCounter = Math.floor(numberParam(qp, 'seed', Math.floor(Math.random() * 1e9)));
+    this.laps = THREE.MathUtils.clamp(Math.floor(numberParam(qp, 'laps', 2)), 1, 4);
     const car = Number(qp.get('car') ?? localStorage.getItem('minirush.car'));
     this.carIndex = THREE.MathUtils.clamp(Math.floor(car) || 0, 0, CARS.length - 1);
     // ?map= takes a city id ("beijing") or an index; falls back to the saved pick
@@ -212,12 +224,24 @@ export class Game {
     this.input.onTap = () => this.onTap();
     this.input.onCamera = () => this.cycleCamera();
     this.input.onNitroKey = () => this.boostNitro();
+    this.input.onPause = () => this.togglePause();
     this.ui.onBrake = (down) => (this.input.uiBrake = down);
     this.ui.onGas = (down) => (this.input.uiGas = down);
     this.ui.onCamera = () => this.cycleCamera();
     this.ui.onNitroPress = () => this.boostNitro();
+    this.ui.onPause = () => this.togglePause();
+    this.ui.onResume = () => this.togglePause();
+    this.ui.onRestart = () => {
+      this.paused = false;
+      this.retrySameTrack();
+    };
 
     window.addEventListener('resize', () => this.onResize());
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && !this.paused && (this.state === 'countdown' || this.state === 'racing')) {
+        this.togglePause();
+      }
+    });
 
     // audio needs a user gesture; catch the very first one no matter where
     // it lands (touch, click, or keyboard) rather than relying on one button
@@ -390,12 +414,13 @@ export class Game {
     (this.scene.fog as THREE.Fog).near = fogNear;
     (this.scene.fog as THREE.Fog).far = fogFar;
 
-    // rain overlay
+    // rain overlay — the CSS streaks only fall while racing; the menu-backdrop
+    // world keeps the weather's fog mood but stays clean of screen-wide lines
     if (!this.rainOverlay) {
       this.rainOverlay = document.getElementById('rain-overlay');
     }
     if (this.rainOverlay) {
-      this.rainOverlay.style.opacity = String(this.weather.rainIntensity);
+      this.rainOverlay.style.opacity = '0';
     }
     // weather label
     if (!this.weatherLabel) {
@@ -453,6 +478,7 @@ export class Game {
 
   /** Garage pick: persist, and swap the parked car live while in the menu. */
   private setCar(i: number): void {
+    if (!Number.isSafeInteger(i) || i < 0 || i >= CARS.length) return;
     this.carIndex = i;
     localStorage.setItem('minirush.car', String(i));
     if (this.state === 'menu') {
@@ -464,6 +490,7 @@ export class Game {
 
   /** Tour stop pick: persist, and rebuild the menu backdrop in the new city. */
   private setMap(i: number): void {
+    if (!Number.isSafeInteger(i) || i < 0 || i >= MAPS.length) return;
     this.mapIndex = i;
     localStorage.setItem('minirush.map', MAPS[i].id);
     if (this.state === 'menu') {
@@ -474,6 +501,7 @@ export class Game {
 
   /** Mode pick: persist, and rebuild so the menu grid shows the new field. */
   private setMode(i: number): void {
+    if (!Number.isSafeInteger(i) || i < 0 || i >= MODES.length) return;
     this.modeIndex = i;
     localStorage.setItem('minirush.mode', MODES[i].id);
     if (this.state === 'menu') {
@@ -508,7 +536,13 @@ export class Game {
   }
 
   private startRace(): void {
-    this.audio.play('click');
+    if (!localStorage.getItem('minirush.controls-guide')) {
+      this.ui.showFirstRunGuide();
+      return;
+    }
+    this.paused = false;
+    this.ui.hidePause();
+    this.audio.play('start'); // race-start fanfare on the START RACE launch
     this.disposeRace();
     this.buildRace();
     this.raceLaps = MODES[this.modeIndex].lapsLocked ?? this.laps;
@@ -520,7 +554,7 @@ export class Game {
     this.lastCount = -1;
     this.audio.play('ignition');
     this.audio.startEngine();
-    void this.audio.playMusic('race');
+    void this.audio.playMusic(MAPS[this.mapIndex].music ?? 'race');
     this.raceTime = 0;
     this.playerTime = 0;
     this.coins = 0;
@@ -570,6 +604,11 @@ export class Game {
       this.ui.popText(`GHOST: ${this.ghostData.time.toFixed(1)}s — BEAT IT`, '#9adfff');
     }
 
+    // now that we're really racing, let the weather's rain streaks fall
+    if (this.rainOverlay && this.weather) {
+      this.rainOverlay.style.opacity = String(this.weather.rainIntensity);
+    }
+
     this.ui.showRace();
   }
 
@@ -582,7 +621,7 @@ export class Game {
 
   /** Tap = shoot in gun modes; otherwise tap = nitro, as ever. */
   private onTap(): void {
-    if (this.state !== 'racing') return;
+    if (this.state !== 'racing' || this.paused) return;
     if (MODES[this.modeIndex].guns) {
       this.shoot();
       return;
@@ -591,10 +630,22 @@ export class Game {
   }
 
   private boostNitro(): void {
-    if (this.state !== 'racing') return;
+    if (this.state !== 'racing' || this.paused) return;
     if (this.player.fireNitro()) {
       this.audio.play('nitro');
       this.ui.popText('NITRO!', '#7fd4ff');
+    }
+  }
+
+  private togglePause(): void {
+    if (!this.paused && this.state !== 'countdown' && this.state !== 'racing') return;
+    this.paused = !this.paused;
+    if (this.paused) {
+      this.audio.stopEngine();
+      this.ui.showPause();
+    } else {
+      this.ui.hidePause();
+      this.audio.startEngine();
     }
   }
 
@@ -738,6 +789,16 @@ export class Game {
       if (next) this.ui.popText(`🛂 ${next.flag} ${next.name} UNLOCKED!`, '#9adfff');
     }
 
+    // Guaranteed finish payout on top of coins grabbed on track — keeps the
+    // garage curve moving even on a pickup-light run (economy floor).
+    const payout = racePayout({
+      place: this.playerPlace,
+      field: this.rivals.rivals.length + 1,
+      zombies: this.zombiesSquashed,
+      laps: this.raceLaps
+    });
+    this.coins += payout;
+    if (payout > 0) setTimeout(() => this.ui.popText(`+${payout} COINS`, '#fcff52'), 1600);
     deposit(this.coins); // race coins bank for the garage
 
     // Record local stats
@@ -819,10 +880,37 @@ export class Game {
 
   // ---------- per-frame ----------
 
+  /**
+   * Nudge render resolution toward a 60fps budget. Only while racing (menus are
+   * cheap): steps down to 0.75x when frames run long, climbs back to the device
+   * cap when there's headroom. A cooldown guards against resolution oscillation.
+   */
+  private adaptResolution(dt: number): void {
+    if (this.state !== 'racing') return;
+    this.frameEma += (dt - this.frameEma) * 0.1;
+    if (this.dprCooldown > 0) { this.dprCooldown--; return; }
+    const fps = 1 / this.frameEma;
+    const MIN = 0.75, STEP = 0.25;
+    let next = this.curDpr;
+    if (fps < 50 && this.curDpr > MIN) next = Math.max(MIN, this.curDpr - STEP);
+    else if (fps > 58 && this.curDpr < this.dprCap) next = Math.min(this.dprCap, this.curDpr + STEP);
+    if (next !== this.curDpr) {
+      this.curDpr = next;
+      this.renderer.setPixelRatio(next);
+      this.dprCooldown = 90; // ~1.5s before the next change
+    }
+  }
+
   private tick(): void {
     const dt = Math.min(this.clock.getDelta(), 0.05);
     const elapsed = this.clock.elapsedTime;
+    this.adaptResolution(dt);
     const dragPx = this.input.consumeDrag();
+
+    if (this.paused) {
+      this.renderer.render(this.scene, this.camera);
+      return;
+    }
 
     switch (this.state) {
       case 'menu':
@@ -838,6 +926,7 @@ export class Game {
           if (n > 0) {
             this.ui.countdown(String(n));
             this.audio.play('count');
+            this.audio.play('rev'); // blip the throttle on each beat at the line
           }
         }
         this.audio.engine(0.55, 0.12); // idling on the grid
@@ -870,7 +959,8 @@ export class Game {
         this.handleWall(elapsed);
         this.rivals.update(
           dt, elapsed, this.raceTime, this.player.s, true,
-          this.player.x, MODES[this.modeIndex].aggression, this.player.v
+          this.player.x, MODES[this.modeIndex].aggression, this.player.v,
+          this.entities
         );
 
         // Slipstream drafting: check if player is directly behind a rival inside draft cone
@@ -887,6 +977,7 @@ export class Game {
           this.player.draftGauge = Math.min(1, this.player.draftGauge + dt * 0.55);
           if (this.player.draftGauge >= 1) {
             if (this.player.triggerDraftBoost()) {
+              this.audio.play('draft');
               this.audio.play('combo');
               this.ui.popText('SLIPSTREAM SLINGSHOT!', '#00ffcc');
             }
@@ -910,11 +1001,11 @@ export class Game {
         }
         if (this.player.landed) {
           this.shake = Math.max(this.shake, 0.7);
-          this.audio.play('bump');
+          this.audio.play('land');
           if (navigator.vibrate) navigator.vibrate(40);
         }
 
-        this.simulateContacts(elapsed);
+        this.simulateContacts(dt, elapsed);
         this.updateStyle(dt, elapsed);
         this.updateGhost(dt);
         this.emitSmoke(dt, elapsed);
@@ -1027,7 +1118,7 @@ export class Game {
       p.v *= 0.93; // scraping the wall bleeds speed — get off it
       if (elapsed - this.lastWallGrindAt > 0.8) {
         this.lastWallGrindAt = elapsed;
-        this.audio.play('skid', 0.4);
+        this.audio.play('wall_grind', 0.5);
         this.shake = Math.max(this.shake, 0.25);
         if (navigator.vibrate) navigator.vibrate(20);
       }
@@ -1066,9 +1157,12 @@ export class Game {
     const pursuit = !!MODES[this.modeIndex].pursuit;
     this.rivals.rivals.forEach((r, i) => {
       const gap = r.s - p.s;
-      const crossed = Math.sign(gap) !== Math.sign(this.prevGap[i]) && Math.abs(gap) < 8;
+      const prev = this.prevGap[i];
+      const crossed = Math.sign(gap) !== Math.sign(prev) && Math.abs(gap) < 8;
       this.prevGap[i] = gap;
       if (!crossed || pursuit) return; // dodging the cop is just Tuesday
+      // clean pass — rival was ahead, now behind, at speed = OVERTAKE
+      if (prev > 0 && gap < 0 && p.v > 20 && p.tumbleT <= 0) this.audio.play('overtake');
       const dx = Math.abs(r.x - p.x);
       if (
         dx > 1.6 && dx < 3.4 && p.v > 20 &&
@@ -1095,7 +1189,7 @@ export class Game {
     this.ghostObj.rotation.y += Math.PI; // cars face +z; flip down-track
   }
 
-  private simulateContacts(elapsed: number): void {
+  private simulateContacts(dt: number, elapsed: number): void {
     const p = this.player;
     const ws = this.track.wrap(p.s);
     const mode = MODES[this.modeIndex];
@@ -1120,14 +1214,14 @@ export class Game {
         this.zombiesSquashed += squashed;
         this.style.stoke(0.12 * squashed);
         p.v = Math.max(10, p.v - 1.4 * squashed); // gore is not aerodynamic
-        this.audio.play('squish');
+        this.audio.play(squashed >= 3 ? 'zombie_splat_multi' : 'squish');
         this.ui.popText(`SPLAT x${this.zombieCombo}`, '#7fae5a');
-        if (navigator.vibrate) navigator.vibrate(30);
+        if (navigator.vibrate) navigator.vibrate(squashed >= 3 ? [20, 15, 20] : 30);
 
         if (mode.infected && p.infected && this.zombiesSquashed % 10 < squashed) {
           p.infected = false;
           this.ui.popText('VIRUS CURED! EMP SHOCKWAVE!', '#00ffcc');
-          this.audio.play('combo');
+          this.audio.play('virus_cure');
           for (const r of this.rivals.rivals) {
             if (Math.abs(this.track.wrap(r.s) - this.track.wrap(p.s)) < 24) {
               this.rivals.wreck(r);
@@ -1154,7 +1248,7 @@ export class Game {
       } else {
         p.v = Math.max(9, p.v - 4); // brute shrugs you off
         this.shake = Math.max(this.shake, 0.7);
-        this.audio.play('bump');
+        this.audio.play('boss_roar');
         this.ui.popText('BOSS HIT!', '#ff8a3d');
         if (navigator.vibrate) navigator.vibrate(45);
       }
@@ -1176,6 +1270,27 @@ export class Game {
     // rivals plow through zombies too (no points for robots)
     for (const r of this.rivals.rivals) {
       this.entities.trySquash(this.track.wrap(r.s), r.x, elapsed);
+    }
+
+    // rival-to-rival jostling: when two AI cars overlap, the slower one
+    // gets shoved sideways. This makes the pack fight for position instead
+    // of ghosting through each other.
+    const rivals = this.rivals.rivals;
+    for (let a = 0; a < rivals.length; a++) {
+      for (let b = a + 1; b < rivals.length; b++) {
+        const ra = rivals[a], rb = rivals[b];
+        if (ra.tumbleT > 0 || rb.tumbleT > 0) continue;
+        if (Math.abs(ra.s - rb.s) < 3.5 && Math.abs(ra.x - rb.x) < 1.6) {
+          const dir = Math.sign(ra.x - rb.x) || 1;
+          const faster = ra.v >= rb.v ? ra : rb;
+          const slower = faster === ra ? rb : ra;
+          // shove the slower one aside
+          slower.x += dir * (slower === rb ? -1 : 1) * 0.8 * dt * 10;
+          slower.v *= 0.97;
+          // the faster one nudges slightly the other way
+          faster.x -= dir * (faster === ra ? -1 : 1) * 0.3 * dt * 10;
+        }
+      }
     }
 
     // car-to-car contact. Grand Prix: trade paint. Burnout: the faster car

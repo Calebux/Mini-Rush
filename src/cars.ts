@@ -6,7 +6,7 @@ export interface CarSpec {
   name: string;
   blurb: string;
   color: number; // UI chip + underglow + procedural fallback paint
-  model: number; // -1 = car_player.glb, 0..5 = car_traffic_{n+1}.glb
+  model: number; // -1 = car_player.glb, 0..5 = traffic, 100+ = supercar slots
   speed: number;
   accel: number;
   grip: number;
@@ -54,5 +54,30 @@ export const CARS: CarSpec[] = [
     id: 'glasscannon', name: 'GLASS CANNON', blurb: 'Fragile speed demon',
     color: 0xffd700, model: 1, speed: 1.15, accel: 0.88, grip: 0.75, nitro: 0.9,
     price: 600
+  },
+  {
+    id: 'r8', name: 'R8 V10', blurb: 'Clean supercar balance',
+    color: 0x4dd8ff, model: 100, speed: 1.12, accel: 1.08, grip: 1.05, nitro: 0.98,
+    price: 900
+  },
+  {
+    id: 'sesto', name: 'SESTO R', blurb: 'Ultra-light corner hunter',
+    color: 0xd8ff2f, model: 101, speed: 1.13, accel: 1.05, grip: 1.1, nitro: 0.96,
+    price: 980
+  },
+  {
+    id: 'aventador', name: 'AVENTADOR SV', blurb: 'Brutal launch, heavy bite',
+    color: 0xff4a1f, model: 102, speed: 1.14, accel: 1.12, grip: 0.95, nitro: 1.0,
+    price: 1100
+  },
+  {
+    id: 'divo', name: 'DIVO', blurb: 'Aero grip for late braking',
+    color: 0x2fd8ff, model: 103, speed: 1.11, accel: 1.0, grip: 1.16, nitro: 0.96,
+    price: 1150
+  },
+  {
+    id: 'tourbillon', name: 'TOURBILLON', blurb: 'Hybrid top-end monster',
+    color: 0x6f7cff, model: 104, speed: 1.18, accel: 0.98, grip: 1.03, nitro: 1.1,
+    price: 1200
   }
 ];

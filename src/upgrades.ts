@@ -19,11 +19,22 @@ const BONUS: Record<UpgradeStat, number> = { speed: 0.03, grip: 0.06, nitro: 0.1
 const KEY = 'minirush.upgrades';
 
 type Store = Record<string, Partial<Record<UpgradeStat, number>>>;
+const STATS: UpgradeStat[] = ['speed', 'grip', 'nitro'];
 
 function load(): Store {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) ?? '{}') as Store;
-    return raw && typeof raw === 'object' ? raw : {};
+    if (!raw || typeof raw !== 'object') return {};
+    const store: Store = {};
+    for (const [carId, tiers] of Object.entries(raw)) {
+      if (!tiers || typeof tiers !== 'object') continue;
+      store[carId] = {};
+      for (const stat of STATS) {
+        const value = Math.floor(Number(tiers[stat]));
+        if (Number.isFinite(value) && value > 0) store[carId][stat] = Math.min(MAX_TIER, value);
+      }
+    }
+    return store;
   } catch {
     return {};
   }

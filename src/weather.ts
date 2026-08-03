@@ -46,14 +46,21 @@ const MAP_POOL: Record<string, WeatherType[]> = {
   nairobi: ['clear', 'clear', 'clear', 'night'],
   seoul:   ['clear', 'rain', 'night'],
   accra:   ['clear', 'clear', 'rain'],
-  saopaulo:['clear', 'rain', 'night']
+  saopaulo:['clear', 'rain', 'night'],
+  norway:  ['clear', 'night', 'night', 'rain'],
+  iceland: ['clear', 'rain', 'night'],
+  canada:  ['clear', 'clear', 'rain'],
+  newzealand: ['clear', 'clear', 'rain'],
+  finland: ['night', 'night', 'clear']
 };
 
 /** Deterministic weather for a map+seed. */
 export function rollWeather(mapId: string, seed: number): WeatherSpec {
   const pool = MAP_POOL[mapId] ?? ['clear'];
+  if (pool.length === 0) return { ...SPECS.clear };
   // simple hash of the seed to pick from the pool
-  const hash = Math.abs(Math.imul(seed, 2654435761) >>> 0);
+  const safeSeed = Number.isFinite(seed) ? Math.floor(seed) : 0;
+  const hash = Math.abs(Math.imul(safeSeed, 2654435761) >>> 0);
   const type = pool[hash % pool.length];
   return { ...SPECS[type] };
 }

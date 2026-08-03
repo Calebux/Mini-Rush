@@ -16,6 +16,7 @@ const INDEX_KEY = 'minirush.ghosts';
 const MAX_GHOSTS = 8;
 const HZ = 10;
 const MAX_SAMPLES = 3600; // 6 min cap — beyond that stop recording
+const MAX_POINTS = MAX_SAMPLES * 2;
 
 export const ghostKey = (
   seed: number, mapId: string, modeId: string, laps: number, len: number
@@ -24,7 +25,10 @@ export const ghostKey = (
 export function loadGhost(key: string): GhostData | null {
   try {
     const g = JSON.parse(localStorage.getItem(key) ?? 'null') as GhostData | null;
-    return g && Array.isArray(g.pts) && g.pts.length >= 4 ? g : null;
+    if (!g || !Array.isArray(g.pts) || g.pts.length < 4 || g.pts.length > MAX_POINTS) return null;
+    if (!Number.isFinite(g.time) || g.time <= 0 || !Number.isFinite(g.hz) || g.hz <= 0) return null;
+    if (!g.pts.every(Number.isFinite)) return null;
+    return g;
   } catch {
     return null;
   }
@@ -49,7 +53,11 @@ export function saveGhost(key: string, g: GhostData): boolean {
   index = index.filter((k) => k !== key);
   index.push(key);
   while (index.length > MAX_GHOSTS) localStorage.removeItem(index.shift()!);
-  localStorage.setItem(INDEX_KEY, JSON.stringify(index));
+  try {
+    localStorage.setItem(INDEX_KEY, JSON.stringify(index));
+  } catch {
+    /* index pruning is best-effort */
+  }
   return true;
 }
 
@@ -73,6 +81,7 @@ export class GhostRecorder {
 /** Interpolated ghost position at race time t; null once the run has ended. */
 export function ghostPos(g: GhostData, t: number): { s: number; x: number } | null {
   const n = g.pts.length / 2;
+  if (n < 2 || !Number.isFinite(t) || t < 0 || !Number.isFinite(g.hz) || g.hz <= 0) return null;
   const f = t * g.hz;
   if (f >= n - 1) return null;
   const i = Math.max(0, Math.floor(f));

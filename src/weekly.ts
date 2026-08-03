@@ -33,13 +33,15 @@ export function weeklySeed(): number {
 
 /** This week's city, rotating through the map list by week. */
 export function weeklyMapIndex(mapCount: number): number {
-  return weekHash() % mapCount;
+  if (!Number.isFinite(mapCount) || mapCount <= 0) return 0;
+  return weekHash() % Math.floor(mapCount);
 }
 
 /** This week's mode, rotating through the mode list by week. */
 export function weeklyModeIndex(modeCount: number): number {
+  if (!Number.isFinite(modeCount) || modeCount <= 0) return 0;
   // a different mixing constant so the mode doesn't track the map lockstep
-  return (Math.imul(weekHash(), 40503) >>> 0) % modeCount;
+  return (Math.imul(weekHash(), 40503) >>> 0) % Math.floor(modeCount);
 }
 
 // Coin prize for finishing position on the weekly circuit. Paid once per week,
@@ -63,7 +65,10 @@ interface ClaimData {
 function loadClaim(): ClaimData {
   try {
     const raw = JSON.parse(localStorage.getItem(CLAIM_KEY) ?? 'null') as ClaimData | null;
-    if (raw && raw.week === weekKey()) return raw;
+    if (raw && raw.week === weekKey()) {
+      const bestPlace = Math.max(1, Math.min(99, Math.floor(Number(raw.bestPlace) || 99)));
+      return { week: raw.week, bestPlace };
+    }
   } catch { /* fall through */ }
   return { week: weekKey(), bestPlace: 99 };
 }

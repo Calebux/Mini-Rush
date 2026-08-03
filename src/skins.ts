@@ -59,6 +59,36 @@ export const CAR_SKINS: Record<string, Skin[]> = {
     { name: 'Chrome', color: 0xc0c0c8, price: 120 },
     { name: 'Inferno', color: 0xff2200, price: 120 },
     { name: 'Ice', color: 0xaaddff, price: 160 }
+  ],
+  r8: [
+    { name: 'Stock', color: 0x4dd8ff, price: 0 },
+    { name: 'Nardo', color: 0x7d858c, price: 140 },
+    { name: 'Signal Green', color: 0x66ff33, price: 160 },
+    { name: 'Carbon Red', color: 0xb8142a, price: 180 }
+  ],
+  sesto: [
+    { name: 'Stock', color: 0xd8ff2f, price: 0 },
+    { name: 'Graphite', color: 0x3a3a42, price: 160 },
+    { name: 'Lime Punch', color: 0xb9ff27, price: 180 },
+    { name: 'White Line', color: 0xf2f2e8, price: 180 }
+  ],
+  aventador: [
+    { name: 'Stock', color: 0xff4a1f, price: 0 },
+    { name: 'Arancio', color: 0xff8f1f, price: 160 },
+    { name: 'Blu Nethuns', color: 0x1f5fff, price: 180 },
+    { name: 'Blackout', color: 0x101016, price: 180 }
+  ],
+  divo: [
+    { name: 'Stock', color: 0x2fd8ff, price: 0 },
+    { name: 'French Blue', color: 0x245cff, price: 160 },
+    { name: 'Aero Silver', color: 0xc7d1d8, price: 180 },
+    { name: 'Track Red', color: 0xda1f2a, price: 180 }
+  ],
+  tourbillon: [
+    { name: 'Stock', color: 0x6f7cff, price: 0 },
+    { name: 'Royal Blue', color: 0x223dff, price: 180 },
+    { name: 'Pearl', color: 0xf1edf7, price: 180 },
+    { name: 'Solar Gold', color: 0xffc437, price: 200 }
   ]
 };
 
@@ -72,7 +102,11 @@ interface SkinStore {
 function load(): SkinStore {
   try {
     const raw = JSON.parse(localStorage.getItem(ACTIVE_KEY) ?? '{}') as SkinStore;
-    return raw && typeof raw === 'object' && raw.active ? raw : { active: {}, owned: {} };
+    if (!raw || typeof raw !== 'object') return { active: {}, owned: {} };
+    return {
+      active: raw.active && typeof raw.active === 'object' ? raw.active : {},
+      owned: raw.owned && typeof raw.owned === 'object' ? raw.owned : {}
+    };
   } catch {
     return { active: {}, owned: {} };
   }
@@ -84,7 +118,9 @@ function save(store: SkinStore): void {
 
 /** Index of the currently active skin for a car. */
 export function activeSkinIndex(carId: string): number {
-  return load().active[carId] ?? 0;
+  const skins = CAR_SKINS[carId];
+  const index = Math.floor(load().active[carId] ?? 0);
+  return skins && index >= 0 && index < skins.length ? index : 0;
 }
 
 /** Whether a specific skin is owned. Index 0 (stock) is always owned. */
@@ -101,7 +137,7 @@ export function buySkin(carId: string, index: number): boolean {
   if (!spend(skins[index].price)) return false;
   const store = load();
   if (!store.owned[carId]) store.owned[carId] = [];
-  store.owned[carId].push(index);
+  store.owned[carId] = Array.from(new Set([...store.owned[carId], index]));
   store.active[carId] = index;
   save(store);
   return true;

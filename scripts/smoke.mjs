@@ -11,6 +11,7 @@ page.on('pageerror', (e) => errors.push(String(e)));
 // the test drives GECKO, which the coin economy locks for fresh profiles
 await page.addInitScript(() => {
   localStorage.setItem('minirush.owned', JSON.stringify(['sunburst', 'gecko']));
+  localStorage.setItem('minirush.controls-guide', '1');
 });
 // short seeded 1-lap circuit so the race finishes fast
 await page.goto('http://localhost:4173/?len=500&seed=7&laps=1', { waitUntil: 'networkidle' });

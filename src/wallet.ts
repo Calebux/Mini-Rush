@@ -8,6 +8,10 @@ import { codeFromHostname, toDataSuffix } from '@celo/attribution-tags';
 // USDm / cUSD on Celo mainnet — used for balance reads and as the network-fee
 // currency (fee abstraction) when the game writes runs on-chain.
 const CUSD: Address = '0x765DE816845861e75A25fCA122bb6898B8B1282a';
+const USDT: Address = '0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e';
+const USDT_FEE_CURRENCY: Address = '0x0e2a3e05bc9a16f5292a6170456a710cb89c6f72';
+const MARKET_RECEIVER =
+  ((import.meta.env.VITE_MARKET_RECEIVER as string | undefined) as Address | undefined);
 
 // MiniRushTracker — signups + race counter. Filled in after deploy; overridable
 // via VITE_TRACKER_ADDRESS. Zero address ⇒ on-chain tracking is simply off and
@@ -52,6 +56,19 @@ const ERC20_BALANCE_ABI = [
     stateMutability: 'view',
     inputs: [{ name: 'account', type: 'address' }],
     outputs: [{ name: '', type: 'uint256' }]
+  }
+] as const;
+
+const ERC20_TRANSFER_ABI = [
+  {
+    name: 'transfer',
+    type: 'function',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'recipient', type: 'address' },
+      { name: 'amount', type: 'uint256' }
+    ],
+    outputs: [{ name: '', type: 'bool' }]
   }
 ] as const;
 
@@ -149,6 +166,10 @@ export class Wallet {
     return getProvider()?.isMiniPay === true;
   }
 
+  get marketReady(): boolean {
+    return /^0x[0-9a-fA-F]{40}$/.test(MARKET_RECEIVER ?? '');
+  }
+
   async connect(): Promise<Address> {
     const provider = getProvider();
     if (!provider) throw new Error('No wallet found. Open this game inside MiniPay.');
@@ -156,6 +177,13 @@ export class Wallet {
     const [address] = await client.requestAddresses();
     this.address = address;
     return address;
+  }
+
+  /** Native CELO balance, formatted to 2 decimals. */
+  async celoBalance(): Promise<string> {
+    if (!this.address) throw new Error('Not connected');
+    const raw = await this.reader().getBalance({ address: this.address });
+    return Number(formatUnits(raw, 18)).toFixed(2);
   }
 
   /** cUSD balance, formatted to 2 decimals. */
@@ -230,6 +258,19 @@ export class Wallet {
     );
   }
 
+  /** Pay the configured MiniRush market receiver in USDT. Amount is 6-decimal units. */
+  async buyMarketCarUsdt(amount: bigint): Promise<Hex | null> {
+    const receiver = MARKET_RECEIVER;
+    if (!receiver || !/^0x[0-9a-fA-F]{40}$/.test(receiver)) return null;
+    if (!this.address) await this.connect();
+    const data = encodeFunctionData({
+      abi: ERC20_TRANSFER_ABI,
+      functionName: 'transfer',
+      args: [receiver, amount]
+    });
+    return this.write(data, USDT, USDT_FEE_CURRENCY);
+  }
+
   /** Earned-badge bitfield from V2, or null when V2 isn't configured/available. */
   async badges(): Promise<number | null> {
     if (!v2Enabled() || !this.address) return null;
@@ -281,7 +322,11 @@ export class Wallet {
   }
 
   /** Send a tracker write: append the attribution suffix, pay fees in USDm. */
-  private async write(callData: Hex, to: Address = TRACKER): Promise<Hex | null> {
+  private async write(
+    callData: Hex,
+    to: Address = TRACKER,
+    feeCurrency: Address = CUSD
+  ): Promise<Hex | null> {
     const provider = getProvider();
     if (to === '0x0000000000000000000000000000000000000000' || !this.address || !provider) return null;
     try {
@@ -290,7 +335,7 @@ export class Wallet {
         account: this.address,
         to,
         data: concat([callData, suffix()]),
-        feeCurrency: CUSD
+        feeCurrency
       });
     } catch {
       return null; // rejected, unfunded, or non-MiniPay wallet — game continues

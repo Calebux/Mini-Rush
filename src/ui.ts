@@ -2,7 +2,7 @@ import { AudioManager } from './audio';
 import { CARS } from './cars';
 import { dailyMapIndex, dayKey } from './daily';
 import { weekKey, weeklyMapIndex, weeklyModeIndex, WEEKLY_PRIZES } from './weekly';
-import { bank, owned, unlock } from './economy';
+import { bank, grantCar, owned, racePayout, unlock } from './economy';
 import { Leaderboard } from './leaderboard';
 import { MAPS } from './maps';
 import { MODES } from './modes';
@@ -25,6 +25,17 @@ const BEST_KEY = 'minirush.best';
 const PLACE_SUFFIX = ['st', 'nd', 'rd', 'th'];
 const suffix = (place: number) => PLACE_SUFFIX[Math.min(place, 4) - 1];
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+const activateOnEnter = (el: HTMLElement, fn: () => void): void => {
+  el.addEventListener('click', fn);
+  if (el.tagName === 'BUTTON') return;
+  el.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    fn();
+  });
+};
+// mouse + hover ⇒ a physical keyboard is almost certainly attached
+const hasKeyboard = () => matchMedia('(any-hover: hover) and (any-pointer: fine)').matches;
 const MODE_RISK: Record<string, string> = {
   gp: 'RACE',
   burnout: 'WILD',
@@ -39,6 +50,8 @@ const MODE_RISK: Record<string, string> = {
   infected: 'VIRUS',
   voltage: 'SURGE'
 };
+const MARKET_USDT_PRICE = 100_000n; // 0.1 USDT, USDT has 6 decimals.
+const isMarketCar = (model: number): boolean => model >= 100;
 
 export class UI {
   onPlay: () => void = () => {};
@@ -46,6 +59,9 @@ export class UI {
   onBrake: (down: boolean) => void = () => {};
   onGas: (down: boolean) => void = () => {};
   onCamera: () => void = () => {};
+  onPause: () => void = () => {};
+  onResume: () => void = () => {};
+  onRestart: () => void = () => {};
   onLaps: (n: number) => void = () => {};
   onCar: (index: number) => void = () => {};
   onMap: (index: number) => void = () => {};
@@ -75,6 +91,7 @@ export class UI {
   private driftTime = $('drift-time');
   private modeButtons: HTMLElement[] = [];
   private modeCards: HTMLElement[] = [];
+  private carButtons: HTMLButtonElement[] = [];
   private dots: HTMLElement[] = [];
   private board = new Leaderboard();
   private carIndex = 0;
@@ -83,8 +100,10 @@ export class UI {
   private dailyUi = false; // garage reached via DAILY RUN, not the tour flow
   private weeklyUi = false; // garage reached via WEEKLY CUP, not the tour flow
   private tutTimers: number[] = [];
+  private keyHintTimer = 0;
   private modeIndex = 0;
   private lastRun: RunCard | null = null;
+  private guideMode: 'paused' | 'first-run' | 'menu' = 'paused';
 
   constructor(private wallet: Wallet, private audio: AudioManager) {
     // blur so Space/Enter (nitro key) can't re-trigger the focused button
@@ -95,6 +114,29 @@ export class UI {
       });
     on('btn-retry', () => this.onPlay());
     on('btn-retry-same', () => this.onRetrySame());
+    on('btn-pause', () => this.onPause());
+    on('btn-how', () => {
+      this.menu.classList.add('hidden');
+      this.showGuide('menu');
+    });
+    on('btn-resume', () => {
+      const mode = this.guideMode;
+      this.audio.play(mode === 'paused' ? 'click' : 'start');
+      this.hidePause();
+      if (mode === 'paused') this.onResume();
+      else if (mode === 'first-run') {
+        localStorage.setItem('minirush.controls-guide', '1');
+        localStorage.setItem('minirush.tutorial', '1');
+        this.onPlay();
+      } else {
+        this.menu.classList.remove('hidden');
+      }
+    });
+    on('btn-pause-restart', () => {
+      this.audio.play('start');
+      this.hidePause();
+      this.onRestart();
+    });
     on('btn-share', () => {
       if (this.lastRun) void shareRun(this.lastRun, shareUrl(this.wallet.address));
     });
@@ -140,6 +182,11 @@ export class UI {
       goto('menu', 'tour');
     });
     on('pill-car', () => {
+      this.audio.unlock();
+      this.exitDaily();
+      goto('menu', 'garage');
+    });
+    on('btn-garage-menu', () => {
       this.audio.unlock();
       this.exitDaily();
       goto('menu', 'garage');
@@ -204,6 +251,7 @@ export class UI {
         this.refreshBank();
       }
     });
+    on('btn-market-usdt', () => void this.buyMarketCar());
 
     // workshop: coins buy stat tiers on the displayed (owned) car
     const upgrades: [string, UpgradeStat][] = [
@@ -223,6 +271,11 @@ export class UI {
     // garage carousel
     on('car-prev', () => this.stepCar(-1));
     on('car-next', () => this.stepCar(1));
+    on('car-jump-hyper', () => {
+      const firstHyper = CARS.findIndex((c) => isMarketCar(c.model));
+      if (firstHyper >= 0) this.selectCar(firstHyper);
+    });
+    this.buildCarRoster();
 
     // world tour stop
     on('map-prev', () => this.stepMap(-1));
@@ -278,7 +331,7 @@ export class UI {
 
     const cam = $('btn-cam');
     cam.addEventListener('pointerdown', (e) => e.stopPropagation());
-    cam.addEventListener('click', () => this.onCamera());
+    activateOnEnter(cam, () => this.onCamera());
 
     // mute lives in two places (menu chip + race HUD) but is one setting
     const MUTE_KEY = 'minirush.muted';
@@ -292,7 +345,7 @@ export class UI {
     for (const id of ['btn-mute', 'btn-mute-race']) {
       const el = $(id);
       el.addEventListener('pointerdown', (e) => e.stopPropagation());
-      el.addEventListener('click', () => {
+      activateOnEnter(el, () => {
         muted = !muted;
         localStorage.setItem(MUTE_KEY, muted ? '1' : '0');
         applyMute();
@@ -327,6 +380,8 @@ export class UI {
       const m = MODES[i];
       const b = document.createElement('button');
       b.className = className;
+      b.type = 'button';
+      b.setAttribute('aria-label', `Select ${m.name} mode`);
       b.innerHTML =
         `<span class="mi">${m.icon}</span>` +
         `<span class="mn">${m.name}</span>` +
@@ -342,6 +397,8 @@ export class UI {
     MODES.forEach((m, i) => {
       const card = document.createElement('button');
       card.className = 'mode-card';
+      card.type = 'button';
+      card.setAttribute('aria-label', `Select ${m.name} mode`);
       const laps = m.lapsLocked ? `${m.lapsLocked} LAP${m.lapsLocked === 1 ? '' : 'S'}` : 'OPEN LAPS';
       card.innerHTML =
         `<div class="mode-card-top">` +
@@ -374,6 +431,8 @@ export class UI {
     });
     const more = document.createElement('button');
     more.className = 'mode-chip more';
+    more.type = 'button';
+    more.setAttribute('aria-label', 'Open all modes');
     more.innerHTML = '<span class="mi">▦</span><span class="mn">ALL MODES</span><span class="mr">MORE</span>';
     more.addEventListener('click', () => {
       more.blur();
@@ -467,10 +526,14 @@ export class UI {
     this.modeIndex = i;
     const m = MODES[i];
     this.modeButtons.forEach((c, ci) => {
-      if (c) c.classList.toggle('sel', ci === i);
+      if (c) {
+        c.classList.toggle('sel', ci === i);
+        c.setAttribute('aria-pressed', String(ci === i));
+      }
     });
     this.modeCards.forEach((c, ci) => {
       c.classList.toggle('sel', ci === i);
+      c.setAttribute('aria-pressed', String(ci === i));
     });
     $('mode-tag').textContent = m.tagline;
     $('mode-name-line').textContent = `${m.icon} ${m.name} · ${MODE_RISK[m.id] ?? 'MODE'}`;
@@ -481,7 +544,8 @@ export class UI {
   }
 
   get best(): number {
-    return Number(localStorage.getItem(BEST_KEY) ?? '0');
+    const n = Number(localStorage.getItem(BEST_KEY) ?? '0');
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
   }
 
   /** Reflect an externally-set lap count (e.g. ?laps= query param). */
@@ -519,6 +583,8 @@ export class UI {
       ? m.blurb
       : `🛂 Finish a race in ${MAPS[this.mapIndex - 1].name} to stamp your passport.`;
     $('btn-tour-done').classList.toggle('locked', !open);
+    $<HTMLButtonElement>('btn-tour-done').disabled = !open;
+    $('btn-tour-done').setAttribute('aria-disabled', String(!open));
   }
 
   /** Circuit minimap on the tour page — the actual spline, one color per district. */
@@ -544,6 +610,7 @@ export class UI {
       minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
       minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z);
     }
+    if (!Number.isFinite(minX + maxX + minZ + maxZ) || maxX === minX || maxZ === minZ) return;
     const pad = 16;
     const sc = Math.min((W - 2 * pad) / (maxX - minX), (H - 2 * pad) / (maxZ - minZ));
     const ox = (W - (maxX - minX) * sc) / 2 - minX * sc;
@@ -586,10 +653,34 @@ export class UI {
   }
 
   private stepCar(dir: number): void {
+    this.selectCar((this.carIndex + dir + CARS.length) % CARS.length);
+  }
+
+  private selectCar(index: number): void {
+    if (!Number.isSafeInteger(index) || index < 0 || index >= CARS.length) return;
     this.audio.play('select');
-    this.carIndex = (this.carIndex + dir + CARS.length) % CARS.length;
+    this.carIndex = index;
     this.renderCar();
     this.onCar(this.carIndex);
+  }
+
+  private buildCarRoster(): void {
+    const roster = $('car-roster');
+    CARS.forEach((car, index) => {
+      const button = document.createElement('button');
+      const hex = `#${car.color.toString(16).padStart(6, '0')}`;
+      button.type = 'button';
+      button.className = `car-roster-item${isMarketCar(car.model) ? ' hyper' : ''}`;
+      button.style.setProperty('--car-color', hex);
+      button.setAttribute('aria-label', `Select ${car.name}`);
+      button.innerHTML =
+        `<span class="car-roster-kind">${isMarketCar(car.model) ? 'HYPER' : 'STREET'}</span>` +
+        `<strong><i></i>${car.name}</strong>` +
+        `<small></small>`;
+      button.addEventListener('click', () => this.selectCar(index));
+      roster.appendChild(button);
+      this.carButtons.push(button);
+    });
   }
 
   private renderCar(): void {
@@ -611,12 +702,36 @@ export class UI {
     $('st-nos').style.width = pct(up.nitro);
 
     // locked cars preview fine but can't race — coins open the padlock
-    const isOwned = c.price === 0 || owned().has(c.id);
+    const ownedCars = owned();
+    const isOwned = c.price === 0 || ownedCars.has(c.id);
     $('car-lock').classList.toggle('hidden', isOwned);
+    $('car-market').classList.toggle('hidden', isOwned || !isMarketCar(c.model));
     $('btn-garage-done').classList.toggle('locked', !isOwned);
+    $<HTMLButtonElement>('btn-garage-done').disabled = !isOwned;
+    $('btn-garage-done').setAttribute('aria-disabled', String(!isOwned));
     if (!isOwned) {
       $('car-price').textContent = `🔒 ⬤ ${c.price}`;
       $<HTMLButtonElement>('btn-unlock').disabled = bank() < c.price;
+      const pay = $<HTMLButtonElement>('btn-market-usdt');
+      pay.disabled = !this.wallet.marketReady;
+      pay.textContent = this.wallet.marketReady ? '0.1 USDT' : 'USDT OFF';
+      $('market-status').textContent = this.wallet.marketReady
+        ? 'Unlock instantly with USDT, no coin grind.'
+        : 'USDT payments are not configured yet.';
+    }
+
+    this.carButtons.forEach((button, index) => {
+      const car = CARS[index];
+      const carOwned = car.price === 0 || ownedCars.has(car.id);
+      button.classList.toggle('selected', index === this.carIndex);
+      button.classList.toggle('locked', !carOwned);
+      button.setAttribute('aria-pressed', String(index === this.carIndex));
+      const status = button.querySelector('small');
+      if (status) status.textContent = carOwned ? 'OWNED' : `⬤ ${car.price}`;
+    });
+    const selectedButton = this.carButtons[this.carIndex];
+    if (selectedButton && !$('garage').classList.contains('hidden')) {
+      selectedButton.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
     }
 
     // workshop row — hidden until the car is yours
@@ -642,6 +757,36 @@ export class UI {
     this.renderSkins(isOwned);
   }
 
+  private async buyMarketCar(): Promise<void> {
+    const c = CARS[this.carIndex];
+    if (!isMarketCar(c.model) || c.price === 0 || owned().has(c.id)) return;
+    const button = $<HTMLButtonElement>('btn-market-usdt');
+    const status = $('market-status');
+    if (!this.wallet.marketReady) {
+      status.textContent = 'USDT payments are not configured yet.';
+      return;
+    }
+    button.disabled = true;
+    status.textContent = 'Confirm payment in your wallet.';
+    let tx = null;
+    try {
+      tx = await this.wallet.buyMarketCarUsdt(MARKET_USDT_PRICE);
+    } catch {
+      tx = null;
+    }
+    if (!tx) {
+      status.textContent = 'Payment was not completed.';
+      button.disabled = false;
+      return;
+    }
+    grantCar(c.id);
+    this.audio.play('buy');
+    status.textContent = 'Unlocked. Market perks active.';
+    this.refreshBank();
+    this.renderCar();
+    this.onCar(this.carIndex);
+  }
+
   /** Paint-job dots under the car. Tap an owned skin to equip, a locked one to buy. */
   private renderSkins(carOwned: boolean): void {
     const row = $('skin-row');
@@ -661,6 +806,9 @@ export class UI {
       const dot = document.createElement('button');
       const owned = skinOwned(car.id, i);
       dot.className = 'skin-dot' + (i === active ? ' sel' : '') + (owned ? '' : ' locked');
+      dot.type = 'button';
+      dot.setAttribute('aria-label', owned ? `Equip ${skin.name} paint` : `Buy ${skin.name} paint for ${skin.price} coins`);
+      dot.setAttribute('aria-pressed', String(i === active));
       const hex = `#${skin.color.toString(16).padStart(6, '0')}`;
       dot.style.background = hex;
       dot.style.color = hex; // drives the currentColor glow
@@ -708,6 +856,7 @@ export class UI {
       });
     };
     const daily = this.board.dailyEntries(dayKey());
+    const weekly = this.board.weeklyEntries(weekKey());
     const allTime = this.board.entries();
 
     // global daily first — it's the board that matters
@@ -749,8 +898,9 @@ export class UI {
     }
 
     if (daily.length > 0) section("⚡ TODAY'S DAILY (THIS PHONE)", daily.slice(0, 5));
+    if (weekly.length > 0) section("🏆 THIS WEEK'S CUP (THIS PHONE)", weekly.slice(0, 5));
     if (allTime.length > 0) section('ALL TIME', allTime);
-    if (daily.length === 0 && allTime.length === 0 && !remoteEnabled()) {
+    if (daily.length === 0 && weekly.length === 0 && allTime.length === 0 && !remoteEnabled()) {
       const empty = document.createElement('div');
       empty.className = 'board-empty';
       empty.textContent = 'No runs yet — go set a score!';
@@ -760,7 +910,9 @@ export class UI {
 
   private selectLapChip(n: number, notify = true): void {
     document.querySelectorAll<HTMLElement>('.lap-chip').forEach((c) => {
-      c.classList.toggle('sel', Number(c.dataset.laps) === n);
+      const selected = Number(c.dataset.laps) === n;
+      c.classList.toggle('sel', selected);
+      c.setAttribute('aria-pressed', String(selected));
     });
     $('menu-laps').textContent = `${n} LAP${n === 1 ? '' : 'S'}`;
     if (notify) {
@@ -786,7 +938,7 @@ export class UI {
     } else if (this.wallet.available) {
       const chip = $('wallet-chip');
       chip.classList.add('connectable');
-      chip.textContent = '🔗 CONNECT';
+      chip.textContent = '🔗 CONNECT & COMPETE';
     }
   }
 
@@ -795,7 +947,7 @@ export class UI {
     chip.classList.remove('connectable');
     chip.textContent = this.wallet.shortAddress();
     try {
-      chip.textContent = `${this.wallet.shortAddress()} · ${await this.wallet.cusdBalance()} cUSD`;
+      chip.textContent = `${this.wallet.shortAddress()} · ${await this.wallet.celoBalance()} CELO`;
     } catch { /* balance is best-effort */ }
   }
 
@@ -822,8 +974,8 @@ export class UI {
     $('profile-tag').textContent = this.board.tag;
     $('profile-addr').textContent = this.wallet.shortAddress();
     $('profile-balance').textContent = '';
-    void this.wallet.cusdBalance()
-      .then((b) => { $('profile-balance').textContent = `${b} cUSD`; })
+    void this.wallet.celoBalance()
+      .then((b) => { $('profile-balance').textContent = `${b} CELO`; })
       .catch(() => { /* balance is best-effort */ });
 
     $('p-best').textContent = String(this.best);
@@ -894,10 +1046,43 @@ export class UI {
     this.menu.classList.add('hidden');
     this.results.classList.add('hidden');
     this.hud.classList.add('visible');
+    this.showKeyHints();
+  }
+
+  showPause(): void {
+    this.showGuide('paused');
+  }
+
+  showFirstRunGuide(): void {
+    this.showGuide('first-run');
+  }
+
+  hidePause(): void {
+    $('pause').classList.add('hidden');
+  }
+
+  private showGuide(mode: 'paused' | 'first-run' | 'menu'): void {
+    this.guideMode = mode;
+    const paused = mode === 'paused';
+    $('pause-kicker').textContent = paused ? 'RACE STOPPED' : 'DRIVER BRIEFING';
+    $('pause-title').textContent = paused ? 'PAUSED' : mode === 'first-run' ? 'READY TO RACE?' : 'HOW TO PLAY';
+    $('btn-resume').textContent = paused ? 'RESUME' : mode === 'first-run' ? 'START RACE' : 'BACK';
+    $('btn-pause-restart').classList.toggle('hidden', !paused);
+    $('pause').classList.remove('hidden');
+  }
+
+  /** Keyboard players get the controls flashed for the first 5s of each race. */
+  private showKeyHints(): void {
+    if (!hasKeyboard()) return;
+    const el = $('key-hints');
+    el.classList.remove('hidden');
+    window.clearTimeout(this.keyHintTimer);
+    this.keyHintTimer = window.setTimeout(() => el.classList.add('hidden'), 5000);
   }
 
   /** First race ever: three timed control tips. Marked seen once all ran. */
   startTutorial(): void {
+    if (hasKeyboard()) return; // desktop gets the key cheatsheet instead
     if (localStorage.getItem('minirush.tutorial')) return;
     const el = $('tutorial');
     const tips = [
@@ -958,7 +1143,9 @@ export class UI {
     this.nitroUi.textContent = nitroActive ? 'NITRO!!' : `NITRO ×${nitroTanks} — TAP`;
 
     progress.forEach((p, i) => {
-      this.dots[i].style.left = `${Math.min(100, p * 100)}%`;
+      if (!this.dots[i]) return;
+      const pct = Number.isFinite(p) ? Math.min(100, Math.max(0, p * 100)) : 0;
+      this.dots[i].style.left = `${pct}%`;
     });
   }
 
@@ -984,6 +1171,8 @@ export class UI {
     place: number, time: number, zombies: number, coins: number, score: number,
     laps: number, car: string, busted = false, style = 0, daily = false, weekly = false
   ): void {
+    window.clearTimeout(this.keyHintTimer);
+    $('key-hints').classList.add('hidden');
     const best = Math.max(this.best, score);
     localStorage.setItem(BEST_KEY, String(best));
     // daily / weekly runs rank on their own shared-circuit boards, not all-time
@@ -1024,6 +1213,9 @@ export class UI {
     $('r-zombies').textContent = String(zombies);
     $('r-coins').textContent = String(coins);
     $('r-score').textContent = String(score);
+    const finishReward = racePayout({ place, field: 1, zombies, laps });
+    const pickups = Math.max(0, coins - finishReward);
+    $('r-coin-note').textContent = `${pickups} picked up + ${finishReward} finish reward = ${coins} banked · ${Math.floor(zombies / 4)} from zombie splats`;
     const map = MAPS[this.mapIndex];
     const mode = MODES[this.modeIndex];
     this.lastRun = {

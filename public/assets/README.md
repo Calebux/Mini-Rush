@@ -14,6 +14,8 @@ Scale doesn't matter — the loader auto-normalizes size and grounds each model.
 |---|---|---|
 | `car_player.glb` | PSX-style cars (ggbot) or RCP4 (jreo) | the coolest car — this is the hero |
 | `car_traffic_1.glb` … `car_traffic_6.glb` | PSX-style cars / RCP4 | any 6 different cars |
+| `car_super_1.glb` | user-downloaded OBJ supercar | R8 V10 premium garage car |
+| `car_super_2.fbx` … `car_super_5.fbx` | user-downloaded super cars package templates | premium garage cars |
 | `city_building_1.glb` … `city_building_8.glb` | Downtown City MegaKit (Quaternius) | varied building blocks |
 | `desert_building_1.glb` … `desert_building_8.glb` | Voxel Desert Town (maxparata) | houses, market stalls |
 | `prop_streetlight.glb` | Downtown City MegaKit | streetlight/lamp prop |
@@ -60,6 +62,23 @@ hot-swaps them in; procedural fallbacks cover anything missing:
 | `sprites/skyline_future.png` | Free Futuristic City Pixel Art Backgrounds (craftpix) — city 1 towers layer | spare skyline for a future map (set `skyline: 'skyline_future'` in maps.ts) |
 | `sprites/zombie_1..3.png` | Zombie Sprite Sheet Pack (craftpix) — Idle strips | crossed-plane billboard zombies (used when no `zombie_*.glb` models exist; square frames, frame 0 shown) |
 
+## New country horizon packs
+
+The country maps added in `src/maps.ts` look for one flattened/merged PNG per
+pack. If the pack ships parallax layers, export the layer or combined backdrop
+you want visible at the horizon and rename it exactly:
+
+| File | Source pack | Used for |
+|------|-------------|----------|
+| `sprites/skyline_mountain_dusk.png` | Mountain Dusk Parallax Background (ansimuz) | NORWAY horizon |
+| `sprites/skyline_glacial_mountains.png` | Glacial Mountains: Parallax Background (vnitti) | ICELAND horizon |
+| `sprites/skyline_tall_forest.png` | SunnyLand Tall Forest Environment (ansimuz) | CANADA horizon |
+| `sprites/skyline_nature_landscapes.png` | Nature Landscapes Free Pixel Art (Free Game Assets / CraftPix) | NEW ZEALAND horizon |
+| `sprites/skyline_stringstar_fields.png` | stringstar fields (Trixie) | FINLAND horizon |
+
+The skyline loader falls back to procedural pixel horizons if any file is
+missing, so these maps are playable before the art is dropped in.
+
 SFX shipped from the Universal UI Soundpack: `count, go, start,
 coin, combo, finish, nitro, buy`.
 
@@ -83,9 +102,14 @@ Looping tracks, loaded lazily when present (`.ogg`/`.mp3`/`.wav`):
 |---|---|
 | `menu.(ogg\|mp3)` | menus, garage, results |
 | `race.(ogg\|mp3)` | countdown + race |
+| `offroad.(ogg\|mp3)` | nature/country races (Norway, Iceland, Canada, New Zealand, Finland) |
 
 Suggested source: **Cozy Tunes** (pizzadoggy.itch.io/cozy-tunes) — requires
 claiming with an itch.io account (100%-off sale), so grab it logged in, then
 drop two tracks here with those names. Until files exist, synthesized
 chiptune loops play instead (laid-back arpeggio in menus, driving beat in
 races) — real tracks take over automatically.
+
+For `offroad`, use any loop from **Free 25 Fantasy RPG Game Tracks Vol. 2**
+(alkakrab). Export/rename the chosen file to `public/assets/music/offroad.ogg`
+or `.mp3`.
