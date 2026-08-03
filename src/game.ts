@@ -122,6 +122,7 @@ export class Game {
   private lastWallGrindAt = -10;
   private camMode = 0;
   private cam = { ...CAMS[0] };
+  private paused = false;
 
   private style = new StyleMeter();
   private prevGap: number[] = []; // rival s-gaps last frame — sign flip = a pass
@@ -223,12 +224,24 @@ export class Game {
     this.input.onTap = () => this.onTap();
     this.input.onCamera = () => this.cycleCamera();
     this.input.onNitroKey = () => this.boostNitro();
+    this.input.onPause = () => this.togglePause();
     this.ui.onBrake = (down) => (this.input.uiBrake = down);
     this.ui.onGas = (down) => (this.input.uiGas = down);
     this.ui.onCamera = () => this.cycleCamera();
     this.ui.onNitroPress = () => this.boostNitro();
+    this.ui.onPause = () => this.togglePause();
+    this.ui.onResume = () => this.togglePause();
+    this.ui.onRestart = () => {
+      this.paused = false;
+      this.retrySameTrack();
+    };
 
     window.addEventListener('resize', () => this.onResize());
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && !this.paused && (this.state === 'countdown' || this.state === 'racing')) {
+        this.togglePause();
+      }
+    });
 
     // audio needs a user gesture; catch the very first one no matter where
     // it lands (touch, click, or keyboard) rather than relying on one button
@@ -523,6 +536,12 @@ export class Game {
   }
 
   private startRace(): void {
+    if (!localStorage.getItem('minirush.controls-guide')) {
+      this.ui.showFirstRunGuide();
+      return;
+    }
+    this.paused = false;
+    this.ui.hidePause();
     this.audio.play('start'); // race-start fanfare on the START RACE launch
     this.disposeRace();
     this.buildRace();
@@ -602,7 +621,7 @@ export class Game {
 
   /** Tap = shoot in gun modes; otherwise tap = nitro, as ever. */
   private onTap(): void {
-    if (this.state !== 'racing') return;
+    if (this.state !== 'racing' || this.paused) return;
     if (MODES[this.modeIndex].guns) {
       this.shoot();
       return;
@@ -611,10 +630,22 @@ export class Game {
   }
 
   private boostNitro(): void {
-    if (this.state !== 'racing') return;
+    if (this.state !== 'racing' || this.paused) return;
     if (this.player.fireNitro()) {
       this.audio.play('nitro');
       this.ui.popText('NITRO!', '#7fd4ff');
+    }
+  }
+
+  private togglePause(): void {
+    if (!this.paused && this.state !== 'countdown' && this.state !== 'racing') return;
+    this.paused = !this.paused;
+    if (this.paused) {
+      this.audio.stopEngine();
+      this.ui.showPause();
+    } else {
+      this.ui.hidePause();
+      this.audio.startEngine();
     }
   }
 
@@ -875,6 +906,11 @@ export class Game {
     const elapsed = this.clock.elapsedTime;
     this.adaptResolution(dt);
     const dragPx = this.input.consumeDrag();
+
+    if (this.paused) {
+      this.renderer.render(this.scene, this.camera);
+      return;
+    }
 
     switch (this.state) {
       case 'menu':

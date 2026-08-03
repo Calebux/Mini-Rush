@@ -142,7 +142,7 @@ export const MAPS: MapSpec[] = [
     id: 'cairo', name: 'CAIRO', flag: '🇪🇬',
     blurb: 'Wide-open desert rally straights across ancient pyramids and dusty bazaars.',
     ctlMin: 9, ctlVar: 3, rMin: 0.8, rVar: 0.4, fogNear: 35, fogFar: 200,
-    skyline: 'skyline_cairo',
+    skyline: 'skyline_cairo_v2',
     districts: [
       { label: 'Nile Corniche', flavor: 'palms',
         skyTop: 0x2f78b8, skyBottom: 0xfce29c, fog: 0xd8c898, ground: 0xa89466, road: 0x9a968e, hemi: 0xfffae8, dust: 0xbca474 },

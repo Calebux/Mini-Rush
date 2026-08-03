@@ -2,7 +2,7 @@ import { AudioManager } from './audio';
 import { CARS } from './cars';
 import { dailyMapIndex, dayKey } from './daily';
 import { weekKey, weeklyMapIndex, weeklyModeIndex, WEEKLY_PRIZES } from './weekly';
-import { bank, grantCar, owned, unlock } from './economy';
+import { bank, grantCar, owned, racePayout, unlock } from './economy';
 import { Leaderboard } from './leaderboard';
 import { MAPS } from './maps';
 import { MODES } from './modes';
@@ -59,6 +59,9 @@ export class UI {
   onBrake: (down: boolean) => void = () => {};
   onGas: (down: boolean) => void = () => {};
   onCamera: () => void = () => {};
+  onPause: () => void = () => {};
+  onResume: () => void = () => {};
+  onRestart: () => void = () => {};
   onLaps: (n: number) => void = () => {};
   onCar: (index: number) => void = () => {};
   onMap: (index: number) => void = () => {};
@@ -88,6 +91,7 @@ export class UI {
   private driftTime = $('drift-time');
   private modeButtons: HTMLElement[] = [];
   private modeCards: HTMLElement[] = [];
+  private carButtons: HTMLButtonElement[] = [];
   private dots: HTMLElement[] = [];
   private board = new Leaderboard();
   private carIndex = 0;
@@ -99,6 +103,7 @@ export class UI {
   private keyHintTimer = 0;
   private modeIndex = 0;
   private lastRun: RunCard | null = null;
+  private guideMode: 'paused' | 'first-run' | 'menu' = 'paused';
 
   constructor(private wallet: Wallet, private audio: AudioManager) {
     // blur so Space/Enter (nitro key) can't re-trigger the focused button
@@ -109,6 +114,29 @@ export class UI {
       });
     on('btn-retry', () => this.onPlay());
     on('btn-retry-same', () => this.onRetrySame());
+    on('btn-pause', () => this.onPause());
+    on('btn-how', () => {
+      this.menu.classList.add('hidden');
+      this.showGuide('menu');
+    });
+    on('btn-resume', () => {
+      const mode = this.guideMode;
+      this.audio.play(mode === 'paused' ? 'click' : 'start');
+      this.hidePause();
+      if (mode === 'paused') this.onResume();
+      else if (mode === 'first-run') {
+        localStorage.setItem('minirush.controls-guide', '1');
+        localStorage.setItem('minirush.tutorial', '1');
+        this.onPlay();
+      } else {
+        this.menu.classList.remove('hidden');
+      }
+    });
+    on('btn-pause-restart', () => {
+      this.audio.play('start');
+      this.hidePause();
+      this.onRestart();
+    });
     on('btn-share', () => {
       if (this.lastRun) void shareRun(this.lastRun, shareUrl(this.wallet.address));
     });
@@ -243,6 +271,11 @@ export class UI {
     // garage carousel
     on('car-prev', () => this.stepCar(-1));
     on('car-next', () => this.stepCar(1));
+    on('car-jump-hyper', () => {
+      const firstHyper = CARS.findIndex((c) => isMarketCar(c.model));
+      if (firstHyper >= 0) this.selectCar(firstHyper);
+    });
+    this.buildCarRoster();
 
     // world tour stop
     on('map-prev', () => this.stepMap(-1));
@@ -620,10 +653,34 @@ export class UI {
   }
 
   private stepCar(dir: number): void {
+    this.selectCar((this.carIndex + dir + CARS.length) % CARS.length);
+  }
+
+  private selectCar(index: number): void {
+    if (!Number.isSafeInteger(index) || index < 0 || index >= CARS.length) return;
     this.audio.play('select');
-    this.carIndex = (this.carIndex + dir + CARS.length) % CARS.length;
+    this.carIndex = index;
     this.renderCar();
     this.onCar(this.carIndex);
+  }
+
+  private buildCarRoster(): void {
+    const roster = $('car-roster');
+    CARS.forEach((car, index) => {
+      const button = document.createElement('button');
+      const hex = `#${car.color.toString(16).padStart(6, '0')}`;
+      button.type = 'button';
+      button.className = `car-roster-item${isMarketCar(car.model) ? ' hyper' : ''}`;
+      button.style.setProperty('--car-color', hex);
+      button.setAttribute('aria-label', `Select ${car.name}`);
+      button.innerHTML =
+        `<span class="car-roster-kind">${isMarketCar(car.model) ? 'HYPER' : 'STREET'}</span>` +
+        `<strong><i></i>${car.name}</strong>` +
+        `<small></small>`;
+      button.addEventListener('click', () => this.selectCar(index));
+      roster.appendChild(button);
+      this.carButtons.push(button);
+    });
   }
 
   private renderCar(): void {
@@ -645,7 +702,8 @@ export class UI {
     $('st-nos').style.width = pct(up.nitro);
 
     // locked cars preview fine but can't race — coins open the padlock
-    const isOwned = c.price === 0 || owned().has(c.id);
+    const ownedCars = owned();
+    const isOwned = c.price === 0 || ownedCars.has(c.id);
     $('car-lock').classList.toggle('hidden', isOwned);
     $('car-market').classList.toggle('hidden', isOwned || !isMarketCar(c.model));
     $('btn-garage-done').classList.toggle('locked', !isOwned);
@@ -660,6 +718,20 @@ export class UI {
       $('market-status').textContent = this.wallet.marketReady
         ? 'Unlock instantly with USDT, no coin grind.'
         : 'USDT payments are not configured yet.';
+    }
+
+    this.carButtons.forEach((button, index) => {
+      const car = CARS[index];
+      const carOwned = car.price === 0 || ownedCars.has(car.id);
+      button.classList.toggle('selected', index === this.carIndex);
+      button.classList.toggle('locked', !carOwned);
+      button.setAttribute('aria-pressed', String(index === this.carIndex));
+      const status = button.querySelector('small');
+      if (status) status.textContent = carOwned ? 'OWNED' : `⬤ ${car.price}`;
+    });
+    const selectedButton = this.carButtons[this.carIndex];
+    if (selectedButton && !$('garage').classList.contains('hidden')) {
+      selectedButton.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
     }
 
     // workshop row — hidden until the car is yours
@@ -977,6 +1049,28 @@ export class UI {
     this.showKeyHints();
   }
 
+  showPause(): void {
+    this.showGuide('paused');
+  }
+
+  showFirstRunGuide(): void {
+    this.showGuide('first-run');
+  }
+
+  hidePause(): void {
+    $('pause').classList.add('hidden');
+  }
+
+  private showGuide(mode: 'paused' | 'first-run' | 'menu'): void {
+    this.guideMode = mode;
+    const paused = mode === 'paused';
+    $('pause-kicker').textContent = paused ? 'RACE STOPPED' : 'DRIVER BRIEFING';
+    $('pause-title').textContent = paused ? 'PAUSED' : mode === 'first-run' ? 'READY TO RACE?' : 'HOW TO PLAY';
+    $('btn-resume').textContent = paused ? 'RESUME' : mode === 'first-run' ? 'START RACE' : 'BACK';
+    $('btn-pause-restart').classList.toggle('hidden', !paused);
+    $('pause').classList.remove('hidden');
+  }
+
   /** Keyboard players get the controls flashed for the first 5s of each race. */
   private showKeyHints(): void {
     if (!hasKeyboard()) return;
@@ -1119,6 +1213,9 @@ export class UI {
     $('r-zombies').textContent = String(zombies);
     $('r-coins').textContent = String(coins);
     $('r-score').textContent = String(score);
+    const finishReward = racePayout({ place, field: 1, zombies, laps });
+    const pickups = Math.max(0, coins - finishReward);
+    $('r-coin-note').textContent = `${pickups} picked up + ${finishReward} finish reward = ${coins} banked · ${Math.floor(zombies / 4)} from zombie splats`;
     const map = MAPS[this.mapIndex];
     const mode = MODES[this.modeIndex];
     this.lastRun = {

@@ -404,6 +404,54 @@
     .cstat span { width: 26px; font-size: 9px; font-weight: 800; letter-spacing: 1px; opacity: .55; text-align: right; }
     .cstat .bar { flex: 1; height: 5px; border-radius: 3px; background: rgba(255,255,255,.15); overflow: hidden; }
     .cstat .bar i { display: block; height: 100%; border-radius: 3px; background: #fcff52; transition: width .2s ease; }
+    .car-roster-shell {
+      width: min(92vw, 560px); display: flex; flex-direction: column; gap: 6px;
+      padding: 9px; border-radius: 13px; background: rgba(6,8,20,.68);
+      border: 1px solid rgba(255,255,255,.15); backdrop-filter: blur(7px);
+    }
+    .car-roster-head {
+      display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 7px;
+      padding: 0 2px; font-size: 8px; font-weight: 900; letter-spacing: 2px;
+      color: rgba(255,255,255,.58);
+    }
+    .car-roster-nav {
+      appearance: none; cursor: pointer; width: 26px; height: 24px; border-radius: 7px;
+      color: #fff; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.18);
+      font-family: inherit; font-size: 16px; font-weight: 900; line-height: 1;
+    }
+    #car-jump-hyper {
+      appearance: none; cursor: pointer; padding: 4px 8px; border-radius: 999px;
+      color: #7fd4ff; background: rgba(77,216,255,.1); border: 1px solid rgba(77,216,255,.35);
+      font: inherit; letter-spacing: 1px;
+    }
+    #car-roster {
+      display: flex; gap: 7px; overflow-x: auto; padding: 1px 1px 5px;
+      scroll-snap-type: x mandatory; scrollbar-width: thin; scrollbar-color: rgba(252,255,82,.45) transparent;
+    }
+    .car-roster-item {
+      --car-color: #fcff52; appearance: none; cursor: pointer; flex: 0 0 96px;
+      min-width: 0; padding: 7px 8px; border-radius: 9px; scroll-snap-align: center;
+      color: #fff; text-align: left; font-family: inherit;
+      background: rgba(255,255,255,.065); border: 1px solid rgba(255,255,255,.14);
+      transition: border-color .15s ease, background .15s ease, transform .12s ease;
+    }
+    .car-roster-item:active { transform: scale(.96); }
+    .car-roster-item.selected {
+      background: color-mix(in srgb, var(--car-color) 16%, rgba(6,8,20,.9));
+      border-color: var(--car-color); box-shadow: 0 0 16px color-mix(in srgb, var(--car-color) 28%, transparent);
+    }
+    .car-roster-kind { display: block; font-size: 6.5px; font-weight: 900; letter-spacing: 1px; opacity: .48; }
+    .car-roster-item.hyper .car-roster-kind { color: #7fd4ff; opacity: 1; }
+    .car-roster-item strong {
+      display: block; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      font-size: 9px; font-weight: 900; letter-spacing: .3px;
+    }
+    .car-roster-item strong i {
+      display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%;
+      vertical-align: -1px; background: var(--car-color); box-shadow: 0 0 7px var(--car-color);
+    }
+    .car-roster-item small { display: block; margin-top: 3px; font-size: 7px; font-weight: 800; color: #fcff52; }
+    .car-roster-item.locked strong { opacity: .62; }
 
     /* ---------- leaderboard ---------- */
     #tag-row { display: flex; align-items: center; gap: 10px; }
@@ -536,6 +584,14 @@
     #hud-right { text-align: right; font-weight: 800; }
     #hud-coins { font-size: 17px; color: #fcff52; }
     #hud-zombies { font-size: 15px; color: #7fae5a; margin-top: 3px; }
+    #btn-pause {
+      position: absolute; top: max(12px, env(safe-area-inset-top)); left: 50%;
+      transform: translateX(-50%); width: 44px; height: 38px; border-radius: 10px;
+      display: grid; place-items: center; pointer-events: auto; cursor: pointer;
+      background: rgba(6,8,20,.68); border: 1px solid rgba(255,255,255,.3);
+      color: #fff; font-family: inherit; font-size: 17px; font-weight: 900; line-height: 1;
+    }
+    #hud:not(.visible) #btn-pause { pointer-events: none; }
 
     #progress {
       position: absolute; top: max(64px, calc(env(safe-area-inset-top) + 52px));
@@ -803,6 +859,40 @@
       background: rgba(252,255,82,.1);
     }
 
+    /* pause doubles as the first-run briefing and permanent help screen */
+    #pause { z-index: 20; padding-inline: 16px; }
+    .pause-card {
+      width: min(100%, 560px); max-height: calc(100dvh - 32px); overflow-y: auto;
+      padding: 22px; border-radius: 18px; text-align: left;
+      background: linear-gradient(160deg, rgba(20,27,49,.97), rgba(7,10,24,.98));
+      border: 1px solid rgba(252,255,82,.28); box-shadow: 0 22px 70px rgba(0,0,0,.5);
+    }
+    .pause-kicker { font-size: 9px; font-weight: 900; letter-spacing: 3px; color: #a3ff2e; }
+    #pause-title { margin-top: 3px; font-size: clamp(32px, 9vw, 48px); font-style: italic; line-height: 1; }
+    .pause-section { margin-top: 18px; }
+    .pause-label { font-size: 10px; font-weight: 900; letter-spacing: 2px; color: rgba(255,255,255,.56); }
+    .control-grid, .coin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 8px; }
+    .control-item, .coin-item {
+      min-width: 0; padding: 10px; border-radius: 9px;
+      background: rgba(255,255,255,.065); border: 1px solid rgba(255,255,255,.1);
+    }
+    .control-item strong, .coin-item strong { display: block; color: #fcff52; font-size: 12px; }
+    .control-item span, .coin-item span { display: block; margin-top: 3px; font-size: 10.5px; line-height: 1.35; opacity: .74; }
+    .pause-note { margin-top: 9px; font-size: 10.5px; line-height: 1.4; color: #9fd8ff; }
+    .pause-actions { display: grid; grid-template-columns: 1fr auto; gap: 9px; margin-top: 18px; }
+    .pause-actions .btn { margin: 0; }
+    #btn-pause-restart.hidden { display: none; }
+    #btn-how {
+      width: 100%; padding: 8px 10px; border-radius: 8px; cursor: pointer;
+      background: transparent; border: 1px solid rgba(255,255,255,.14); color: rgba(255,255,255,.72);
+      font-family: inherit; font-size: 10px; font-weight: 800; line-height: 1; letter-spacing: 1.4px;
+    }
+    #r-coin-note { max-width: 440px; color: #fcff52; opacity: .8; }
+    @media (max-width: 390px) {
+      .pause-card { padding: 17px; }
+      .control-grid, .coin-grid { grid-template-columns: 1fr; }
+    }
+
     #combo {
       position: fixed; top: 32%; left: 50%; transform: translateX(-50%);
       z-index: 6; font-size: 22px; font-weight: 900; color: #fcff52;
@@ -873,6 +963,7 @@
         <div id="hud-zombies">☠ 0</div>
       </div>
     </div>
+    <button id="btn-pause" type="button" aria-label="Pause race">Ⅱ</button>
     <div id="progress"></div>
     <div id="style-ui"><span id="style-mult">×1</span><div id="style-bar"><i id="style-fill"></i></div></div>
     <div id="nitro-ui" class="none">NITRO ×0 — TAP</div>
@@ -912,6 +1003,37 @@
     <span><b>A</b><b>D</b> STEER</span>
     <span><b>SPACE</b> NITRO / FIRE</span>
     <span><b>C</b> CAMERA</span>
+    <span><b>P</b> PAUSE</span>
+  </div>
+
+  <div class="overlay hidden" id="pause" role="dialog" aria-modal="true" aria-labelledby="pause-title">
+    <div class="pause-card">
+      <div class="pause-kicker" id="pause-kicker">RACE STOPPED</div>
+      <h2 id="pause-title">PAUSED</h2>
+      <div class="pause-section">
+        <div class="pause-label">CONTROLS</div>
+        <div class="control-grid">
+          <div class="control-item"><strong>STEER</strong><span>Drag left/right · A/D · arrow keys</span></div>
+          <div class="control-item"><strong>DRIVE</strong><span>Hold yellow gas · W/↑ · red pedal or S/↓ brakes</span></div>
+          <div class="control-item"><strong>NITRO / FIRE</strong><span>Tap the blue pill · Space fires in armed modes</span></div>
+          <div class="control-item"><strong>CAMERA / PAUSE</strong><span>Camera button or C · pause button, P, or Esc</span></div>
+        </div>
+      </div>
+      <div class="pause-section">
+        <div class="pause-label">HOW COINS WORK</div>
+        <div class="coin-grid">
+          <div class="coin-item"><strong>+12 FINISH</strong><span>Cross the line and the base reward is yours.</span></div>
+          <div class="coin-item"><strong>+20 / +14 / +8 / +2</strong><span>Placement reward for 1st through 4th.</span></div>
+          <div class="coin-item"><strong>+1 PER 4 ZOMBIES</strong><span>Splats also build combo score; chains do not multiply coins.</span></div>
+          <div class="coin-item"><strong>+5 EXTRA LAP</strong><span>Each lap after the first pays more. Track pickups add directly.</span></div>
+        </div>
+        <div class="pause-note">Coins buy cars and upgrades in the garage. Score controls leaderboard rank; coins control progression.</div>
+      </div>
+      <div class="pause-actions">
+        <button class="btn" id="btn-resume" type="button">RESUME</button>
+        <button class="btn ghost" id="btn-pause-restart" type="button">RESTART</button>
+      </div>
+    </div>
   </div>
 
   <div class="overlay" id="menu">
@@ -969,6 +1091,7 @@
           <input type="range" id="vol-slider" min="0" max="100" aria-label="Volume" />
         </div>
       </div>
+      <button id="btn-how" type="button">HOW TO PLAY + COINS</button>
     </div>
   </div>
 
@@ -995,8 +1118,15 @@
       <div class="stage-title">GAR<em>AGE</em></div>
       <div class="stage-step">STEP 2 / 2 — PICK YOUR RIDE</div>
     </div>
-    <button class="stage-arrow left" id="car-prev" type="button" aria-label="Previous car">‹</button>
-    <button class="stage-arrow right" id="car-next" type="button" aria-label="Next car">›</button>
+    <div class="car-roster-shell">
+      <div class="car-roster-head">
+        <button class="car-roster-nav" id="car-prev" type="button" aria-label="Previous car">‹</button>
+        <span>ALL 13 CARS</span>
+        <button id="car-jump-hyper" type="button">HYPER 5&nbsp;→</button>
+        <button class="car-roster-nav" id="car-next" type="button" aria-label="Next car">›</button>
+      </div>
+      <div id="car-roster" aria-label="Car list"></div>
+    </div>
     <div class="stage-card">
       <div class="stage-name" id="car-name"><i id="car-chip"></i><span id="car-name-t">VIPER GT</span></div>
       <div id="car-blurb">Balanced all-rounder</div>
@@ -1049,6 +1179,7 @@
       <div class="stat"><span class="v" id="r-style">0</span><span class="k">Style</span></div>
       <div class="stat"><span class="v" id="r-score">0</span><span class="k">Score</span></div>
     </div>
+    <div class="hint" id="r-coin-note"></div>
     <button class="btn" id="btn-retry" type="button">RACE AGAIN</button>
     <button class="btn ghost" id="btn-retry-same" type="button" aria-label="Retry the same track">🔁 SAME TRACK</button>
     <button class="btn ghost" id="btn-share" type="button" aria-label="Share this run">📤 Share</button>

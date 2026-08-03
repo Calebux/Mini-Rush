@@ -7,6 +7,7 @@ export class InputManager {
   onTap: () => void = () => {};
   onCamera: () => void = () => {};
   onNitroKey: () => void = () => {}; // N — nitro in gun modes where tap shoots
+  onPause: () => void = () => {};
 
   /** -1..1 from held keys */
   keySteer = 0;
@@ -66,6 +67,7 @@ export class InputManager {
       else if (key === 'arrowup' || key === 'w') this.gasHeld = true;
       else if (!e.repeat && key === 'c') this.onCamera();
       else if (!e.repeat && key === 'n') this.onNitroKey();
+      else if (!e.repeat && (key === 'escape' || key === 'p')) this.onPause();
       else if (!e.repeat && (key === ' ' || key === 'enter')) this.onTap();
       this.keySteer = (this.leftHeld ? -1 : 0) + (this.rightHeld ? 1 : 0);
     });
@@ -101,7 +103,7 @@ export class InputManager {
   }
 
   private isControlKey(key: string): boolean {
-    return ['arrowleft', 'arrowright', 'arrowdown', 'arrowup', ' ', 'a', 'd', 's', 'w'].includes(key);
+    return ['arrowleft', 'arrowright', 'arrowdown', 'arrowup', ' ', 'a', 'd', 's', 'w', 'p', 'escape'].includes(key);
   }
 
   private isEditableTarget(target: EventTarget | null): boolean {
