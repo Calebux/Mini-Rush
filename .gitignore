@@ -27,3 +27,4 @@ scripts/.stress-wallets*.json
 
 # quarantined third-party assets pending replacement (never ship, never commit)
 _unlicensed-quarantine/
+.vercel
