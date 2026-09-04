@@ -2,6 +2,8 @@
 // lap — its own cel palette, scenery flavor, fog mood, and track shape.
 // Districts blend into each other as you drive (game.ts blendBiome).
 
+import type { TrackLayout } from './track';
+
 export type Flavor =
   | 'towers'       // downtown blocks, streetlights, racing barriers
   | 'palms'        // beachfront — palm trees + low painted buildings
@@ -36,10 +38,19 @@ export interface MapSpec {
   ctlVar: number;
   rMin: number;
   rVar: number;
+  layout?: TrackLayout;
   fogNear: number;
   fogFar: number;
   skyline?: string; // horizon panorama sprite (assets/sprites/<name>.png)
   music?: string;   // optional /assets/music/<name> race loop
+  /**
+   * A real circuit imported from a model. `model` is the .glb under
+   * /assets/models/imported and `path` the centreline baked from it by
+   * scripts/bake-track-path.mjs — you drive the circuit's own geometry, so the
+   * two names always travel together.
+   */
+  circuit?: { model: string; path: string };
+  alwaysOpen?: boolean; // bonus/imported circuits can bypass passport order
   districts: [District, District, District];
 }
 
@@ -48,6 +59,7 @@ export const MAPS: MapSpec[] = [
     id: 'lagos', name: 'LAGOS', flag: '🇳🇬',
     blurb: 'Flowing sweepers from the Island to the market — golden hour, all hour.',
     ctlMin: 10, ctlVar: 3, rMin: 0.7, rVar: 0.5, fogNear: 40, fogFar: 185,
+    layout: 'waterfront',
     districts: [
       { label: 'The Island', flavor: 'towers',
         skyTop: 0x35418f, skyBottom: 0xffb45e, fog: 0xd88a5a, ground: 0x46543e, road: 0x8f939f, hemi: 0xffd9b0, dust: 0xb99e6a },
@@ -61,6 +73,7 @@ export const MAPS: MapSpec[] = [
     id: 'beijing', name: 'BEIJING', flag: '🇨🇳',
     blurb: 'Tight technical corners through hutongs, temple gardens and the CBD haze.',
     ctlMin: 13, ctlVar: 4, rMin: 0.55, rVar: 0.85, fogNear: 35, fogFar: 165,
+    layout: 'city-grid',
     districts: [
       { label: 'Hutongs', flavor: 'pagoda',
         skyTop: 0xc76a55, skyBottom: 0xf2c98a, fog: 0xe0b088, ground: 0x8a7a5f, road: 0xa39a8a, hemi: 0xffe0c0, dust: 0xb0987a },
@@ -74,6 +87,7 @@ export const MAPS: MapSpec[] = [
     id: 'mumbai', name: 'MUMBAI', flag: '🇮🇳',
     blurb: 'Chaotic rhythm — painted facades, Marine Drive palms, bazaar squeeze.',
     ctlMin: 12, ctlVar: 4, rMin: 0.6, rVar: 0.75, fogNear: 40, fogFar: 185,
+    layout: 'coastal',
     districts: [
       { label: 'Colaba', flavor: 'towers',
         skyTop: 0x2a7fd8, skyBottom: 0xffd98a, fog: 0xe8c890, ground: 0x7a6a4a, road: 0x9a948a, hemi: 0xfff0c8, dust: 0xb09a6a },
@@ -87,6 +101,7 @@ export const MAPS: MapSpec[] = [
     id: 'neon', name: 'NEON CITY', flag: '🌃',
     blurb: 'Rain-slick cyberpunk streets — all glow, no mercy, midnight forever.',
     ctlMin: 12, ctlVar: 4, rMin: 0.55, rVar: 0.8, fogNear: 26, fogFar: 150,
+    layout: 'neon-knot',
     skyline: 'skyline_neon',
     districts: [
       { label: 'Neon Strip', flavor: 'towers',
@@ -101,6 +116,7 @@ export const MAPS: MapSpec[] = [
     id: 'london', name: 'LONDON', flag: '🇬🇧',
     blurb: 'A murky, unforgiving street circuit — terraces, Hyde Park, the Square Mile.',
     ctlMin: 14, ctlVar: 3, rMin: 0.5, rVar: 0.7, fogNear: 30, fogFar: 145,
+    layout: 'city-grid',
     districts: [
       { label: 'The Terraces', flavor: 'terrace',
         skyTop: 0x5a6a8a, skyBottom: 0xb8c2d0, fog: 0xaab4c2, ground: 0x4a5548, road: 0x767c88, hemi: 0xd8e0ea, dust: 0x707a68 },
@@ -114,6 +130,7 @@ export const MAPS: MapSpec[] = [
     id: 'tokyo', name: 'TOKYO', flag: '🇯🇵',
     blurb: 'Touge drift switchbacks across Shibuya crossing, arcade alleys and Mt. Fuji pass.',
     ctlMin: 16, ctlVar: 4, rMin: 0.45, rVar: 0.9, fogNear: 30, fogFar: 155,
+    layout: 'mountain-switchback',
     skyline: 'skyline_tokyo',
     districts: [
       { label: 'Shibuya Crossing', flavor: 'towers',
@@ -128,6 +145,7 @@ export const MAPS: MapSpec[] = [
     id: 'rio', name: 'RIO DE JANEIRO', flag: '🇧🇷',
     blurb: 'High-speed Copacabana curves plunging into tight hillside favela stairways.',
     ctlMin: 11, ctlVar: 3, rMin: 0.65, rVar: 0.6, fogNear: 45, fogFar: 190,
+    layout: 'coastal',
     skyline: 'skyline_rio',
     districts: [
       { label: 'Copacabana Beach', flavor: 'palms',
@@ -142,6 +160,7 @@ export const MAPS: MapSpec[] = [
     id: 'cairo', name: 'CAIRO', flag: '🇪🇬',
     blurb: 'Wide-open desert rally straights across ancient pyramids and dusty bazaars.',
     ctlMin: 9, ctlVar: 3, rMin: 0.8, rVar: 0.4, fogNear: 35, fogFar: 200,
+    layout: 'desert-rally',
     skyline: 'skyline_cairo_v2',
     districts: [
       { label: 'Nile Corniche', flavor: 'palms',
@@ -156,6 +175,7 @@ export const MAPS: MapSpec[] = [
     id: 'nairobi', name: 'NAIROBI', flag: '🇰🇪',
     blurb: 'Savanna sun, downtown glass and dusty market alleys — Kenyan speed.',
     ctlMin: 11, ctlVar: 3, rMin: 0.65, rVar: 0.55, fogNear: 40, fogFar: 195,
+    layout: 'market-knot',
     districts: [
       { label: 'Uhuru Gardens', flavor: 'palms',
         skyTop: 0x2a88c8, skyBottom: 0xffe4a0, fog: 0xd0b888, ground: 0x7a9a52, road: 0x969892, hemi: 0xfff6d8, dust: 0x9a8a5a },
@@ -169,6 +189,7 @@ export const MAPS: MapSpec[] = [
     id: 'seoul', name: 'SEOUL', flag: '🇰🇷',
     blurb: 'K-pop neon meets ancient palace walls. Tight alleys, wide boulevards.',
     ctlMin: 14, ctlVar: 4, rMin: 0.5, rVar: 0.85, fogNear: 28, fogFar: 155,
+    layout: 'neon-knot',
     skyline: 'skyline_neon',
     districts: [
       { label: 'Gangnam', flavor: 'towers',
@@ -183,6 +204,7 @@ export const MAPS: MapSpec[] = [
     id: 'accra', name: 'ACCRA', flag: '🇬🇭',
     blurb: 'Sun-drenched coastal city — Osu palms, Jamestown bricks and Makola chaos.',
     ctlMin: 10, ctlVar: 3, rMin: 0.7, rVar: 0.5, fogNear: 42, fogFar: 190,
+    layout: 'waterfront',
     districts: [
       { label: 'Osu Beach', flavor: 'palms',
         skyTop: 0x2590c8, skyBottom: 0xffe898, fog: 0xc8c098, ground: 0xd0b480, road: 0x949690, hemi: 0xfff8e0, dust: 0xc0a870 },
@@ -196,6 +218,7 @@ export const MAPS: MapSpec[] = [
     id: 'saopaulo', name: 'SÃO PAULO', flag: '🇧🇷',
     blurb: 'Paulista boulevards to painted Vila favelas — concrete jungle alive.',
     ctlMin: 13, ctlVar: 4, rMin: 0.55, rVar: 0.75, fogNear: 32, fogFar: 170,
+    layout: 'city-grid',
     districts: [
       { label: 'Av. Paulista', flavor: 'towers',
         skyTop: 0x2a4878, skyBottom: 0xa0b8d0, fog: 0x90a8b8, ground: 0x404848, road: 0x8a8e98, hemi: 0xd0dce8, dust: 0x686e78 },
@@ -209,6 +232,7 @@ export const MAPS: MapSpec[] = [
     id: 'norway', name: 'NORWAY', flag: '🇳🇴',
     blurb: 'Dusk mountain roads under a rising moon — wide sweepers, cold air, no guard rails.',
     ctlMin: 10, ctlVar: 4, rMin: 0.72, rVar: 0.55, fogNear: 42, fogFar: 210,
+    layout: 'mountain-switchback',
     skyline: 'skyline_mountain_dusk', music: 'offroad',
     districts: [
       { label: 'Fjord Road', flavor: 'park',
@@ -223,6 +247,7 @@ export const MAPS: MapSpec[] = [
     id: 'iceland', name: 'ICELAND', flag: '🇮🇸',
     blurb: 'Glacial switchbacks across blue ice, black gravel and volcanic frost.',
     ctlMin: 12, ctlVar: 4, rMin: 0.55, rVar: 0.85, fogNear: 30, fogFar: 165,
+    layout: 'mountain-switchback',
     skyline: 'skyline_glacial_mountains', music: 'offroad',
     districts: [
       { label: 'Glacier Tongue', flavor: 'pyramids',
@@ -237,6 +262,7 @@ export const MAPS: MapSpec[] = [
     id: 'canada', name: 'CANADA', flag: '🇨🇦',
     blurb: 'Tall-forest rally lanes through cedar shade, lakeside cabins and mossy cutbacks.',
     ctlMin: 13, ctlVar: 4, rMin: 0.58, rVar: 0.78, fogNear: 36, fogFar: 185,
+    layout: 'forest-rally',
     skyline: 'skyline_tall_forest', music: 'offroad',
     districts: [
       { label: 'Cedar Run', flavor: 'park',
@@ -251,6 +277,7 @@ export const MAPS: MapSpec[] = [
     id: 'newzealand', name: 'NEW ZEALAND', flag: '🇳🇿',
     blurb: 'Bright nature-stage racing over green hills, coastal cliffs and alpine straights.',
     ctlMin: 11, ctlVar: 4, rMin: 0.68, rVar: 0.62, fogNear: 45, fogFar: 205,
+    layout: 'coastal',
     skyline: 'skyline_nature_landscapes', music: 'offroad',
     districts: [
       { label: 'Rolling Hills', flavor: 'palms',
@@ -265,6 +292,7 @@ export const MAPS: MapSpec[] = [
     id: 'finland', name: 'FINLAND', flag: '🇫🇮',
     blurb: 'Star-lit forest roads with glowing fields, quiet lakes and sharp midnight corners.',
     ctlMin: 14, ctlVar: 4, rMin: 0.5, rVar: 0.82, fogNear: 28, fogFar: 160,
+    layout: 'forest-rally',
     skyline: 'skyline_stringstar_fields', music: 'offroad',
     districts: [
       { label: 'Stringstar Grove', flavor: 'park',
@@ -273,6 +301,34 @@ export const MAPS: MapSpec[] = [
         skyTop: 0x15163a, skyBottom: 0x5f3d86, fog: 0x3d3164, ground: 0x324842, road: 0x56586a, hemi: 0x9c94ff, dust: 0x53645d },
       { label: 'Midnight Fields', flavor: 'market',
         skyTop: 0x0e122c, skyBottom: 0x6f4a8f, fog: 0x3b2a5c, ground: 0x3c4435, road: 0x575866, hemi: 0xa58cff, dust: 0x5e6048 }
+    ]
+  },
+  {
+    id: 'cartoonoval', name: 'CARTOON OVAL', flag: '🏁',
+    blurb: 'A bright arcade speedway — long sweepers, wide apron, nowhere to hide.',
+    ctlMin: 10, ctlVar: 2, rMin: 0.78, rVar: 0.3, fogNear: 44, fogFar: 200,
+    alwaysOpen: true,
+    districts: [
+      { label: 'Start Park', flavor: 'park',
+        skyTop: 0x3ca6e8, skyBottom: 0xd8f6ff, fog: 0xaed5de, ground: 0x62a84c, road: 0x7f8588, hemi: 0xf3ffe4, dust: 0x8da862 },
+      { label: 'Grandstand Bend', flavor: 'park',
+        skyTop: 0x4f8fc0, skyBottom: 0xf7d0a0, fog: 0xc8b090, ground: 0x6f9146, road: 0x777f86, hemi: 0xffe8c4, dust: 0x8b8e58 },
+      { label: 'Picnic Straight', flavor: 'market',
+        skyTop: 0x557bd5, skyBottom: 0xffc36e, fog: 0xcaa16e, ground: 0x5b9a4d, road: 0x737b83, hemi: 0xffdfb5, dust: 0x8c8358 }
+    ]
+  },
+  {
+    id: 'cota', name: 'LONE STAR GP', flag: '🇺🇸',
+    blurb: 'Texas hill-country grand prix — a brutal uphill first turn, then esses.',
+    ctlMin: 16, ctlVar: 4, rMin: 0.45, rVar: 0.9, fogNear: 42, fogFar: 205,
+    alwaysOpen: true,
+    districts: [
+      { label: 'Main Straight', flavor: 'park',
+        skyTop: 0x2f6fa3, skyBottom: 0xd8ecff, fog: 0xb5c7d2, ground: 0x5f7448, road: 0x787d82, hemi: 0xf0f8ff, dust: 0x7a805f },
+      { label: 'Esses', flavor: 'park',
+        skyTop: 0x486f8f, skyBottom: 0xf0d0a0, fog: 0xc9ad88, ground: 0x735f46, road: 0x777b82, hemi: 0xffe3bc, dust: 0x927a58 },
+      { label: 'Stadium Sector', flavor: 'market',
+        skyTop: 0x3e4f6f, skyBottom: 0xffba78, fog: 0xc79c78, ground: 0x645442, road: 0x74777e, hemi: 0xffd8b2, dust: 0x887054 }
     ]
   }
 ];

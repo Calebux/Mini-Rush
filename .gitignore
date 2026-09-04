@@ -24,3 +24,6 @@ scripts/.stress-wallets*.json
 # local agent settings (machine-specific permissions)
 .claude/settings.local.json
 .sim/
+
+# quarantined third-party assets pending replacement (never ship, never commit)
+_unlicensed-quarantine/

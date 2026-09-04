@@ -1,5 +1,9 @@
 # Asset drop zone
 
+Anything you drop here ships to players, so record its pack and licence in
+`CREDITS.md` at the repo root before committing it. Models of real production
+cars and other trademarked designs don't belong here regardless of licence.
+
 The game runs fully without these files (procedural placeholders). Drop the
 itch.io kit files here with the exact names below and they are picked up
 automatically on next reload — no code changes needed.
@@ -12,10 +16,9 @@ Scale doesn't matter — the loader auto-normalizes size and grounds each model.
 
 | Filename | Source pack | Suggestion |
 |---|---|---|
-| `car_player.glb` | PSX-style cars (ggbot) or RCP4 (jreo) | the coolest car — this is the hero |
+| `car_player.glb` | PSX-style cars (ggbot) or RCP4 (jreo) | the hero car — **empty by default**, procedural fallback |
 | `car_traffic_1.glb` … `car_traffic_6.glb` | PSX-style cars / RCP4 | any 6 different cars |
-| `car_super_1.glb` | user-downloaded OBJ supercar | R8 V10 premium garage car |
-| `car_super_2.fbx` … `car_super_5.fbx` | user-downloaded super cars package templates | premium garage cars |
+| `car_super_1.glb` … `car_super_5.glb` | any CC0 / commercial-use supercar pack | premium garage cars — **empty by default**, procedural fallback |
 | `city_building_1.glb` … `city_building_8.glb` | Downtown City MegaKit (Quaternius) | varied building blocks |
 | `desert_building_1.glb` … `desert_building_8.glb` | Voxel Desert Town (maxparata) | houses, market stalls |
 | `prop_streetlight.glb` | Downtown City MegaKit | streetlight/lamp prop |

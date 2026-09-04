@@ -6,7 +6,10 @@ export interface CarSpec {
   name: string;
   blurb: string;
   color: number; // UI chip + underglow + procedural fallback paint
-  model: number; // -1 = car_player.glb, 0..5 = traffic, 100+ = supercar slots
+  model: number; // -1 = car_player.glb, 0..5 = traffic, 100..104 = supercar
+                 // market slots, 200+ = imported cars (assets/models/imported).
+                 // Slots with no licensed model on disk render procedurally in
+                 // `color` — see AssetLibrary.cloneCar.
   speed: number;
   accel: number;
   grip: number;
@@ -56,28 +59,33 @@ export const CARS: CarSpec[] = [
     price: 600
   },
   {
-    id: 'r8', name: 'R8 V10', blurb: 'Clean supercar balance',
+    id: 'r8', name: 'AURORA V10', blurb: 'Clean supercar balance',
     color: 0x4dd8ff, model: 100, speed: 1.12, accel: 1.08, grip: 1.05, nitro: 0.98,
     price: 900
   },
   {
-    id: 'sesto', name: 'SESTO R', blurb: 'Ultra-light corner hunter',
+    id: 'sesto', name: 'CINDER R', blurb: 'Ultra-light corner hunter',
     color: 0xd8ff2f, model: 101, speed: 1.13, accel: 1.05, grip: 1.1, nitro: 0.96,
     price: 980
   },
   {
-    id: 'aventador', name: 'AVENTADOR SV', blurb: 'Brutal launch, heavy bite',
+    id: 'aventador', name: 'AVANTI SV', blurb: 'Brutal launch, heavy bite',
     color: 0xff4a1f, model: 102, speed: 1.14, accel: 1.12, grip: 0.95, nitro: 1.0,
     price: 1100
   },
   {
-    id: 'divo', name: 'DIVO', blurb: 'Aero grip for late braking',
+    id: 'divo', name: 'DERVISH', blurb: 'Aero grip for late braking',
     color: 0x2fd8ff, model: 103, speed: 1.11, accel: 1.0, grip: 1.16, nitro: 0.96,
     price: 1150
   },
   {
-    id: 'tourbillon', name: 'TOURBILLON', blurb: 'Hybrid top-end monster',
+    id: 'tourbillon', name: 'TOURMALINE', blurb: 'Hybrid top-end monster',
     color: 0x6f7cff, model: 104, speed: 1.18, accel: 0.98, grip: 1.03, nitro: 1.1,
     price: 1200
+  },
+  {
+    id: 'stockcar', name: 'STOCK 88', blurb: 'Oval-bred bruiser — flat out, forever',
+    color: 0xd32f2f, model: 200, speed: 1.16, accel: 0.94, grip: 1.12, nitro: 0.92,
+    price: 800
   }
 ];

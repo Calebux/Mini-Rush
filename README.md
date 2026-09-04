@@ -1,12 +1,12 @@
 # MiniRush — Outbreak GP 🧟🏁
 
-A mobile-first 3D racing game built for **MiniPay** (Celo).
+A mobile-first 3D racing game built as a **Nimiq Pay Mini App**.
 Race three AI rivals point-to-point through zombie-infested streets: drag to
 steer, tap to fire nitro, splat everything green for combo points, and grab
 coins along the way.
 
 Built with Three.js + Vite + TypeScript. No frameworks, targets 60 fps inside
-the MiniPay webview.
+the Nimiq Pay WebView.
 
 ## Play it
 
@@ -90,47 +90,46 @@ VITE_LB_KEY=your-anon-public-key
 
 Restart `npm run dev`. Daily results then post to a shared board (best score
 per player per day) and the 🏆 panel gains a **🌍 GLOBAL DAILY** section, with
-your own row highlighted. Identity is the MiniPay wallet address when
-connected, otherwise a sticky per-device id. Every network call fails soft —
+your own row highlighted. Identity is the Nimiq address when connected,
+otherwise a sticky per-device id. Every network call fails soft —
 a missing or down backend never breaks the game. See `src/remoteBoard.ts`.
 
-## MiniPay integration
+## Nimiq Pay integration
 
-- Detects the MiniPay provider (`window.ethereum.isMiniPay`) and
-  auto-connects on load — no Connect button; the menu quietly shows the
-  address + cUSD balance (viem, Celo mainnet). Plain browsers show nothing.
-- **On-chain signups + races** — `src/wallet.ts` writes to the
-  **MiniRushTracker** contract on Celo mainnet: the player is registered on
-  connect (`signUp`, idempotent) and every finished race is counted
-  (`recordRace`). Writes are legacy transactions with the network fee paid in
-  USDm (`feeCurrency`), carry an [ERC-8021 attribution suffix](https://github.com/celo-org/attribution-tags),
-  and are fire-and-forget: a plain browser, an unconfigured contract, or a
-  rejected transaction never blocks play. See [`contracts/`](contracts/).
+`src/wallet.ts` talks to the provider Nimiq Pay injects into the Mini App's
+WebView, via [`@nimiq/mini-app-sdk`](https://www.npmjs.com/package/@nimiq/mini-app-sdk).
 
-To test inside MiniPay: run `npm run dev`, expose it with a tunnel
-(e.g. `ngrok http 5173`), then open MiniPay → compass icon → "Test page" and
-enter the tunnel URL.
+- **Auto-connect** — the provider is injected before the page script runs, so
+  the menu chip quietly fills in with the player's address (and NIM balance,
+  if `VITE_NIMIQ_RPC_URL` is set). Outside Nimiq Pay nothing shows and the
+  game plays exactly the same.
+- **Garage market** — hyper-class cars can be bought outright for NIM via
+  `sendBasicTransaction`, instead of grinding coins. Off unless
+  `VITE_MARKET_RECEIVER` is configured.
+- **Race receipts** — the results screen offers a one-tap **⛓ Mint receipt**
+  that writes the finished run into a transaction's data field
+  (`sendBasicTransactionWithData`), making the run verifiable independently of
+  this game's own leaderboard. The payload is `MR1` + score/place/map/mode as
+  fixed-width hex — 19 bytes, inside Nimiq's 64-byte data field.
 
-## On-chain contract
+Nimiq Pay puts a native confirmation in front of every sensitive action, which
+the Mini App can't bypass — so nothing is ever written on the player's behalf.
+That's why scores, badges and the daily board live off-chain (local storage +
+the Supabase board) and only payments and opt-in receipts touch the chain.
 
-[`contracts/MiniRushTracker.sol`](contracts/src/MiniRushTracker.sol) is a tiny,
-owner-less Foundry project that counts signups and races on Celo. It holds no
-funds and has two writes — `signUp()` and
-`recordRace(score, place, mapId, modeId)` — plus `totalPlayers` / `totalRaces`
-counters and per-wallet `statsOf`.
+Every call fails soft: no provider, a declined dialog, or an unconfigured
+receiver leaves the game fully playable.
 
-```bash
-cd contracts
-forge install        # vendors forge-std into lib/ (gitignored)
-forge test           # unit tests
-# deploy (needs a funded DEPLOYER_PRIVATE_KEY in ../.env.local):
-forge script script/Deploy.s.sol:Deploy --rpc-url celo --broadcast
-```
+**Testing inside Nimiq Pay:** run `npm run dev`, expose it with a tunnel
+(e.g. `ngrok http 5173`), then open the tunnel URL as a Mini App —
+`https://nimpay.app/miniapps/open/<your-host>` or the
+`nimiqpay://miniapp?url=<your-host>` deeplink.
 
-**Deployed (Celo mainnet, 42220):**
-[`0x51F572dF0C722DA24cFf02B5FddC949AEe6F293d`](https://celoscan.io/address/0x51F572dF0C722DA24cFf02B5FddC949AEe6F293d)
-— the game reads this address from `VITE_TRACKER_ADDRESS` (falling back to the
-baked-in default in `src/wallet.ts`).
+## Legacy Celo contracts
+
+[`contracts/`](contracts/) still holds the Foundry project for **MiniRushTracker**,
+the Celo tracker the game used before moving to Nimiq Pay. Nothing in `src/`
+references it any more; it is kept for history and is not part of the build.
 
 ## Art & sound
 
@@ -181,5 +180,15 @@ src/assets.ts       GLB loader with per-file procedural fallback
 src/meshes.ts       procedural placeholder art (cel-shaded cars, buildings, zombies)
 src/toon.ts         toon materials, cel outlines, GLB re-skinning
 src/audio.ts        file SFX with WebAudio synth fallback
-src/wallet.ts       MiniPay / viem / cUSD
+src/wallet.ts       Nimiq Pay Mini App provider — NIM payments, race receipts
 ```
+
+## Licence
+
+Source code is **MIT** — see [`LICENSE`](LICENSE).
+
+The art and audio under `public/assets/` are third-party and keep their own
+licences; every bundled file, its pack and its terms are listed in
+[`CREDITS.md`](CREDITS.md). Nothing ships unless its licence is recorded there,
+and every asset slot has a procedural fallback, so the game runs complete
+without any of them.

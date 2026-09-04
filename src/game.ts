@@ -14,7 +14,7 @@ import { StyleMeter } from './style';
 import { MAPS } from './maps';
 import { MODES } from './modes';
 import { mapUnlocked, stamp } from './passport';
-import { captureReferrer, creditReferral, getReferrer } from './referral';
+import { captureReferrer, creditReferral } from './referral';
 import { activeColor } from './skins';
 import { applyUpgrades } from './upgrades';
 import { Rival } from './rivals';
@@ -28,6 +28,7 @@ import { recordLocalRace } from './stats';
 import { checkReward, recordDay } from './streak';
 import { toonMat } from './toon';
 import { Track } from './track';
+import { bakedPath, loadTrackPaths } from './trackPaths';
 import { UI } from './ui';
 import { Wallet } from './wallet';
 import { rollWeather, WeatherSpec } from './weather';
@@ -112,6 +113,9 @@ export class Game {
   private latchMeshes: THREE.Object3D[] = [];
   // menu-family camera: which page is up, turntable angle, flyby distance
   private uiScene: 'menu' | 'garage' | 'tour' = 'menu';
+  private garageLiftPx = 0;
+  private garageLiftAt = 0;   // viewport height garageLiftPx was measured for
+  private viewOffset = 0;     // lens shift currently applied to the camera
   private orbitT = 0;
   private tourS = 0;
   private camLook = new THREE.Vector3();
@@ -254,7 +258,8 @@ export class Game {
     window.addEventListener('pointerdown', unlockAudio, { once: true });
     window.addEventListener('keydown', unlockAudio, { once: true });
 
-    void this.assets.load().then(() => {
+    const circuits = MAPS.map((m) => m.circuit?.path).filter((p): p is string => !!p);
+    void Promise.all([this.assets.load(), loadTrackPaths(circuits)]).then(() => {
       this.buildRace();
       this.state = 'menu';
       this.renderer.setAnimationLoop(() => this.tick());
@@ -326,6 +331,27 @@ export class Game {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.garageLiftAt = 0; // re-measure the garage's clear band at the new size
+  }
+
+  /**
+   * Pixels to lift the garage turntable by so the car lands in the gap between
+   * the title and the car selector instead of behind it. Measured from the live
+   * layout — the card grows and shrinks with the car's state (locked, market,
+   * upgrades), so a hardcoded fraction would drift out of date.
+   */
+  private garageLift(): number {
+    const h = window.innerHeight;
+    if (this.garageLiftAt === h) return this.garageLiftPx;
+    const box = (sel: string): DOMRect | null => {
+      const el = document.querySelector(sel) as HTMLElement | null;
+      return el && el.offsetParent !== null ? el.getBoundingClientRect() : null;
+    };
+    const top = box('#garage .stage-head')?.bottom ?? 0;
+    const bottom = (box('#garage .car-roster-shell') ?? box('#garage .stage-card'))?.top ?? h;
+    this.garageLiftPx = bottom > top ? h / 2 - (top + bottom) / 2 : 0;
+    this.garageLiftAt = h;
+    return this.garageLiftPx;
   }
 
   // ---------- race lifecycle ----------
@@ -405,7 +431,9 @@ export class Game {
     this.raceSeed = seed;
     const map = MAPS[this.mapIndex];
     const mode = MODES[this.modeIndex];
-    this.track = new Track(seed, this.trackLength, map);
+    this.track = new Track(seed, this.trackLength, {
+      ...map, baked: bakedPath(map.circuit?.path)
+    });
 
     // weather
     this.weather = rollWeather(map.id, seed);
@@ -834,24 +862,16 @@ export class Game {
       }
     }
 
-    // Referral: credit local coins on first race, and record the referrer
-    // on-chain once (V2 only; fails soft otherwise).
+    // Referral: credit local coins on the first race.
     if (creditReferral()) {
-      const referrer = getReferrer();
-      if (referrer) void this.wallet.recordReferral(referrer);
       setTimeout(() => {
         this.ui.popText('🎉 REFERRAL BONUS +50 COINS!', '#fcff52');
       }, 3000);
     }
 
-    // Count the race on-chain (Celo). Fire-and-forget, fails soft in plain
-    // browsers or when no tracker contract is configured.
-    void this.wallet.recordRace({
-      score: this.score(),
-      place: this.playerPlace,
-      mapId: this.mapIndex,
-      modeId: this.modeIndex
-    });
+    // The run itself is banked locally and pushed to the daily board by the UI.
+    // Writing it on-chain costs the player a native Nimiq Pay confirmation, so
+    // it stays opt-in behind the results screen's mint button — never automatic.
 
     if (!this.busted && this.ghostRec) {
       const beat = saveGhost(
@@ -1523,6 +1543,7 @@ export class Game {
       this.menuCamera(dt);
       return;
     }
+    this.setViewLift(0); // racing frames the road centred, never lens-shifted
     const p = this.player;
 
     // glide between camera modes rather than snapping
@@ -1559,6 +1580,15 @@ export class Game {
       this.camera.fov = THREE.MathUtils.damp(this.camera.fov, targetFov, 6, dt);
       this.camera.updateProjectionMatrix();
     }
+  }
+
+  /** Off-axis projection shift, in screen pixels; 0 restores a centred view. */
+  private setViewLift(px: number): void {
+    if (Math.abs(px - this.viewOffset) < 0.5) return;
+    this.viewOffset = px;
+    const w = window.innerWidth, h = window.innerHeight;
+    if (px === 0) this.camera.clearViewOffset();
+    else this.camera.setViewOffset(w, h, 0, px, w, h);
   }
 
   /**
@@ -1606,6 +1636,11 @@ export class Game {
       fov = this.cam.fov;
       skyTheta = back.theta;
     }
+
+    // Lens-shift the garage turntable up into the clear band. Offsetting the
+    // projection keeps the camera pointed at the car, so the hero angle is
+    // unchanged — only where it lands on screen moves.
+    this.setViewLift(this.uiScene === 'garage' ? this.garageLift() : 0);
 
     const k = 1 - Math.exp(-3.2 * dt);
     this.camera.position.lerp(pos, k);

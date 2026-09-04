@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { CarSpec } from './cars';
 import { buildCar, CAR_COLORS, carGroundFx } from './meshes';
@@ -7,12 +6,14 @@ import { toonify } from './toon';
 
 /**
  * Loads real kit models from /assets/models when present, falling back to
- * procedural stand-ins. Drop-in filenames (see assets/README.md):
+ * procedural stand-ins. Every slot below is optional: a filename that isn't
+ * there resolves to null and the car/prop is built procedurally instead, so
+ * the repo only ever ships models we hold a license for (see CREDITS.txt).
+ * Drop-in filenames (see assets/README.md):
  *
  *   car_player.glb            — your hero car   (PSX-style cars / RCP4)
  *   car_traffic_1..6.glb      — traffic cars    (PSX-style cars / RCP4)
- *   car_super_1.glb           — OBJ-converted premium garage car
- *   car_super_2..5.fbx        — FBX premium garage cars
+ *   car_super_1..5.glb        — premium garage cars
  *   city_building_1..8.glb    — city blocks     (Downtown City MegaKit)
  *   desert_building_1..8.glb  — desert blocks   (Voxel Desert Town)
  *   prop_streetlight.glb, prop_cactus_1..3.glb, plane_bonus.glb (Voxel Plane)
@@ -23,6 +24,8 @@ export class AssetLibrary {
   // whichever async load order the GLBs resolve in
   trafficCars: (THREE.Group | null)[] = [null, null, null, null, null, null];
   superCars: (THREE.Group | null)[] = [null, null, null, null, null];
+  // cars converted from downloaded models by scripts/import-track.mjs
+  importedCars: (THREE.Group | null)[] = [null];
   cityBuildings: THREE.Group[] = [];
   desertBuildings: THREE.Group[] = [];
   medievalBuildings: THREE.Group[] = [];
@@ -33,7 +36,6 @@ export class AssetLibrary {
   wheel: THREE.Group | null = null;
 
   private loader = new GLTFLoader();
-  private fbxLoader = new FBXLoader();
   private base = `${import.meta.env.BASE_URL}assets/models/`;
 
   async load(): Promise<void> {
@@ -52,15 +54,14 @@ export class AssetLibrary {
         if (m) this.trafficCars[i - 1] = this.addWheels(m);
       }));
     }
-    jobs.push(this.tryLoad('car_super_1.glb', 4.0).then((m) => {
-      if (m) this.superCars[0] = this.addWheels(m);
+    for (let i = 1; i <= 5; i++) {
+      jobs.push(this.tryLoad(`car_super_${i}.glb`, 4.0).then((m) => {
+        if (m) this.superCars[i - 1] = this.addWheels(m);
+      }));
+    }
+    jobs.push(this.tryLoad('imported/car_1.glb', 4.4).then((m) => {
+      if (m) this.importedCars[0] = this.addWheels(m);
     }));
-    ['car_super_2.fbx', 'car_super_3.fbx', 'car_super_4.fbx', 'car_super_5.fbx']
-      .forEach((file, index) => {
-        jobs.push(this.tryLoadFbx(file, 4.0).then((m) => {
-          if (m) this.superCars[index + 1] = this.addWheels(m);
-        }));
-      });
     for (let i = 1; i <= 8; i++) {
       jobs.push(this.tryLoad(`city_building_${i}.glb`, 18, 'y').then((m) => {
         if (m) this.cityBuildings.push(m);
@@ -168,10 +169,12 @@ export class AssetLibrary {
     const model = Number.isSafeInteger(spec.model) ? spec.model : -1;
     const src = model < 0
       ? this.playerCar
-      : model >= 100
-        ? this.superCars[model - 100] ?? null
-        : this.trafficCars[model] ?? null;
-    if (!src) return buildCar(Math.max(0, CAR_COLORS.indexOf(spec.color)));
+      : model >= 200
+        ? this.importedCars[model - 200] ?? null
+        : model >= 100
+          ? this.superCars[model - 100] ?? null
+          : this.trafficCars[model] ?? null;
+    if (!src) return buildCar(0, spec.color);
     const g = src.clone(true);
     g.add(carGroundFx(spec.color));
     return g;
@@ -199,17 +202,6 @@ export class AssetLibrary {
         },
         undefined,
         () => resolve(null) // missing file → procedural fallback, not an error
-      );
-    });
-  }
-
-  private tryLoadFbx(file: string, targetSize: number): Promise<THREE.Group | null> {
-    return new Promise((resolve) => {
-      this.fbxLoader.load(
-        this.base + file,
-        (fbx) => resolve(this.normalizeModel(fbx, targetSize)),
-        undefined,
-        () => resolve(null)
       );
     });
   }

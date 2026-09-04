@@ -63,14 +63,19 @@ const CABIN_PROFILE: [number, number][] = [
   [-0.5, 0.6], [0.0, 1.0], [0.78, 0.98], [1.3, 0.6]
 ];
 
-export function buildCar(colorIndex = 0): THREE.Group {
+/**
+ * Procedural cel-shaded car. colorIndex picks from CAR_COLORS; paintOverride
+ * takes an exact hex instead, so a garage car whose colour isn't in the shared
+ * palette still renders in its own livery rather than falling back to slot 0.
+ */
+export function buildCar(colorIndex = 0, paintOverride?: number): THREE.Group {
   const outer = new THREE.Group();
   // parts are authored nose-at--z; the game treats +z as the model's front,
   // so everything solid goes in an inner group flipped 180°
   const g = new THREE.Group();
   g.rotation.y = Math.PI;
   outer.add(g);
-  const paint = CAR_COLORS[colorIndex % CAR_COLORS.length];
+  const paint = paintOverride ?? CAR_COLORS[colorIndex % CAR_COLORS.length];
   const paintMat = mat(paint);
   const trim = mat(0x1c2130);
 
