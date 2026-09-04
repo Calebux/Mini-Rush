@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { ROAD_HALF_WIDTH, SAMPLE_STEP } from './constants';
 import { mulberry32 } from './meshes';
 import { toonMat } from './toon';
+import { BakedPath } from './trackPaths';
 
 export interface Frame {
   x: number;
@@ -31,14 +32,107 @@ export interface TrackShape {
   ctlVar: number;
   rMin: number;   // radius spread — how far corners swing in/out
   rVar: number;
+  layout?: TrackLayout; // named circuit plan; undefined keeps the radial generator
+  /** Centreline baked from an imported circuit — overrides every field above. */
+  baked?: BakedPath | null;
 }
+
+export type TrackLayout =
+  | 'waterfront'
+  | 'city-grid'
+  | 'coastal'
+  | 'market-knot'
+  | 'desert-rally'
+  | 'mountain-switchback'
+  | 'forest-rally'
+  | 'neon-knot';
+
+// The road ribbon's full painted width. An imported circuit is never scaled
+// below this, or the generated ribbon would overhang its own tarmac onto grass.
+const RIBBON_WIDTH = (ROAD_HALF_WIDTH + 0.6) * 2;
 
 const DEFAULT_SHAPE: TrackShape = { ctlMin: 11, ctlVar: 4, rMin: 0.6, rVar: 0.75 };
 const safeNumber = (value: number, fallback: number): number =>
   Number.isFinite(value) ? value : fallback;
 
+const LAYOUTS: Record<TrackLayout, [number, number][]> = {
+  // Long promenade straight, bridge bend, then a tight inland return.
+  waterfront: [
+    [-0.95, -0.48], [-0.45, -0.68], [0.25, -0.7], [0.88, -0.54],
+    [1.04, -0.08], [0.72, 0.28], [0.2, 0.38], [-0.24, 0.72],
+    [-0.8, 0.48], [-1.04, 0.02]
+  ],
+  // Blocky city circuit: short straights linked by hard avenue turns.
+  'city-grid': [
+    [-0.78, -0.78], [-0.18, -0.78], [0.46, -0.78], [0.84, -0.5],
+    [0.84, -0.04], [0.42, -0.04], [0.42, 0.44], [0.9, 0.72],
+    [0.08, 0.84], [-0.52, 0.58], [-0.9, 0.12], [-0.56, -0.34]
+  ],
+  // Fast beach road with a cliff-side hook and a narrow return.
+  coastal: [
+    [-0.98, -0.28], [-0.46, -0.62], [0.34, -0.72], [0.96, -0.48],
+    [1.1, 0.0], [0.86, 0.46], [0.32, 0.72], [-0.34, 0.62],
+    [-0.82, 0.28], [-1.08, 0.02]
+  ],
+  // Dense bazaar/plaza loop with quick left-right rhythm.
+  'market-knot': [
+    [-0.72, -0.56], [-0.18, -0.72], [0.34, -0.54], [0.08, -0.2],
+    [0.66, -0.12], [0.92, 0.28], [0.34, 0.5], [-0.02, 0.24],
+    [-0.44, 0.72], [-0.92, 0.36], [-0.62, 0.0], [-0.98, -0.28]
+  ],
+  // Big rally oval: high speed, broad sweepers, sparse heavy braking.
+  'desert-rally': [
+    [-1.18, -0.32], [-0.62, -0.68], [0.3, -0.72], [1.08, -0.42],
+    [1.22, 0.12], [0.72, 0.54], [-0.08, 0.7], [-0.84, 0.5],
+    [-1.24, 0.08]
+  ],
+  // Hairpin climb/descent shape for touge, fjord and icy passes.
+  'mountain-switchback': [
+    [-0.82, -0.74], [-0.16, -0.82], [0.54, -0.62], [0.2, -0.3],
+    [0.82, -0.08], [0.34, 0.16], [0.9, 0.46], [0.1, 0.76],
+    [-0.64, 0.58], [-0.22, 0.2], [-0.86, -0.08], [-0.42, -0.42]
+  ],
+  // Uneven rally loop with medium corners and one long commitment straight.
+  'forest-rally': [
+    [-0.9, -0.48], [-0.38, -0.8], [0.16, -0.62], [0.62, -0.76],
+    [0.98, -0.28], [0.72, 0.2], [0.92, 0.62], [0.18, 0.76],
+    [-0.48, 0.5], [-0.98, 0.24]
+  ],
+  // Compact cyber street maze, intentionally technical and bend-heavy.
+  'neon-knot': [
+    [-0.7, -0.7], [-0.08, -0.82], [0.48, -0.54], [0.12, -0.22],
+    [0.78, -0.02], [0.5, 0.34], [0.9, 0.72], [0.08, 0.6],
+    [-0.34, 0.82], [-0.78, 0.38], [-0.36, 0.02], [-0.94, -0.34]
+  ],
+};
+
+function layoutControls(
+  layout: TrackLayout, rand: () => number, targetLength: number
+): { x: number[]; z: number[] } {
+  const pts = LAYOUTS[layout];
+  let perimeter = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length];
+    perimeter += Math.hypot(b[0] - a[0], b[1] - a[1]);
+  }
+  const scale = Math.max(600, targetLength) / Math.max(1, perimeter);
+  const jitter = scale * 0.035;
+  const x: number[] = [], z: number[] = [];
+  for (const [px, pz] of pts) {
+    x.push(px * scale + (rand() - 0.5) * jitter);
+    z.push(pz * scale + (rand() - 0.5) * jitter);
+  }
+  return { x, z };
+}
+
 export class Track {
   readonly length: number;
+  /**
+   * Uniform factor mapping the imported model's units to world metres. Scenery
+   * scales the .glb by exactly this so the shell lands on the driven route.
+   * 1 for generated tracks.
+   */
+  readonly modelScale: number = 1;
   private px: Float32Array;
   private pz: Float32Array;
   private th: Float32Array;
@@ -46,29 +140,54 @@ export class Track {
 
   constructor(seed: number, targetLength: number, shape: TrackShape = DEFAULT_SHAPE) {
     const rand = mulberry32(seed);
-    const ctlMin = Math.max(4, Math.floor(safeNumber(shape.ctlMin, DEFAULT_SHAPE.ctlMin)));
-    const ctlVar = Math.max(1, Math.floor(safeNumber(shape.ctlVar, DEFAULT_SHAPE.ctlVar)));
-    const rMin = Math.max(0.1, safeNumber(shape.rMin, DEFAULT_SHAPE.rMin));
-    const rVar = Math.max(0, safeNumber(shape.rVar, DEFAULT_SHAPE.rVar));
-    const nCtl = ctlMin + Math.floor(rand() * ctlVar);
-    const R = Math.max(600, safeNumber(targetLength, 1800)) / (2 * Math.PI);
-    const cx: number[] = [], cz: number[] = [];
-    for (let i = 0; i < nCtl; i++) {
-      const a = (i / nCtl) * Math.PI * 2 + (rand() - 0.5) * (2.2 / nCtl);
-      const r = R * (rMin + rand() * rVar);
-      cx.push(Math.sin(a) * r);
-      cz.push(-Math.cos(a) * r);
-    }
-
-    // oversample the closed spline into a fine polyline
-    const SUB = 48;
     const rx: number[] = [], rz: number[] = [];
-    for (let i = 0; i < nCtl; i++) {
-      const a = (i - 1 + nCtl) % nCtl, b = i, c = (i + 1) % nCtl, d = (i + 2) % nCtl;
-      for (let j = 0; j < SUB; j++) {
-        const t = j / SUB;
-        rx.push(catmull(cx[a], cx[b], cx[c], cx[d], t));
-        rz.push(catmull(cz[a], cz[b], cz[c], cz[d], t));
+
+    if (shape.baked) {
+      // Imported circuit: the baked centreline already is the fine polyline, so
+      // it goes in untouched — no spline fitting, which would round off the very
+      // corners the circuit is known for. Scale respects the requested race
+      // length but never squeezes the tarmac narrower than the painted ribbon.
+      const baked = shape.baked;
+      const byLength = Math.max(600, safeNumber(targetLength, 1800)) / Math.max(1, baked.length);
+      // Measured at the circuit's narrowest point, not its median, so the
+      // ribbon stays on tarmac through the tightest corner too.
+      const byWidth = RIBBON_WIDTH / Math.max(1, baked.roadWidthMin || baked.roadWidth);
+      this.modelScale = Math.max(byLength, byWidth);
+      for (const [x, z] of baked.points) {
+        rx.push(x * this.modelScale);
+        rz.push(z * this.modelScale);
+      }
+    } else {
+      const ctlMin = Math.max(4, Math.floor(safeNumber(shape.ctlMin, DEFAULT_SHAPE.ctlMin)));
+      const ctlVar = Math.max(1, Math.floor(safeNumber(shape.ctlVar, DEFAULT_SHAPE.ctlVar)));
+      const rMin = Math.max(0.1, safeNumber(shape.rMin, DEFAULT_SHAPE.rMin));
+      const rVar = Math.max(0, safeNumber(shape.rVar, DEFAULT_SHAPE.rVar));
+      const R = Math.max(600, safeNumber(targetLength, 1800)) / (2 * Math.PI);
+      let cx: number[] = [], cz: number[] = [];
+      if (shape.layout) {
+        const controls = layoutControls(shape.layout, rand, targetLength);
+        cx = controls.x;
+        cz = controls.z;
+      } else {
+        const nCtl = ctlMin + Math.floor(rand() * ctlVar);
+        for (let i = 0; i < nCtl; i++) {
+          const a = (i / nCtl) * Math.PI * 2 + (rand() - 0.5) * (2.2 / nCtl);
+          const r = R * (rMin + rand() * rVar);
+          cx.push(Math.sin(a) * r);
+          cz.push(-Math.cos(a) * r);
+        }
+      }
+      const nCtl = cx.length;
+
+      // oversample the closed spline into a fine polyline
+      const SUB = 48;
+      for (let i = 0; i < nCtl; i++) {
+        const a = (i - 1 + nCtl) % nCtl, b = i, c = (i + 1) % nCtl, d = (i + 2) % nCtl;
+        for (let j = 0; j < SUB; j++) {
+          const t = j / SUB;
+          rx.push(catmull(cx[a], cx[b], cx[c], cx[d], t));
+          rz.push(catmull(cz[a], cz[b], cz[c], cz[d], t));
+        }
       }
     }
 

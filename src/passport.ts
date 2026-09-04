@@ -28,5 +28,6 @@ export function stamp(id: string): boolean {
 /** First city is always open; each later one needs the previous stamped. */
 export function mapUnlocked(index: number): boolean {
   if (!Number.isSafeInteger(index) || index < 0 || index >= MAPS.length) return false;
+  if (MAPS[index].alwaysOpen) return true;
   return index <= 0 || stamps().has(MAPS[index - 1].id);
 }

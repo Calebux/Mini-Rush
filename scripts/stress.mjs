@@ -9,6 +9,7 @@
 //
 //   node scripts/stress.mjs           # full run: fund -> burst -> sweep
 //   node scripts/stress.mjs sweep     # sweep existing wallets back only
+//   WALLETS=16 TOTAL_TXS=28 node scripts/stress.mjs
 //
 // Real funds. Reads DEPLOYER_PRIVATE_KEY + VITE_TRACKER_V2_ADDRESS from .env.local.
 
@@ -28,6 +29,7 @@ const KEYS_FILE = join(HERE, '.stress-wallets.json');
 
 // ---- knobs -----------------------------------------------------------------
 const WALLETS = Number(process.env.WALLETS ?? 29);
+const TOTAL_TXS = process.env.TOTAL_TXS ? Number(process.env.TOTAL_TXS) : null;
 const RACES_PER_WALLET = Number(process.env.RACES ?? 3);
 // Fund must cover RACES x (GAS_LIMIT x gasPrice) reserved up front, + sweep gas.
 // By default this is calculated from the current buffered gas price. Set FUND
@@ -73,9 +75,26 @@ async function gasPrice() {
   return (gp * GAS_PRICE_BUFFER_BPS) / 10_000n;
 }
 
-function fundPerWallet(gp) {
+function plannedTxCount(walletCount) {
+  return TOTAL_TXS ?? (walletCount * RACES_PER_WALLET);
+}
+
+function racesForWallet(walletIndex, walletCount) {
+  if (TOTAL_TXS === null) return RACES_PER_WALLET;
+
+  const base = Math.floor(TOTAL_TXS / walletCount);
+  const remainder = TOTAL_TXS % walletCount;
+  return base + (walletIndex < remainder ? 1 : 0);
+}
+
+function maxRacesPerWallet(walletCount) {
+  if (TOTAL_TXS === null) return RACES_PER_WALLET;
+  return Math.ceil(TOTAL_TXS / walletCount);
+}
+
+function fundPerWallet(gp, walletCount) {
   if (FUND_PER_WALLET_OVERRIDE !== null) return FUND_PER_WALLET_OVERRIDE;
-  const maxRaceGas = GAS_LIMIT * BigInt(RACES_PER_WALLET);
+  const maxRaceGas = GAS_LIMIT * BigInt(maxRacesPerWallet(walletCount));
   const sweepGas = 21_000n;
   return ((maxRaceGas + sweepGas) * gp * 11n) / 10n;
 }
@@ -155,7 +174,7 @@ async function waitAll(hashes, label) {
 
 async function fundPhase(wallets, gp) {
   const bal = await pub.getBalance({ address: deployer.address });
-  const perWallet = fundPerWallet(gp);
+  const perWallet = fundPerWallet(gp, wallets.length);
   const fundingNeeded = perWallet * BigInt(wallets.length);
   const fundingGasNeeded = 21_000n * gp * BigInt(wallets.length);
   const reserve = parseEther('0.05');
@@ -172,12 +191,16 @@ async function fundPhase(wallets, gp) {
 }
 
 async function racePhase(wallets, gp) {
-  console.log(`\n== RACE BURST ==\n${wallets.length} wallets x ${RACES_PER_WALLET} recordRace = ${wallets.length * RACES_PER_WALLET} txs, concurrent`);
+  const totalTxs = plannedTxCount(wallets.length);
+  const maxPerWallet = maxRacesPerWallet(wallets.length);
+  console.log(`\n== RACE BURST ==\n${wallets.length} wallets -> ${totalTxs} recordRace txs total${TOTAL_TXS === null ? ` (${RACES_PER_WALLET} each)` : ` (up to ${maxPerWallet} per wallet)`}, concurrent`);
   const before = await pub.readContract({ address: V2, abi: V2_ABI, functionName: 'totalRaces' });
   // Prepare each wallet's burst, then launch all wallets at once.
-  const bursts = await Promise.all(wallets.map(async (w) => {
+  const bursts = await Promise.all(wallets.map(async (w, index) => {
+    const txCount = racesForWallet(index, wallets.length);
+    if (txCount === 0) return null;
     const nonce = await pub.getTransactionCount({ address: w.address, blockTag: 'pending' });
-    const txs = Array.from({ length: RACES_PER_WALLET }, () => ({
+    const txs = Array.from({ length: txCount }, () => ({
       to: V2,
       data: encodeFunctionData({
         abi: V2_ABI, functionName: 'recordRace',
@@ -191,12 +214,13 @@ async function racePhase(wallets, gp) {
     }));
     return { w, nonce, txs };
   }));
+  const activeBursts = bursts.filter(Boolean);
   const t0 = Date.now();
-  const allSent = await Promise.all(bursts.map((b) => fireBurst(b.w.account, b.txs, b.nonce, gp)));
+  const allSent = await Promise.all(activeBursts.map((b) => fireBurst(b.w.account, b.txs, b.nonce, gp)));
   const submitMs = Date.now() - t0;
   const hashes = [];
   allSent.flat().forEach((s) => { if (s.hash) hashes.push(s.hash); else console.log(`  send FAILED: ${s.error}`); });
-  console.log(`  submitted ${hashes.length}/${wallets.length * RACES_PER_WALLET} txs in ${submitMs}ms`);
+  console.log(`  submitted ${hashes.length}/${totalTxs} txs in ${submitMs}ms`);
   const res = await waitAll(hashes, 'races');
   const after = await pub.readContract({ address: V2, abi: V2_ABI, functionName: 'totalRaces' });
   const players = await pub.readContract({ address: V2, abi: V2_ABI, functionName: 'totalPlayers' });
@@ -227,11 +251,12 @@ async function sweepPhase(wallets, gp) {
 
 async function main() {
   assertPositiveInteger('WALLETS', WALLETS);
-  assertPositiveInteger('RACES', RACES_PER_WALLET);
+  if (TOTAL_TXS === null) assertPositiveInteger('RACES', RACES_PER_WALLET);
+  else assertPositiveInteger('TOTAL_TXS', TOTAL_TXS);
 
   const mode = process.argv[2];
   const gp = await gasPrice();
-  console.log(`Chain: Celo mainnet | V2: ${V2} | gasPrice(buffered): ${celoStr(gp * 1_000_000_000n)}/Ggas`);
+  console.log(`Chain: Celo mainnet | V2: ${V2} | gasPrice(buffered): ${celoStr(gp * 1_000_000_000n)}/Ggas | wallets: ${WALLETS} | planned txs: ${TOTAL_TXS ?? `${RACES_PER_WALLET} per wallet`}`);
   const wallets = mode === 'sweep' ? loadOrCreateWallets(null) : loadOrCreateWallets();
 
   if (mode === 'sweep') { await sweepPhase(wallets, gp); return; }

@@ -63,7 +63,9 @@ export function toonify(root: THREE.Object3D, paint?: number): void {
         map: src.map ?? null,
         gradientMap: toonGradient(),
         transparent: src.transparent,
-        opacity: src.opacity
+        opacity: src.opacity,
+        alphaTest: src.alphaTest,
+        side: src.side
       });
       if (src.emissive) {
         out.emissive.copy(src.emissive);

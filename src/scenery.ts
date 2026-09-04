@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { AssetLibrary } from './assets';
 import { districtIndexAt, ROAD_HALF_WIDTH, SHARP_CORNER_K } from './constants';
 import { Flavor, MapSpec } from './maps';
@@ -8,8 +9,9 @@ import {
   buildObelisk, buildPagodaHouse, buildPalm, buildPhoneBox, buildPyramid, buildStall,
   buildStreetlight, buildTerraceHouse, buildTree, mulberry32
 } from './meshes';
-import { toonMat } from './toon';
+import { toonify, toonMat } from './toon';
 import { Track } from './track';
+import { bakedPath } from './trackPaths';
 
 interface Placed {
   s: number;
@@ -96,6 +98,7 @@ export class Scenery {
   readonly rampS: number[] = []; // lap positions of launch ramps, for jump detection
   private window: VisibilityWindow;
   private roadMat: THREE.MeshToonMaterial;
+  private disposed = false;
 
   constructor(
     scene: THREE.Scene,
@@ -112,6 +115,7 @@ export class Scenery {
     const road = track.buildRoadMesh();
     this.roadMat = road.material as THREE.MeshToonMaterial;
     this.group.add(road);
+    if (map.circuit) this.loadCircuitModel(map.circuit);
 
     for (const side of [-1, 1]) {
       let s = 14;
@@ -297,6 +301,48 @@ export class Scenery {
   }
 
   dispose(scene: THREE.Scene): void {
+    this.disposed = true;
     scene.remove(this.group);
+  }
+
+  /**
+   * Drop the imported circuit's own geometry into the world. The bake recorded
+   * the model-space centre and road height of the lap, and Track worked out the
+   * one scale factor that maps model units to metres — so placement is exact
+   * arithmetic, not a bounding-box guess. The model keeps its own materials;
+   * toonify() only restyles them into the game's cel shading.
+   */
+  private loadCircuitModel(circuit: { model: string; path: string }): void {
+    const baked = bakedPath(circuit.path);
+    if (!baked) return; // no path baked = no way to align it; skip the shell
+    const scale = this.track.modelScale;
+    const file = `${import.meta.env.BASE_URL}assets/models/imported/${circuit.model}.glb`;
+
+    new GLTFLoader().load(
+      file,
+      (gltf) => {
+        if (this.disposed) return;
+        const model = gltf.scene;
+        toonify(model);
+        model.traverse((obj) => {
+          const mesh = obj as THREE.Mesh;
+          if (!mesh.isMesh) return;
+          mesh.frustumCulled = false; // one circuit spans the whole map
+          mesh.castShadow = false;
+          mesh.receiveShadow = false;
+        });
+        model.scale.setScalar(scale);
+        model.position.set(
+          -baked.center[0] * scale,
+          // Sit the tarmac fractionally under the painted ribbon so the two
+          // surfaces never z-fight along the racing line.
+          -baked.roadY * scale - 0.03,
+          -baked.center[1] * scale
+        );
+        this.group.add(model);
+      },
+      undefined,
+      () => { /* imported shells fail soft; the baked route stays drivable */ }
+    );
   }
 }
