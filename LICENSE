@@ -19,14 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-The MIT licence above covers the source code in this repository.
-
-Third-party art and audio bundled under `public/assets/` are NOT covered by it
-and remain under their own licences. Every bundled file, its source pack and
-its licence are listed in CREDITS.md. Assets marked CC0 are public domain and
-carry no restrictions; the remaining packs are free-for-commercial-use itch.io
-releases that may be used in this game but not redistributed as standalone
-assets. If you fork this repository, re-check those terms for your own use.

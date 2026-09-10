@@ -1,11 +1,12 @@
 # Credits & asset licences
 
-MiniRush's **source code** is MIT (see `LICENSE`). The art and audio under
-`public/assets/` are third-party and keep their own licences, listed below.
+MiniRush's **source code** is MIT (see `LICENSE`). The MIT licence does not
+cover the art and audio under `public/assets/`: those are third-party and keep
+their own licences, listed below. If you fork this repository, check those
+terms for your own use.
 
 Every asset slot in the game is optional — `AssetLibrary` (`src/assets.ts`)
-falls back to a procedural stand-in for any file that isn't on disk. Nothing
-ships unless its licence is recorded here.
+falls back to a procedural stand-in for any file that isn't on disk.
 
 ## Models — `public/assets/models/`
 
