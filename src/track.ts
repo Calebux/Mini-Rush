@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { ROAD_HALF_WIDTH, SAMPLE_STEP } from './constants';
 import { mulberry32 } from './meshes';
-import { toonMat } from './toon';
 import { BakedPath } from './trackPaths';
 
 export interface Frame {
@@ -269,7 +268,7 @@ export class Track {
   }
 
   /** One closed ribbon mesh for the whole circuit, with painted lane dashes. */
-  buildRoadMesh(): THREE.Mesh {
+  buildRoadMesh(style: RoadStyle = 'city'): THREE.Mesh {
     const n = this.px.length;
     const rows = n + 1; // repeat sample 0 at the end to close the loop
     const w = ROAD_HALF_WIDTH + 0.6; // slight shoulder
@@ -282,7 +281,7 @@ export class Track {
       const nx = -Math.cos(t), nz = -Math.sin(t);
       const x = this.px[k], z = this.pz[k];
       pos.set([x + nx * w, 0.02, z + nz * w, x - nx * w, 0.02, z - nz * w], i * 6);
-      const v = (i * SAMPLE_STEP) / 8;
+      const v = (i * SAMPLE_STEP) / (style === 'coast' ? 32 : 8);
       uv.set([0, v, 1, v], i * 4);
       if (i > 0) {
         const a = (i - 1) * 2;
@@ -296,39 +295,95 @@ export class Track {
     geo.computeVertexNormals();
     const mesh = new THREE.Mesh(
       geo,
-      toonMat(0x9aa0b4, { map: roadTexture() })
+      new THREE.MeshStandardMaterial({ color: 0xe6e2d8, map: roadTexture(style), roughness: style === 'snow' ? 0.55 : 0.94,
+        ...(style === 'coast' ? { bumpMap: asphaltGrain(), bumpScale: .018 } : {}) })
     );
     mesh.frustumCulled = false; // spans the whole map; fog hides the distance
     return mesh;
   }
 }
 
-let roadTex: THREE.Texture | null = null;
-function roadTexture(): THREE.Texture {
-  if (roadTex) return roadTex;
+export type RoadStyle = 'city' | 'rally' | 'snow' | 'circuit' | 'coast';
+const roadTextures = new Map<RoadStyle, THREE.Texture>();
+function roadTexture(style: RoadStyle): THREE.Texture {
+  const cached = roadTextures.get(style);
+  if (cached) return cached;
+  if (style === 'coast') {
+    const texture = coastalAsphalt(); roadTextures.set(style, texture); return texture;
+  }
   const c = document.createElement('canvas');
-  c.width = 128;
-  c.height = 128;
+  c.width = 256;
+  c.height = 256;
   const ctx = c.getContext('2d')!;
-  ctx.fillStyle = '#3a3d45';
-  ctx.fillRect(0, 0, 128, 128);
+  ctx.fillStyle = style === 'snow' ? '#66777d' : style === 'rally' ? '#55534c' : '#484947';
+  ctx.fillRect(0, 0, 256, 256);
   // asphalt noise
-  for (let i = 0; i < 260; i++) {
-    ctx.fillStyle = Math.random() < 0.5 ? '#41444d' : '#34373f';
-    ctx.fillRect(Math.random() * 128, Math.random() * 128, 2, 2);
+  const rand = mulberry32(0x617370);
+  for (let i = 0; i < 2200; i++) {
+    ctx.fillStyle = rand() < 0.5 ? 'rgba(200,205,198,0.08)' : 'rgba(20,30,25,0.12)';
+    ctx.fillRect(rand() * 256, rand() * 256, 1, 1);
   }
   // edge lines
-  ctx.fillStyle = '#c9cdd6';
-  ctx.fillRect(4, 0, 3, 128);
-  ctx.fillRect(121, 0, 3, 128);
-  // two dashed dividers
-  for (const x of [44, 82]) {
-    for (let y = 0; y < 128; y += 32) ctx.fillRect(x, y, 3, 18);
+  ctx.fillStyle = '#e7e3ce';
+  ctx.fillRect(8, 0, 3, 256);
+  ctx.fillRect(245, 0, 3, 256);
+  if (style === 'city') {
+    for (const x of [86, 168]) ctx.fillRect(x, 0, 4, 110);
+  } else if (style !== 'circuit') {
+    ctx.fillStyle = style === 'rally' ? '#dfc88c' : '#e0e7e4';
+    ctx.fillRect(126, 0, 4, 140);
   }
-  roadTex = new THREE.CanvasTexture(c);
+  const roadTex = new THREE.CanvasTexture(c);
   roadTex.wrapS = THREE.RepeatWrapping;
   roadTex.wrapT = THREE.RepeatWrapping;
-  roadTex.magFilter = THREE.NearestFilter;
+  roadTex.anisotropy = 8;
   roadTex.colorSpace = THREE.SRGBColorSpace;
+  roadTextures.set(style, roadTex);
   return roadTex;
+}
+
+let grain: THREE.CanvasTexture | undefined;
+function asphaltGrain(): THREE.CanvasTexture {
+  if (grain) return grain;
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const ctx = c.getContext('2d')!, pixels = ctx.createImageData(256, 256), rand = mulberry32(591);
+  for (let i = 0; i < pixels.data.length; i += 4) {
+    const n = 85 + rand() * 80; pixels.data.set([n, n, n, 255], i);
+  }
+  ctx.putImageData(pixels, 0, 0); grain = new THREE.CanvasTexture(c);
+  grain.wrapS = grain.wrapT = THREE.RepeatWrapping; grain.repeat.set(5, 10); grain.anisotropy = 4;
+  return grain;
+}
+
+/** Original asphalt atlas: fine aggregate, worn paint, tyre bands and sparse repairs. */
+function coastalAsphalt(): THREE.CanvasTexture {
+  const c = document.createElement('canvas'); c.width = 1024; c.height = 2048;
+  const ctx = c.getContext('2d')!, rand = mulberry32(0xc0a57);
+  const pixels = ctx.createImageData(c.width, c.height);
+  for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) {
+    const n = (rand() - .5) * 15 + Math.sin(x * .021 + Math.sin(y * .006)) * 2 + Math.sin(y * .025) * 1.5;
+    const i = (y * c.width + x) * 4;
+    pixels.data.set([58 + n, 64 + n, 68 + n, 255], i);
+  }
+  ctx.putImageData(pixels, 0, 0);
+  for (const x of [250, 365, 660, 775]) {
+    const shade = ctx.createLinearGradient(x - 34, 0, x + 34, 0);
+    shade.addColorStop(0, 'transparent'); shade.addColorStop(.5, '#17202725'); shade.addColorStop(1, 'transparent');
+    ctx.fillStyle = shade; ctx.fillRect(x - 34, 0, 68, 2048);
+  }
+  ctx.strokeStyle = '#19212688'; ctx.lineWidth = 1.2;
+  for (let i = 0; i < 9; i++) {
+    let x = 75 + rand() * 850, y = rand() * 2048;
+    ctx.beginPath(); ctx.moveTo(x, y);
+    for (let k = 0; k < 12; k++) { x += (rand() - .5) * 14; y += 7 + rand() * 15; ctx.lineTo(x, y); }
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#e2e2d1'; ctx.fillRect(29, 0, 10, 2048); ctx.fillRect(985, 0, 10, 2048);
+  ctx.fillStyle = '#d7c789';
+  for (let y = 0; y < 2048; y += 512) ctx.fillRect(508, y, 8, 240);
+  for (let i = 0; i < 19000; i++) {
+    ctx.fillStyle = rand() < .5 ? '#333b4220' : '#d9dedb13'; ctx.fillRect(rand() * 1024, rand() * 2048, 1, 1);
+  }
+  const texture = new THREE.CanvasTexture(c); texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping; texture.anisotropy = 8; return texture;
 }

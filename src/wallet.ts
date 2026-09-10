@@ -2,6 +2,11 @@ import {
   getHostLanguage, init, requestDeviceIdentifier,
   type ErrorResponse, type NimiqProvider
 } from '@nimiq/mini-app-sdk';
+import {
+  encodeCupReceipt, encodeReceipt, type CupRecord, type RaceRecord
+} from './receipt';
+
+export type { CupRecord, RaceRecord } from './receipt';
 
 /**
  * Nimiq Pay Mini App wallet.
@@ -85,13 +90,6 @@ export function earnedBadges(s: BadgeInput): number {
   return BADGES.reduce((bits, b) => (b.earned(s) ? bits | (1 << b.bit) : bits), 0);
 }
 
-export interface RaceRecord {
-  score: number;
-  place: number;
-  mapId: number;
-  modeId: number;
-}
-
 export interface ChainInfo {
   consensus: boolean;
   blockNumber: number;
@@ -99,19 +97,6 @@ export interface ChainInfo {
 
 const isError = (v: unknown): v is ErrorResponse =>
   typeof v === 'object' && v !== null && 'error' in v;
-
-/**
- * Pack a run into a receipt payload. `MR1` marks the format, then score,
- * place, map and mode as fixed-width hex — 19 bytes, well inside the 64-byte
- * data field a Nimiq extended transaction carries.
- */
-export function encodeReceipt(run: RaceRecord): string {
-  const u = (n: number, max: number, width: number) =>
-    Math.max(0, Math.min(max, Math.round(Number.isFinite(n) ? n : 0)))
-      .toString(16).padStart(width, '0');
-  return `MR1${u(run.score, 0xffffffff, 8)}${u(run.place, 0xffff, 4)}` +
-    `${u(run.mapId, 0xff, 2)}${u(run.modeId, 0xff, 2)}`;
-}
 
 // Receipts minted from this device. Nimiq has no contract to query for a
 // player's history, so the count is kept locally and each tx id is retained
@@ -152,7 +137,8 @@ export class Wallet {
 
   /** The garage market only lights up with a valid receiver configured. */
   get marketReady(): boolean {
-    return isAddress(MARKET_RECEIVER) && MARKET_PRICE_NIM > 0;
+    const luna = Math.round(MARKET_PRICE_NIM * LUNA);
+    return isAddress(MARKET_RECEIVER) && Number.isSafeInteger(luna) && luna > 0;
   }
 
   /** Receipt minting needs a valid anchor address. */
@@ -253,6 +239,19 @@ export class Wallet {
    * confirmation per receipt, which is why it's never called automatically.
    */
   async mintRaceReceipt(run: RaceRecord): Promise<string | null> {
+    return this.sendReceipt(encodeReceipt(run));
+  }
+
+  /**
+   * Weekly Cup bounty entry: the same dust anchor transaction, carrying an MR2
+   * payload the organizer ranks after entries close. Sent from the player's
+   * own wallet, so the sender address is where a prize would go.
+   */
+  async mintCupReceipt(run: CupRecord): Promise<string | null> {
+    return this.sendReceipt(encodeCupReceipt(run));
+  }
+
+  private async sendReceipt(data: string): Promise<string | null> {
     if (!this.receiptsReady) return null;
     if (!this.address) await this.connect();
     if (!this.provider) return null;
@@ -260,7 +259,7 @@ export class Wallet {
       const tx = await this.provider.sendBasicTransactionWithData({
         recipient: RECEIPT_RECEIVER!,
         value: RECEIPT_VALUE,
-        data: encodeReceipt(run)
+        data
       });
       if (isError(tx)) return null;
       noteReceipt(tx);

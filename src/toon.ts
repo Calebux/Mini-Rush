@@ -21,17 +21,6 @@ export function toonMat(
   return new THREE.MeshToonMaterial({ color, gradientMap: toonGradient(), ...extra });
 }
 
-const OUTLINE_MAT = new THREE.MeshBasicMaterial({ color: 0x0d1017, side: THREE.BackSide });
-
-/** Inverted-hull outline: same geometry, flipped faces, scaled up a touch. */
-export function outlineFor(mesh: THREE.Mesh, grow = 1.05): THREE.Mesh {
-  const o = new THREE.Mesh(mesh.geometry, OUTLINE_MAT);
-  o.position.copy(mesh.position);
-  o.rotation.copy(mesh.rotation);
-  o.scale.copy(mesh.scale).multiplyScalar(grow);
-  return o;
-}
-
 // Untextured CAD-style exports (cgtrader OBJs etc.) arrive all-gray, but their
 // material names carry semantics — recolor by keyword. Order matters.
 const NAME_COLORS: [RegExp, number][] = [
@@ -44,6 +33,54 @@ const NAME_COLORS: [RegExp, number][] = [
 ];
 const LIGHT_RE = /light|lamp|led|beam/i;
 const PAINT_RE = /paint|body|shell|hood|bonnet|fender|bumper|door/i;
+
+/** Keep the car's real textures and normals, with a readable satin paint finish.
+ * Converting these to ToonMaterial discarded sky reflections and made the dark
+ * hero shell disappear whenever it drove through a tree/building shadow.
+ */
+export function finishVehicle(root: THREE.Object3D, paint?: number): void {
+  const cache = new Map<THREE.Material, THREE.Material>();
+  root.traverse((obj) => {
+    const mesh = obj as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const convert = (material: THREE.Material): THREE.Material => {
+      if (cache.has(material)) return cache.get(material)!;
+      const src = material as THREE.MeshStandardMaterial;
+      if (!src.color) return material;
+      const out = src.isMeshStandardMaterial ? src.clone() : new THREE.MeshStandardMaterial({
+        color: src.color, map: src.map, side: src.side, transparent: src.transparent,
+        opacity: src.opacity, alphaTest: src.alphaTest
+      });
+      out.name = src.name;
+      const name = src.name;
+      const neutral = !src.map && Math.abs(src.color.r - src.color.g) < 0.02 &&
+        Math.abs(src.color.g - src.color.b) < 0.02 && src.color.r > 0.4;
+      // The main CAD shell is named Metallic / Cool Grey. Preserve black aero,
+      // brakes, badges and textured liveries instead of painting the whole car.
+      if (!src.map && paint !== undefined && /paint.*(metallic|cool grey)|^body|^shell/i.test(name)) {
+        out.color.setHex(paint);
+      } else if (neutral) {
+        const hit = NAME_COLORS.find(([re]) => re.test(name));
+        if (hit) out.color.setHex(hit[1]);
+        else if (/black|soft|cloth/i.test(name)) out.color.setHex(0x30343d);
+        else if (paint !== undefined && PAINT_RE.test(name)) out.color.setHex(paint);
+      }
+      out.roughness = src.map ? 0.72 : /glass/i.test(name) ? 0.18 :
+        /tire|tyre|rubber|cloth|carbon|interior/i.test(name) ? 0.85 : 0.32;
+      out.metalness = src.map ? 0.05 : /steel|alumin|chrome|rim/i.test(name) ? 0.65 :
+        /paint|body/i.test(name) ? 0.25 : 0.08;
+      if (/emissive|headlight|taillight/i.test(name) && neutral) {
+        const light = /warm|tail/i.test(name) ? 0xff3b25 : 0xc4edff;
+        out.color.setHex(light); out.emissive.setHex(light); out.emissiveIntensity = 0.6;
+      }
+      if (src.map) src.map.magFilter = THREE.NearestFilter;
+      cache.set(material, out);
+      return out;
+    };
+    mesh.material = Array.isArray(mesh.material) ? mesh.material.map(convert) : convert(mesh.material);
+  });
+  root.userData.vehicleFinish = true;
+}
 
 /**
  * Re-skin a loaded GLB with toon materials so real kits match the cel look.

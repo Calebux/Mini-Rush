@@ -56,12 +56,34 @@ Query params for testing: `?len=500` (lap length in metres, default 1800),
   (combo resets after 4 s without one)
 - **Coins** +10 each; **nitro tank pickups** stock tap-to-fire boosts
   (46 m/s burst, FOV kick)
+- **The style economy is the core loop** (`src/style.ts`) — near-misses, drifts
+  and takedowns fill one gauge, and a full gauge pays out a **nitro tank** as
+  well as stepping the score multiplier. Risk buys speed, speed makes everything
+  riskier. Contact wipes the chain. Style and boost used to be separate
+  currencies, which meant a player could ignore either one.
+- **Ambient traffic** (`src/traffic.ts`) — a recycled pool of civilian cars fills
+  the lap. It is what near-misses are measured against and what makes speed read
+  as speed. Rows are spaced and never block adjacent lanes, so there is always a
+  line through; clipping one costs speed and your chain, and only a fast closing
+  hit does damage.
+  Lagos mixes four yellow-and-black danfo minibuses into the ten-vehicle pool,
+  with passenger windows and route boards. Their procedural model shares geometry
+  and materials across the fleet (`src/danfo.ts`).
+  Traffic keeps its distance across laps, waits in the spawn queue until it comes
+  into view, and avoids starting lane changes beside an approaching player or
+  into another vehicle. Danfos have a longer contact zone. Gentle clips retain
+  88% of speed; hard impacts retain 72%. A near miss pays once the player has
+  fully cleared the vehicle, and only if the pass stayed clear of contact.
+- **Impact cinematics** — takedowns and wrecks dilate time to 0.3×, drop the
+  camera into the impact and white out the frame, then hand control straight
+  back. Boost drives radial streaks, a chromatic fringe and a warm push in the
+  grade pass.
 - **Bumping** — trade paint with rivals to shove them off line
 - **World Outbreak Tour** — pick a city on the menu: Lagos, Beijing, Mumbai,
   Neon City or London (`src/maps.ts`). Each city has its own cel palette, fog mood, track
   shape (flowing vs technical) and three districts along the lap — e.g.
-  Hutongs → Temple Gardens → CBD — with sky/fog/ground colors blending as
-  you cross
+  Hutongs → Temple Gardens → CBD. A shared lighting/material palette stays
+  consistent across the lap while the local architecture and vegetation change.
 - **Score** = zombie points + coins + place bonus (400/250/120/0) + time bonus
 
 ## Smoke test
@@ -135,19 +157,70 @@ references it any more; it is kept for history and is not part of the build.
 
 The visual style is cel-shaded PS2-era arcade — inspired by
 [Highway Warriors Remastered](https://jreo.itch.io/highway-warriors-remastered):
-toon-stepped lighting on everything, neon wedge sports cars with black cel
-outlines and underglow, a gradient sky dome with a retro sun, and anime speed
-lines during nitro. Loaded GLB kits are automatically re-skinned with toon
-materials so they match.
+faceted geometry, a gradient sky dome and anime speed lines during nitro.
+Environments and cars use soft physically based lighting. Car paint, glass,
+metal and textured liveries keep their own finishes and sky reflections;
+night underglow and desktop bloom supply the arcade accents.
+
+The environments all come out of one low-poly kit (`src/environment.ts`) with a
+separate palette for each of the 19 destinations. Every district flavor is built
+from that kit and that palette — city blocks and terraces, market stalls, tiered
+timber houses, hillside stacks, stepped ruins and obelisks, pines, glacial rocks,
+timber cabins and the two speedways' stepped grandstands — so nothing on a lap is
+painted from a colour the rest of the map has never heard of. Continuous curbs,
+paved frontages, verges and coastal promenades follow the actual road spline
+(`src/roadside.ts`). Layered 3D horizons share the near-field palette and keep a
+fixed compass direction. Static scenery is merged by material into 60m sectors,
+and visibility wraps across the start/finish line.
+
+`src/architecture.ts` gives cities different building silhouettes and off-road
+landmarks: London brick terraces, Mumbai Art Deco balconies, neon curtain-wall
+towers, Accra verandas, Cairo sandstone, and local bridge/gateway/tower details.
+Rural maps have continuous world-space terrain, distinct layered ridgelines,
+Canadian autumn trees and Finnish snow-laden pines. Roads use city, rally, snow
+or circuit markings; Rio has wave-mosaic paving and the speedways have different
+runoff treatments. Track layouts and driving physics are unchanged.
+
+Lighting is tiered by device (`src/quality.ts`): desktops get antialiasing and a
+bounded 2048px sun shadow map, phones get 1024px and no AA, and if frames keep
+running long once the renderer is already at its minimum resolution the race loop
+drops a tier — smaller shadow map, then no shadow pass at all. Car contact shadows
+and underglow are painted separately with soft edges, so a car still sits on the
+road on the tier with no shadow map. `?q=0|1|2` forces a tier for profiling.
+
+For deterministic environment screenshots and browser graphics checks, run
+`node scripts/visual-world.mjs` with the dev server on `127.0.0.1:5173`.
+Optional map IDs limit the run; `--url=` changes the server. Captures of each
+district are written to `output/arena-review/` (gitignored). These are desktop
+browser checks, not a substitute for profiling on a physical phone. The checks
+also cover all 14 garage cars' forward direction and materials, rival/traffic
+headings across lap wraps, and terrain clearance over the full roadway.
+`node scripts/visual-cars.mjs` captures the normalized garage from the +Z corner.
+The garage gives the selected car a dedicated showroom stage with drag/keyboard
+rotation, bounds-based framing, a compact scrollable setup panel and a persistent
+race button. The timing line has a labelled FINISH gantry and a full-width
+chequered road stripe. Successful final crossings get a 3.2-second trackside
+slow-motion shot with place/time before results; intermediate laps and busted
+runs do not trigger it. `node scripts/check-presentation.mjs [dev server URL]`
+checks phone/desktop framing, final-lap gating and results transitions, and saves
+screenshots in `output/presentation-review/`.
+`node scripts/check-danfo.mjs [dev server URL]` checks Lagos traffic selection,
+lap-wrap headings, reset/impact behavior and shared-resource cleanup, and captures
+the minibuses in `output/danfo-review/`.
+`node scripts/check-driving.mjs [dev server URL]` checks continuous traffic over
+multiple laps, collision and near-miss rules, safe lane changes, HUD mutation
+counts, pause behavior and resolution adjustment timing. The home screen and
+workshop skip hidden race simulation, unchanged HUD values avoid DOM writes,
+and graphics adjustment cooldowns use seconds so slower phones respond promptly.
 
 **Cars are real 3D models**: [PSX Style Cars by GGBotNet](https://ggbot.itch.io/psx-style-cars)
 (CC0 public domain, credits bundled in `public/assets/models/CREDITS.txt`) —
 hand-drawn PS1-style photo textures, rendered with NearestFilter for crisp
 texels. The player drives a murdered-out Audi R8 (user-supplied cgtrader OBJ,
 decimated + cel-restyled via `scripts/bake-car-colors.cjs`); traffic includes
-a hot hatch, police car, taxi, rusty beater, van and wagon. City-district
-buildings are from Quaternius' free Downtown City MegaKit (stripped to
-base-color textures for the webview). Car bodies without wheels get the PSX
+a hot hatch, police car, taxi, rusty beater, van and wagon. The licensed
+Quaternius Downtown City MegaKit is retained in the asset library; current
+street frontages use the shared procedural environment kit. Car bodies without wheels get the PSX
 pack's wheel model auto-mounted by `AssetLibrary.addWheels`. Drifting hard, running offroad and firing nitro
 all spawn billboard smoke/dust/exhaust puffs (`src/smoke.ts`) plus a tire-skid
 chirp.

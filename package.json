@@ -9,6 +9,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host",
     "smoke": "node scripts/smoke.mjs",
+    "check:workshop": "node scripts/workshop-check.mjs",
+    "check:workshop-edge": "node scripts/workshop-edge-check.mjs",
     "stress": "node scripts/stress.mjs"
   },
   "dependencies": {

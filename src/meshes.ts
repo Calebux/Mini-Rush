@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { outlineFor, toonMat } from './toon';
+import { toonMat } from './toon';
 
 // Procedural low-poly stand-ins, used for any model not found in /assets/models.
 // Cel-shaded and chunky — Highway-Warriors-flavored — so swapping in the real
@@ -10,27 +10,87 @@ const mat = toonMat;
 // neon arcade paint jobs; index 0 is the hero car
 export const CAR_COLORS = [0xff2e8a, 0x00d9ff, 0xa3ff2e, 0xff9a1f, 0x8b5cf6, 0xffe93b];
 
+let contactTexture: THREE.CanvasTexture | null = null;
+function softContactTexture(): THREE.CanvasTexture {
+  if (contactTexture) return contactTexture;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 64;
+  const ctx = canvas.getContext('2d')!;
+  const gradient = ctx.createRadialGradient(32, 32, 5, 32, 32, 32);
+  gradient.addColorStop(0, 'rgba(255,255,255,1)');
+  gradient.addColorStop(0.45, 'rgba(255,255,255,0.65)');
+  gradient.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = gradient; ctx.fillRect(0, 0, 64, 64);
+  contactTexture = new THREE.CanvasTexture(canvas);
+  return contactTexture;
+}
+
+/** Preserve model paint/textures; let opaque bodies cast and receive the world light. */
+export function polishCar(car: THREE.Group): void {
+  car.traverse((obj) => {
+    const mesh = obj as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    if (materials.every((m) => !m.transparent && m.side !== THREE.BackSide)) {
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+    }
+  });
+}
+
+// Neon underglow is a night-map flourish. Left at full strength it puts a
+// glowing green puddle under a hatchback at noon, which is the same style
+// mismatch the cel outlines were.
+let underglow = 1;
+export function setUnderglow(intensity: number): void { underglow = intensity; }
+
+const contactInverse = new THREE.Quaternion();
+const contactHeading = new THREE.Quaternion();
+const contactEuler = new THREE.Euler();
+
+/** Project the soft footprint onto the road while the body leans or jumps. */
+export function syncCarGroundFx(car: THREE.Group): void {
+  // Cached on the car: this runs per car per frame and the group never moves
+  // in the hierarchy. `null` records "this car has no footprint", so a car
+  // built without one is not re-searched every frame either.
+  let fx = car.userData.groundFx as THREE.Object3D | null | undefined;
+  if (fx === undefined) {
+    fx = car.getObjectByName('car-ground-fx') ?? null;
+    car.userData.groundFx = fx;
+  }
+  if (!fx) return;
+  contactInverse.copy(car.quaternion).invert();
+  contactHeading.setFromEuler(contactEuler.set(0, car.rotation.y, 0));
+  fx.quaternion.copy(contactInverse).multiply(contactHeading);
+  fx.position.set(0, -car.position.y, 0).applyQuaternion(contactInverse);
+  const height = Math.max(0, car.position.y);
+  (fx.children[0] as THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>).material.opacity = 0.65 / (1 + height * 0.6);
+  (fx.children[1] as THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>).material.opacity =
+    0.22 * underglow / (1 + height * 2);
+}
+
 /** Blob shadow + neon underglow, attachable to any car (procedural or GLB). */
 export function carGroundFx(paint: number): THREE.Group {
   const g = new THREE.Group();
   const shadow = new THREE.Mesh(
-    new THREE.CircleGeometry(1.6, 16),
-    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3 })
+    new THREE.PlaneGeometry(3.0, 5.0),
+    new THREE.MeshBasicMaterial({ color: 0x101923, map: softContactTexture(),
+      transparent: true, opacity: 0.65, depthWrite: false })
   );
   shadow.rotation.x = -Math.PI / 2;
-  shadow.position.y = 0.02;
-  shadow.scale.set(0.75, 1.2, 1);
+  shadow.position.y = 0.055;
   g.add(shadow);
 
   const glow = new THREE.Mesh(
     new THREE.PlaneGeometry(2.3, 4.1),
     new THREE.MeshBasicMaterial({
-      color: paint, transparent: true, opacity: 0.4,
+      color: paint, map: softContactTexture(), transparent: true, opacity: 0.22,
       blending: THREE.AdditiveBlending, depthWrite: false
     })
   );
   glow.rotation.x = -Math.PI / 2;
-  glow.position.y = 0.035;
+  glow.position.y = 0.06;
+  g.name = 'car-ground-fx';
   g.add(glow);
   return g;
 }
@@ -76,20 +136,18 @@ export function buildCar(colorIndex = 0, paintOverride?: number): THREE.Group {
   g.rotation.y = Math.PI;
   outer.add(g);
   const paint = paintOverride ?? CAR_COLORS[colorIndex % CAR_COLORS.length];
-  const paintMat = mat(paint);
+  const paintMat = new THREE.MeshPhongMaterial({ color: paint, specular: 0x555b62, shininess: 65 });
   const trim = mat(0x1c2130);
 
   const body = new THREE.Mesh(profileGeometry(BODY_PROFILE, 1.7), paintMat);
   g.add(body);
-  g.add(outlineFor(body, 1.03)); // cel outline
 
   // narrower cabin on top for the classic stepped two-box silhouette
   const cabin = new THREE.Mesh(profileGeometry(CABIN_PROFILE, 1.26), paintMat);
   g.add(cabin);
-  g.add(outlineFor(cabin, 1.04));
 
   // glass band wrapping the cabin sides, proud of cabin + outline
-  const glass = mat(0x16233a);
+  const glass = new THREE.MeshPhongMaterial({ color: 0x1c3444, specular: 0x9baebc, shininess: 100 });
   const windows = new THREE.Mesh(new THREE.BoxGeometry(1.38, 0.24, 1.1), glass);
   windows.position.set(0, 0.76, 0.5);
   g.add(windows);
@@ -139,227 +197,87 @@ export function buildCar(colorIndex = 0, paintOverride?: number): THREE.Group {
   tailBar.position.set(0, 0.42, 1.97);
   g.add(tailBar);
 
-  // blob shadow + underglow (shadow maps are too costly for the MiniPay webview)
+  // Soft contact remains legible even outside the directional shadow's bounds.
   outer.add(carGroundFx(paint));
+  polishCar(outer);
 
   return outer;
 }
 
-let windowTexture: THREE.Texture | null = null;
-function getWindowTexture(): THREE.Texture {
-  if (windowTexture) return windowTexture;
-  const c = document.createElement('canvas');
-  c.width = 64;
-  c.height = 128;
-  const ctx = c.getContext('2d')!;
-  ctx.fillStyle = '#2a3140';
-  ctx.fillRect(0, 0, 64, 128);
-  for (let y = 6; y < 122; y += 14) {
-    for (let x = 6; x < 58; x += 12) {
-      ctx.fillStyle = Math.random() < 0.55 ? '#ffe9a8' : '#1a1f2b';
-      ctx.fillRect(x, y, 7, 9);
-    }
-  }
-  windowTexture = new THREE.CanvasTexture(c);
-  windowTexture.magFilter = THREE.NearestFilter;
-  return windowTexture;
-}
-
-const CITY_TONES = [0x8a94a8, 0x707a90, 0x9aa0b5, 0x6b7488, 0x7d8ba0];
-
-export function buildCityBuilding(rand: () => number): THREE.Group {
+/**
+ * The shooter: a sleeved forearm out of the driver's window with a pistol in
+ * the fist. Parented to the car so it inherits steering lean and body roll.
+ * Local +Z is the car's nose, +X the driver's side, and the barrel points
+ * forward down-track. Sized for the normalized 3.9-long car bodies.
+ */
+export function buildShooterArm(): THREE.Group {
   const g = new THREE.Group();
-  const w = 5 + rand() * 5;
-  const h = 8 + rand() * 22;
-  const d = 5 + rand() * 5;
-  const tone = CITY_TONES[Math.floor(rand() * CITY_TONES.length)];
+  const skin = mat(0xc98a4b);
+  const sleeve = mat(0x23262e);
+  const steel = mat(0x2e323c);
 
-  const winMat = mat(0xffffff, { map: getWindowTexture() });
-  const topMat = mat(tone);
-  const body = new THREE.Mesh(
-    new THREE.BoxGeometry(w, h, d),
-    [winMat, winMat, topMat, topMat, winMat, winMat]
-  );
-  body.position.y = h / 2;
-  g.add(body);
+  // shoulder and sleeve, half-buried in the door so the arm reads as attached
+  const upper = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.22, 0.22), sleeve);
+  upper.position.set(0.08, 0, 0);
+  g.add(upper);
 
-  if (rand() < 0.4) {
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(w * 0.4, 1.6, d * 0.4), mat(0x4a5266));
-    roof.position.y = h + 0.8;
-    g.add(roof);
-  }
-  return g;
-}
+  const fore = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.20, 0.52), skin);
+  fore.position.set(0.30, 0.02, 0.30);
+  g.add(fore);
 
-const DESERT_TONES = [0xd9b98a, 0xc9a878, 0xe0c49a, 0xbf9d70];
+  const fist = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.24, 0.22), skin);
+  fist.position.set(0.30, 0.03, 0.64);
+  g.add(fist);
 
-export function buildDesertBuilding(rand: () => number): THREE.Group {
-  const g = new THREE.Group();
-  const w = 4 + rand() * 4;
-  const h = 3 + rand() * 4;
-  const d = 4 + rand() * 4;
-  const tone = DESERT_TONES[Math.floor(rand() * DESERT_TONES.length)];
+  const slide = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.16, 0.36), steel);
+  slide.position.set(0.30, 0.06, 0.86);
+  g.add(slide);
 
-  const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(tone));
-  body.position.y = h / 2;
-  g.add(body);
-
-  const door = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.5, 0.1), mat(0x5b4a35));
-  door.position.set(0, 0.75, d / 2 + 0.05);
-  g.add(door);
-
-  if (rand() < 0.5) {
-    const dome = new THREE.Mesh(
-      new THREE.SphereGeometry(Math.min(w, d) * 0.35, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2),
-      mat(tone)
-    );
-    dome.position.y = h;
-    g.add(dome);
-  }
-  return g;
-}
-
-export function buildCactus(rand: () => number): THREE.Group {
-  const g = new THREE.Group();
-  const green = mat(0x4f9e57);
-  const h = 1.6 + rand() * 1.6;
-  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.26, h, 6), green);
-  trunk.position.y = h / 2;
-  g.add(trunk);
-  if (rand() < 0.7) {
-    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.9, 6), green);
-    arm.position.set(0.38, h * 0.6, 0);
-    arm.rotation.z = -0.5;
-    g.add(arm);
-  }
-  return g;
-}
-
-export function buildStreetlight(): THREE.Group {
-  const g = new THREE.Group();
-  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 4.6, 6), mat(0x3a4050));
-  pole.position.y = 2.3;
-  g.add(pole);
-  const arm = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.08, 0.08), mat(0x3a4050));
-  arm.position.set(-0.5, 4.55, 0);
-  g.add(arm);
-  const lamp = new THREE.Mesh(
-    new THREE.BoxGeometry(0.34, 0.1, 0.18),
-    mat(0xfff3c4, { emissive: 0xffedad, emissiveIntensity: 1.2 })
-  );
-  lamp.position.set(-1.0, 4.5, 0);
-  g.add(lamp);
-  return g;
-}
-
-const MEDIEVAL_WALL = [0xd8cbb0, 0xcfc0a2, 0xe0d4bc];
-
-export function buildMedievalHouse(rand: () => number): THREE.Group {
-  const g = new THREE.Group();
-  const w = 4 + rand() * 3;
-  const h = 2.6 + rand() * 1.8;
-  const d = 4 + rand() * 3;
-  const wall = MEDIEVAL_WALL[Math.floor(rand() * MEDIEVAL_WALL.length)];
-
-  const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(wall));
-  body.position.y = h / 2;
-  g.add(body);
-
-  // timber frame stripes
-  const beam = mat(0x5b4632);
-  for (const x of [-w / 2 + 0.15, w / 2 - 0.15]) {
-    const b = new THREE.Mesh(new THREE.BoxGeometry(0.22, h, 0.22), beam);
-    b.position.set(x, h / 2, d / 2 + 0.02);
-    g.add(b);
-  }
-  const cross = new THREE.Mesh(new THREE.BoxGeometry(w, 0.22, 0.22), beam);
-  cross.position.set(0, h * 0.55, d / 2 + 0.02);
-  g.add(cross);
-
-  // gabled roof (prism)
-  const roofH = 1.4 + rand() * 1.2;
-  const roof = new THREE.Mesh(
-    prismGeometry(w * 1.15, roofH, d * 1.12),
-    mat(rand() < 0.5 ? 0x8a4a3a : 0x6e4433)
-  );
-  roof.position.y = h;
-  g.add(roof);
-
-  const door = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.5, 0.1), mat(0x4a3826));
-  door.position.set(0, 0.75, d / 2 + 0.06);
-  g.add(door);
-  return g;
-}
-
-function prismGeometry(w: number, h: number, d: number): THREE.BufferGeometry {
-  const hw = w / 2, hd = d / 2;
-  const geo = new THREE.BufferGeometry();
-  const verts = new Float32Array([
-    // front triangle
-    -hw, 0, hd, hw, 0, hd, 0, h, hd,
-    // back triangle
-    hw, 0, -hd, -hw, 0, -hd, 0, h, -hd,
-    // left slope
-    -hw, 0, hd, 0, h, hd, 0, h, -hd, -hw, 0, hd, 0, h, -hd, -hw, 0, -hd,
-    // right slope
-    hw, 0, hd, hw, 0, -hd, 0, h, -hd, hw, 0, hd, 0, h, -hd, 0, h, hd
-  ]);
-  geo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
-  geo.computeVertexNormals();
-  return geo;
-}
-
-// bright coastal paint jobs — Lagos / Mumbai facades
-const PAINT_TONES = [0xd86a3a, 0x3a8ad8, 0xd8b83a, 0x4aa86a, 0xc85a8a, 0x8a6ad8];
-
-export function buildColorfulBuilding(rand: () => number): THREE.Group {
-  const g = new THREE.Group();
-  const w = 4.5 + rand() * 4;
-  const h = 5 + rand() * 9;
-  const d = 4.5 + rand() * 4;
-  const tone = PAINT_TONES[Math.floor(rand() * PAINT_TONES.length)];
-
-  const winMat = mat(0xffffff, { map: getWindowTexture() });
-  const wallMat = mat(tone);
-  const body = new THREE.Mesh(
-    new THREE.BoxGeometry(w, h, d),
-    [winMat, winMat, wallMat, wallMat, winMat, winMat]
-  );
-  body.position.y = h / 2;
-  g.add(body);
-
-  // painted parapet band on the roofline
-  const band = new THREE.Mesh(new THREE.BoxGeometry(w * 1.04, 0.5, d * 1.04), mat(0xf2ead8));
-  band.position.y = h - 0.2;
-  g.add(band);
-  if (rand() < 0.5) {
-    const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 1.2, 8), mat(0x2c2f38));
-    tank.position.set((rand() - 0.5) * w * 0.4, h + 0.6, 0);
-    g.add(tank);
-  }
   return g;
 }
 
 export function buildPalm(rand: () => number): THREE.Group {
   const g = new THREE.Group();
-  const trunk = mat(0x8a6a48);
-  const h = 3.4 + rand() * 2.2;
+  const trunk = new THREE.MeshStandardMaterial({ color: 0x887250, roughness: 0.95 });
+  const h = 6.2 + rand() * 2.6;
   const lean = (rand() - 0.5) * 0.5;
-  // three stacked segments fake the curve
-  for (let i = 0; i < 3; i++) {
-    const seg = new THREE.Mesh(new THREE.CylinderGeometry(0.14 - i * 0.02, 0.17 - i * 0.02, h / 3 + 0.1, 6), trunk);
-    seg.position.set(lean * i * 0.5, h / 6 + (h / 3) * i, 0);
-    seg.rotation.z = lean * (i + 1) * 0.22;
+  // Joined segments follow a single curve; no displaced seams between the rings.
+  for (let i = 0; i < 6; i++) {
+    const a = new THREE.Vector3(lean * (i / 6) ** 2, h * i / 6, 0);
+    const b = new THREE.Vector3(lean * ((i + 1) / 6) ** 2, h * (i + 1) / 6, 0);
+    const seg = new THREE.Mesh(new THREE.CylinderGeometry(0.24 - (i + 1) * 0.012,
+      0.24 - i * 0.012, a.distanceTo(b) + 0.015, 9), trunk);
+    seg.position.copy(a).add(b).multiplyScalar(0.5);
+    seg.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.sub(a).normalize());
     g.add(seg);
   }
-  const top = new THREE.Vector3(lean * 1.4, h, 0);
-  const frond = mat(0x3f9a4f);
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI * 2 + rand() * 0.5;
-    const f = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.06, 0.5), frond);
-    f.position.set(top.x + Math.cos(a) * 0.85, top.y, top.z + Math.sin(a) * 0.85);
+  const top = new THREE.Vector3(lean, h, 0);
+  const fronds = [0x4c672f, 0x607c39, 0x728846].map((color) =>
+    new THREE.MeshStandardMaterial({ color, roughness: 0.9, side: THREE.DoubleSide }));
+  const frondGeo = new THREE.BufferGeometry();
+  const sections = [[0, 0, 0.025], [0.7, 0.5, 0.26], [1.6, 0.7, 0.48],
+    [2.6, 0.37, 0.45], [3.45, -0.22, 0.25], [3.95, -0.92, 0.015]];
+  const positions: number[] = [], indices: number[] = [];
+  sections.forEach(([x, y, w], row) => {
+    positions.push(x, y - 0.1, -w, x, y + 0.035, 0, x, y - 0.1, w);
+    if (row === 0) return;
+    for (let col = 0; col < 2; col++) {
+      const a = (row - 1) * 3 + col, b = row * 3 + col;
+      indices.push(a, b, a + 1, b, b + 1, a + 1);
+    }
+  });
+  frondGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  frondGeo.setIndex(indices);
+  frondGeo.computeVertexNormals();
+  for (let i = 0; i < 13; i++) {
+    const a = (i / 8) * Math.PI * 2 + rand() * 0.3;
+    const f = new THREE.Mesh(frondGeo, fronds[i % 3]);
+    f.position.copy(top);
     f.rotation.y = -a;
-    f.rotation.z = 0.45; // droop
+    if (i >= 8) {
+      f.scale.setScalar(0.78);
+      f.rotation.z = 0.55;
+    }
     g.add(f);
   }
   const nut = mat(0x6a4a2a);
@@ -368,63 +286,6 @@ export function buildPalm(rand: () => number): THREE.Group {
     n.position.set(top.x + (rand() - 0.5) * 0.4, top.y - 0.25, (rand() - 0.5) * 0.4);
     g.add(n);
   }
-  return g;
-}
-
-export function buildTree(rand: () => number): THREE.Group {
-  const g = new THREE.Group();
-  const h = 1.6 + rand() * 1.4;
-  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.24, h, 6), mat(0x6a4f38));
-  trunk.position.y = h / 2;
-  g.add(trunk);
-  const leaf = mat(rand() < 0.5 ? 0x4f8a3f : 0x5f9a48);
-  const r = 1.1 + rand() * 0.9;
-  const crown = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 6), leaf);
-  crown.position.y = h + r * 0.7;
-  crown.scale.y = 0.85;
-  g.add(crown);
-  if (rand() < 0.5) {
-    const side = new THREE.Mesh(new THREE.SphereGeometry(r * 0.55, 7, 5), leaf);
-    side.position.set(r * 0.7, h + r * 0.45, (rand() - 0.5) * r);
-    g.add(side);
-  }
-  return g;
-}
-
-const PAGODA_WALLS = [0x9a4038, 0x8a8a92, 0xb0a890];
-
-export function buildPagodaHouse(rand: () => number): THREE.Group {
-  const g = new THREE.Group();
-  const w = 4 + rand() * 3;
-  const h = 2.4 + rand() * 1.4;
-  const d = 4 + rand() * 2.5;
-  const wall = PAGODA_WALLS[Math.floor(rand() * PAGODA_WALLS.length)];
-
-  const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(wall));
-  body.position.y = h / 2;
-  g.add(body);
-
-  // wide overhanging tiled roof; taller houses get a second tier
-  const roofMat = mat(0x3a4a5a);
-  const roof = new THREE.Mesh(prismGeometry(w * 1.5, 1.1 + rand() * 0.5, d * 1.4), roofMat);
-  roof.position.y = h;
-  g.add(roof);
-  if (rand() < 0.45) {
-    const upper = new THREE.Mesh(new THREE.BoxGeometry(w * 0.55, h * 0.6, d * 0.55), mat(wall));
-    upper.position.y = h + 1.1;
-    g.add(upper);
-    const roof2 = new THREE.Mesh(prismGeometry(w * 0.9, 0.8, d * 0.85), roofMat);
-    roof2.position.y = h + 1.1 + h * 0.3;
-    g.add(roof2);
-  }
-  // gold ridge trim
-  const ridge = new THREE.Mesh(new THREE.BoxGeometry(w * 1.5, 0.12, 0.2), mat(0xd8a848));
-  ridge.position.y = h + 1.05;
-  g.add(ridge);
-
-  const door = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.6, 0.1), mat(0x5a2f28));
-  door.position.set(0, 0.8, d / 2 + 0.06);
-  g.add(door);
   return g;
 }
 
@@ -449,44 +310,6 @@ export function buildLanternPole(): THREE.Group {
   return g;
 }
 
-const BRICK_TONES = [0x8a5344, 0x7a4a3e, 0x96604a];
-
-export function buildTerraceHouse(rand: () => number): THREE.Group {
-  const g = new THREE.Group();
-  const w = 4 + rand() * 2.5;
-  const h = 4.5 + rand() * 2;
-  const d = 4 + rand() * 2;
-  const brick = BRICK_TONES[Math.floor(rand() * BRICK_TONES.length)];
-
-  const winMat = mat(0xffffff, { map: getWindowTexture() });
-  const wallMat = mat(brick);
-  const body = new THREE.Mesh(
-    new THREE.BoxGeometry(w, h, d),
-    [winMat, winMat, wallMat, wallMat, winMat, winMat]
-  );
-  body.position.y = h / 2;
-  g.add(body);
-
-  const roof = new THREE.Mesh(prismGeometry(w * 1.06, 1.3, d * 1.04), mat(0x3f4550));
-  roof.position.y = h;
-  g.add(roof);
-
-  // chimney pots — the London silhouette
-  const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.55, 1.1, 0.55), mat(brick));
-  chimney.position.set(w * 0.3, h + 1.15, 0);
-  g.add(chimney);
-  for (const x of [-0.12, 0.12]) {
-    const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 0.4, 6), mat(0xc9a084));
-    pot.position.set(w * 0.3 + x, h + 1.85, 0);
-    g.add(pot);
-  }
-
-  const door = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.6, 0.1), mat(rand() < 0.4 ? 0x2a4a7a : 0x2f2f36));
-  door.position.set(-w * 0.25, 0.8, d / 2 + 0.06);
-  g.add(door);
-  return g;
-}
-
 export function buildPhoneBox(): THREE.Group {
   const g = new THREE.Group();
   const red = mat(0xc41e2a);
@@ -508,119 +331,6 @@ export function buildPhoneBox(): THREE.Group {
   return g;
 }
 
-const AWNING_TONES = [0xd8452e, 0x2e8ad8, 0xd8a82e, 0x3aa85f];
-
-export function buildStall(rand: () => number): THREE.Group {
-  const g = new THREE.Group();
-  const w = 2.4 + rand() * 1.2;
-  const tone = AWNING_TONES[Math.floor(rand() * AWNING_TONES.length)];
-
-  const counter = new THREE.Mesh(new THREE.BoxGeometry(w, 0.9, 1.2), mat(0x7a5a3a));
-  counter.position.y = 0.45;
-  g.add(counter);
-
-  const poleMat = mat(0x4a3a28);
-  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-    const p = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.2, 5), poleMat);
-    p.position.set(sx * (w / 2 - 0.1), 1.1, sz * 0.55);
-    g.add(p);
-  }
-
-  // striped awning: alternating slats reads as stripes from race distance
-  for (let i = 0; i < 4; i++) {
-    const slat = new THREE.Mesh(
-      new THREE.BoxGeometry(w + 0.3, 0.06, 0.42),
-      mat(i % 2 === 0 ? tone : 0xf2ead8)
-    );
-    slat.position.set(0, 2.25 - i * 0.06, -0.6 + i * 0.42);
-    slat.rotation.x = 0.18;
-    g.add(slat);
-  }
-
-  // crates of un-lootable goods
-  for (let i = 0; i < 2 + Math.floor(rand() * 2); i++) {
-    const c = new THREE.Mesh(
-      new THREE.BoxGeometry(0.4, 0.3, 0.4),
-      mat(PAINT_TONES[Math.floor(rand() * PAINT_TONES.length)])
-    );
-    c.position.set((rand() - 0.5) * (w - 0.6), 1.05, (rand() - 0.5) * 0.6);
-    c.rotation.y = rand();
-    g.add(c);
-  }
-  return g;
-}
-
-const ZOMBIE_SHIRTS = [0x6b4f8a, 0x8a4f4f, 0x4f6b8a, 0x55604a];
-
-export function buildZombie(rand: () => number): THREE.Group {
-  const g = new THREE.Group();
-  const skin = mat(0x7fae5a); // sickly green
-  const shirt = mat(ZOMBIE_SHIRTS[Math.floor(rand() * ZOMBIE_SHIRTS.length)]);
-
-  const legs = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.6, 0.26), mat(0x3a3f4a));
-  legs.position.y = 0.3;
-  g.add(legs);
-
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.6, 0.32), shirt);
-  torso.position.y = 0.9;
-  g.add(torso);
-
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.38, 0.36), skin);
-  head.position.y = 1.42;
-  head.rotation.z = (rand() - 0.5) * 0.4; // lolling head
-  g.add(head);
-
-  // arms stretched forward (zombie shamble)
-  for (const side of [-1, 1]) {
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 0.62), skin);
-    arm.position.set(side * 0.36, 1.06, 0.4);
-    arm.rotation.x = -0.15;
-    g.add(arm);
-  }
-  return g;
-}
-
-/**
- * Boss zombie: a hulking, blood-red brute. Same silhouette as buildZombie but
- * bulkier and scaled up, so it reads as a mini-boss on the horde track.
- */
-export function buildBossZombie(rand: () => number): THREE.Group {
-  const g = new THREE.Group();
-  const flesh = mat(0x8a2f22, { emissive: 0x501208, emissiveIntensity: 0.55 }); // angry red
-  const dark = mat(0x2a1512);
-
-  const legs = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.8, 0.42), dark);
-  legs.position.y = 0.4;
-  g.add(legs);
-
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.9, 0.5), flesh);
-  torso.position.y = 1.35;
-  g.add(torso);
-
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.56, 0.52), flesh);
-  head.position.y = 2.05;
-  head.rotation.z = (rand() - 0.5) * 0.3;
-  g.add(head);
-
-  // glowing eyes so it stands out in the horde
-  const eyeMat = mat(0xffdd22, { emissive: 0xffaa00, emissiveIntensity: 1 });
-  for (const side of [-1, 1]) {
-    const eye = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.06), eyeMat);
-    eye.position.set(side * 0.14, 2.08, 0.28);
-    g.add(eye);
-  }
-
-  for (const side of [-1, 1]) {
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 0.9), flesh);
-    arm.position.set(side * 0.6, 1.5, 0.5);
-    arm.rotation.x = -0.2;
-    g.add(arm);
-  }
-
-  g.scale.multiplyScalar(1.35);
-  return g;
-}
-
 export function buildNitro(): THREE.Group {
   const g = new THREE.Group();
   const tank = new THREE.Mesh(
@@ -637,30 +347,64 @@ export function buildNitro(): THREE.Group {
 
 export function buildFinishArch(width: number): THREE.Group {
   const g = new THREE.Group();
-  const pillarMat = mat(0x30353f);
+  g.name = 'finish-gantry';
+  const pillarMat = new THREE.MeshStandardMaterial({ color: 0x0f3d2e, roughness: 0.55, metalness: 0.35 });
+  const accent = new THREE.MeshBasicMaterial({ color: 0xd4af37 });
   for (const side of [-1, 1]) {
-    const p = new THREE.Mesh(new THREE.BoxGeometry(0.7, 6.4, 0.7), pillarMat);
-    p.position.set(side * (width / 2), 3.2, 0);
+    const p = new THREE.Mesh(new THREE.BoxGeometry(0.85, 7, 0.85), pillarMat);
+    p.position.set(side * (width / 2), 3.5, 0);
     g.add(p);
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(0.14, 5.2, 0.9), accent);
+    strip.position.set(side * (width / 2 - 0.25), 3, 0); g.add(strip);
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.35, 1.5), pillarMat);
+    foot.position.set(side * width / 2, 0.175, 0); g.add(foot);
   }
   const c = document.createElement('canvas');
-  c.width = 128;
-  c.height = 32;
+  c.width = 1024;
+  c.height = 256;
   const ctx = c.getContext('2d')!;
-  for (let y = 0; y < 4; y++) {
-    for (let x = 0; x < 16; x++) {
-      ctx.fillStyle = (x + y) % 2 === 0 ? '#ffffff' : '#111111';
-      ctx.fillRect(x * 8, y * 8, 8, 8);
+  ctx.fillStyle = '#0f3d2e'; ctx.fillRect(0, 0, 1024, 256);
+  for (const base of [0, 224]) for (let y = 0; y < 2; y++) {
+    for (let x = 0; x < 64; x++) {
+      ctx.fillStyle = (x + y) % 2 === 0 ? '#ffffff' : '#0a1a14';
+      ctx.fillRect(x * 16, base + y * 16, 16, 16);
     }
   }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#d4af37'; ctx.font = '900 28px sans-serif';
+  ctx.fillText('M I N I R U S H   /   G R A N D   P R I X', 512, 62);
+  ctx.fillStyle = '#ffffff'; ctx.font = '900 140px sans-serif';
+  ctx.fillText('FINISH', 512, 151);
   const tex = new THREE.CanvasTexture(c);
-  tex.magFilter = THREE.NearestFilter;
-  const banner = new THREE.Mesh(
-    new THREE.BoxGeometry(width, 1.4, 0.15),
-    new THREE.MeshBasicMaterial({ map: tex })
-  );
-  banner.position.y = 5.9;
-  g.add(banner);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const beam = new THREE.Mesh(new THREE.BoxGeometry(width + 0.9, 2.1, 0.8), pillarMat);
+  beam.position.y = 6.1; g.add(beam);
+  const bannerMat = new THREE.MeshBasicMaterial({ map: tex });
+  for (const side of [-1, 1]) {
+    const banner = new THREE.Mesh(new THREE.PlaneGeometry(width, 2.0), bannerMat);
+    banner.position.set(0, 6.1, side * 0.41);
+    if (side < 0) banner.rotation.y = Math.PI;
+    g.add(banner);
+  }
+  // A broad chequered stripe marks the exact timing line on the asphalt.
+  const checker = document.createElement('canvas'); checker.width = 320; checker.height = 64;
+  const paint = checker.getContext('2d')!;
+  for (let y = 0; y < 4; y++) for (let x = 0; x < 20; x++) {
+    paint.fillStyle = (x + y) % 2 ? '#17211f' : '#ffffff';
+    paint.fillRect(x * 16, y * 16, 16, 16);
+  }
+  const checkTex = new THREE.CanvasTexture(checker);
+  checkTex.colorSpace = THREE.SRGBColorSpace; checkTex.magFilter = THREE.NearestFilter;
+  const stripe = new THREE.Mesh(new THREE.PlaneGeometry(width - 3, 2.4),
+    new THREE.MeshBasicMaterial({ map: checkTex, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+  stripe.name = 'finish-road-stripe'; stripe.rotation.x = -Math.PI / 2; stripe.position.y = 0.035; g.add(stripe);
+  for (const side of [-1, 1]) {
+    const flag = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 3.2),
+      new THREE.MeshBasicMaterial({ map: checkTex, side: THREE.DoubleSide }));
+    flag.position.set(side * (width / 2 + 1.1), 3.5, 0);
+    g.add(flag);
+  }
+  polishCar(g);
   return g;
 }
 
@@ -671,60 +415,6 @@ export function buildCoin(): THREE.Mesh {
     geo,
     mat(0xfcff52, { emissive: 0xb8bb1e, emissiveIntensity: 0.55 })
   );
-}
-
-export function buildPyramid(rand: () => number): THREE.Group {
-  const g = new THREE.Group();
-  const baseW = 12 + rand() * 14;
-  const height = baseW * (0.65 + rand() * 0.2);
-  const pyr = new THREE.Mesh(
-    new THREE.ConeGeometry(baseW, height, 4),
-    mat(0xcaa268)
-  );
-  pyr.position.y = height / 2;
-  pyr.rotation.y = Math.PI / 4;
-  g.add(pyr);
-  g.add(outlineFor(pyr, 1.02));
-  return g;
-}
-
-export function buildObelisk(): THREE.Group {
-  const g = new THREE.Group();
-  const pillar = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.5, 0.9, 11, 4),
-    mat(0xb89868)
-  );
-  pillar.position.y = 5.5;
-  pillar.rotation.y = Math.PI / 4;
-  g.add(pillar);
-  g.add(outlineFor(pillar));
-
-  const cap = new THREE.Mesh(
-    new THREE.ConeGeometry(0.7, 1.4, 4),
-    mat(0xffe93b, { emissive: 0xbfa018, emissiveIntensity: 0.6 })
-  );
-  cap.position.y = 11 + 0.7;
-  cap.rotation.y = Math.PI / 4;
-  g.add(cap);
-  return g;
-}
-
-export function buildFavelaHouse(rand: () => number): THREE.Group {
-  const g = new THREE.Group();
-  const colors = [0xff5c5c, 0x48b6ff, 0xffcd38, 0x5ce67c, 0xeb6b34, 0x9c5cff];
-  const tiers = 2 + Math.floor(rand() * 2);
-  let curY = 0;
-  for (let i = 0; i < tiers; i++) {
-    const w = (tiers - i) * 2.2 + rand() * 1.5;
-    const d = (tiers - i) * 2.2 + rand() * 1.5;
-    const h = 2.2 + rand() * 0.8;
-    const box = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(colors[Math.floor(rand() * colors.length)]));
-    box.position.set((rand() * 0.6 - 0.3), curY + h / 2, (rand() * 0.6 - 0.3));
-    g.add(box);
-    g.add(outlineFor(box));
-    curY += h;
-  }
-  return g;
 }
 
 export function buildBeachUmbrella(rand: () => number): THREE.Group {
@@ -776,33 +466,6 @@ export function buildArcadeArch(): THREE.Group {
   return g;
 }
 
-export function buildBossTruck(paint = 0x2d343e): THREE.Group {
-  const g = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.BoxGeometry(2.3, 1.8, 5.4), mat(paint));
-  body.position.y = 1.3;
-  g.add(body);
-  g.add(outlineFor(body));
-
-  const cab = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.3, 2.2), mat(0x1a1d24));
-  cab.position.set(0, 2.4, -0.6);
-  g.add(cab);
-  g.add(outlineFor(cab));
-
-  const bullbar = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.8, 0.4), mat(0x768294));
-  bullbar.position.set(0, 0.9, -2.8);
-  g.add(bullbar);
-
-  // Siren
-  const siren = new THREE.Mesh(
-    new THREE.BoxGeometry(1.4, 0.25, 0.4),
-    new THREE.MeshBasicMaterial({ color: 0xff3b3b })
-  );
-  siren.position.set(0, 3.15, -0.6);
-  g.add(siren);
-
-  return g;
-}
-
 export function buildLaunchRamp(): THREE.Group {
   const g = new THREE.Group();
   const L = 5.5, H = 1.25, W = 4.2; // length (down-track), peak height, width
@@ -818,7 +481,6 @@ export function buildLaunchRamp(): THREE.Group {
   const ramp = new THREE.Mesh(geo, mat(0xffcc00));
   ramp.rotation.y = Math.PI / 2; // length runs down-track; slope faces the driver, lip forward
   g.add(ramp);
-  g.add(outlineFor(ramp));
   return g;
 }
 

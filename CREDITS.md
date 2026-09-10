@@ -39,7 +39,25 @@ its own garage colour) until licensed models are added under those names.
 |---|---|---|---|
 | UI/game `.ogg` sounds | [Universal UI Soundpack](https://cyrex-studios.itch.io/universal-ui-soundpack) | Cyrex Studios | CC0 1.0 |
 | `music/offroad.ogg` | [25 Fantasy RPG Game Tracks Vol. 2](https://alkakrab.itch.io/free-25-fantasy-rpg-game-tracks-no-copyright-vol-2) | alkakrab | Free, no copyright |
+| `music/race.mp3` | [Race Heat](https://uppbeat.io/t/abbynoise/race-heat) | Abbynoise | Uppbeat, user-supplied licence code below |
+| `music/menu.mp3` | [Dirty Games](https://uppbeat.io/t/hybridas/dirty-games) | Hybridas | Uppbeat, user-supplied licence code below |
+| `sfx/police_siren.wav` | [Police siren US](https://mixkit.co/free-sound-effects/police/) (1643) | Mixkit | [Mixkit Sound Effects Free License](https://mixkit.co/license/#sfxFree) |
 | `bump.mp3`, `crash.mp3`, `engine.mp3`, `engine_start.mp3`, `squish.mp3` | ⚠️ **provenance not recorded** | — | **unverified — see below** |
+
+### Music attribution supplied with the downloads
+
+Music from #Uppbeat (free for Creators!):
+https://uppbeat.io/t/abbynoise/race-heat
+License code: PDZF0JMP0K6LPGBE
+
+Music from #Uppbeat (free for Creators!):
+https://uppbeat.io/t/hybridas/dirty-games
+License code: O9NQURMF529SXEWN
+
+Original downloads: `race-heat-abbynoise-main-version-46669-02-19.mp3`,
+`dirty-games-hybridas-main-version-24505-01-17.mp3`, and
+`mixkit-police-siren-us-1643.wav`. Imported without audio edits. Music credits
+are also available in the in-game Driver Card and `public/assets/music/CREDITS.txt`.
 
 ## Unverified assets
 

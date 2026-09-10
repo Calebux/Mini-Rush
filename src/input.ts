@@ -59,6 +59,9 @@ export class InputManager {
 
     window.addEventListener('keydown', (e) => {
       if (this.isEditableTarget(e.target)) return;
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('[role="img"]') ||
+        ((e.key === ' ' || e.key === 'Enter') && target?.closest('button'))) return;
       const key = e.key.toLowerCase();
       if (this.isControlKey(key)) e.preventDefault();
       if (key === 'arrowleft' || key === 'a') this.leftHeld = true;

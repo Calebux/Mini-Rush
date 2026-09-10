@@ -5,7 +5,6 @@
 export interface RunCard {
   place: number;
   time: number;
-  zombies: number;
   coins: number;
   score: number;
   style: number;
@@ -33,7 +32,7 @@ export async function shareRun(run: RunCard, shareLink?: string): Promise<void> 
   const brag = run.busted
     ? `I got BUSTED after ${run.time.toFixed(1)}s in MiniRush 🚔 — think you can escape?`
     : `${run.place}${SUFFIX[Math.min(run.place, 4) - 1]} in ${run.map} — ${run.time.toFixed(1)}s, ` +
-      `${run.zombies} zombies, score ${run.score}. Beat that! 🏁`;
+      `score ${run.score}. Beat that! 🏁`;
   // the link carries the caller's ?ref= code — friends who tap it credit them
   const text = shareLink ? `${brag}\nPlay free: ${shareLink}` : brag;
   const file = new File([blob], 'minirush-run.png', { type: 'image/png' });
@@ -119,7 +118,7 @@ function draw(ctx: CanvasRenderingContext2D, run: RunCard, hasRefLink = false): 
   // stat row
   const stats: [string, string][] = [
     [run.time.toFixed(1) + 's', 'TIME'],
-    [String(run.zombies), 'ZOMBIES'],
+    [String(run.coins), 'COINS'],
     [String(run.style), 'STYLE'],
     [String(run.score), 'SCORE']
   ];

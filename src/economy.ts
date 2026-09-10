@@ -48,18 +48,16 @@ export function grantCar(id: string): void {
 /**
  * Guaranteed finish payout, banked on top of coins grabbed on track. Coin arcs
  * alone make earnings hinge on threading pickups — this gives the garage curve a
- * floor so showing up, finishing, splatting and placing all pay. Tuned against
+ * floor so showing up, finishing and placing all pay. Tuned against
  * car prices (60–600) and upgrade tiers (60/120/240): a clean race adds ~25–45.
  */
 export function racePayout(p: {
-  place: number; field: number; zombies: number; laps: number;
+  place: number; field: number; laps: number;
 }): number {
   const place = Number.isFinite(p.place) ? Math.max(1, Math.floor(p.place)) : 1;
-  const zombies = Number.isFinite(p.zombies) ? Math.max(0, Math.floor(p.zombies)) : 0;
   const lapsRun = Number.isFinite(p.laps) ? Math.max(1, Math.floor(p.laps)) : 1;
   const finish = 12;                                    // reached the line
   const podium = Math.max(0, 20 - (place - 1) * 6);      // 1st 20 · 2nd 14 · 3rd 8 · 4th 2
-  const splats = Math.floor(zombies / 4);                // horde laps reward the grind
   const laps = Math.max(0, lapsRun - 1) * 5;             // multi-lap modes pay more
-  return finish + podium + splats + laps;
+  return finish + podium + laps;
 }

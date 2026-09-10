@@ -2,6 +2,7 @@ import { chromium } from 'playwright';
 
 // Usage: node scripts/smoke.mjs [shotsDir] — expects `vite preview` on :4173
 const shots = process.argv[2] ?? '.';
+const base = process.argv[3] ?? 'http://localhost:4173';
 const errors = [];
 const browser = await chromium.launch({ channel: 'chrome', headless: true });
 const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true });
@@ -13,8 +14,8 @@ await page.addInitScript(() => {
   localStorage.setItem('minirush.owned', JSON.stringify(['sunburst', 'gecko']));
   localStorage.setItem('minirush.controls-guide', '1');
 });
-// short seeded 1-lap circuit so the race finishes fast
-await page.goto('http://localhost:4173/?len=500&seed=7&laps=1', { waitUntil: 'networkidle' });
+// short seeded 1-lap circuit so the race finishes fast, on the phone render tier
+await page.goto(`${base}/?len=600&seed=7&laps=1&q=1`, { waitUntil: 'networkidle' });
 await page.waitForTimeout(1200);
 await page.screenshot({ path: `${shots}/1_menu.png` });
 
@@ -23,10 +24,10 @@ await page.click('#btn-play');
 await page.waitForTimeout(1600); // overlay fade + camera glide onto the circuit
 await page.screenshot({ path: `${shots}/1b_tour.png` });
 await page.click('#btn-tour-done');
-await page.click('#car-next');
-await page.click('#car-next');
+await page.click('#tab-junk'); // cheapest on the shelf is GECKO
 const car = await page.evaluate(() => document.getElementById('car-name-t').textContent);
 console.log('CAR:', car);
+if (car !== 'GECKO') errors.push(`Expected GECKO, got ${car}`);
 await page.waitForTimeout(1600); // let the turntable camera swing in
 await page.screenshot({ path: `${shots}/1a_garage.png` });
 await page.click('#btn-garage-done'); // START RACE
@@ -37,11 +38,12 @@ await page.screenshot({ path: `${shots}/3_race_start.png` });
 
 // hold the gas the whole race; steer around; try nitro (space) mid-race
 await page.keyboard.down('ArrowUp');
+console.log('GAS INPUT:', await page.evaluate(() => ({ gas: window.__game.input.gas, focused: document.activeElement?.id, state: window.__game.state })));
 let shot = false;
-for (let i = 0; i < 70; i++) {
+for (let i = 0; i < 140; i++) {
   const done = await page.evaluate(() => !document.getElementById('results').classList.contains('hidden'));
   if (done) break;
-  const key = Math.random() < 0.5 ? 'ArrowLeft' : 'ArrowRight';
+  const key = i % 2 === 0 ? 'ArrowLeft' : 'ArrowRight';
   await page.keyboard.down(key);
   await page.waitForTimeout(280);
   await page.keyboard.up(key);
@@ -49,13 +51,14 @@ for (let i = 0; i < 70; i++) {
   if (i === 20 && !shot) { shot = true; await page.screenshot({ path: `${shots}/4_midrace.png` }); }
   await page.waitForTimeout(120);
 }
+// the results tally counts up row by row — let it land before reading it
+await page.waitForTimeout(1600);
 await page.screenshot({ path: `${shots}/5_results.png` });
 
 const results = await page.evaluate(() => ({
   visible: !document.getElementById('results').classList.contains('hidden'),
   place: document.getElementById('result-place')?.textContent,
   time: document.getElementById('r-time')?.textContent,
-  zombies: document.getElementById('r-zombies')?.textContent,
   coins: document.getElementById('r-coins')?.textContent,
   score: document.getElementById('r-score')?.textContent,
   rank: document.getElementById('r-rank')?.textContent

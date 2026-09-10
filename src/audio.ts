@@ -5,12 +5,11 @@
  */
 type SfxName =
   | 'click' | 'coin' | 'swoosh' | 'crash' | 'combo' | 'start'
-  | 'squish' | 'nitro' | 'bump' | 'count' | 'go' | 'finish' | 'skid'
+  | 'nitro' | 'bump' | 'count' | 'go' | 'finish' | 'skid'
   | 'shot' | 'blowout' | 'empty'
   | 'select' | 'back' | 'buy' | 'open' // menu foley — each action has a voice
   | 'ignition'  // engine turnover during the countdown
-  | 'wall_grind' | 'draft' | 'land' | 'rev' | 'overtake' // juicier gameplay SFX
-  | 'zombie_splat_multi' | 'boss_roar' | 'virus_cure'; // combo/boss/mode SFX
+  | 'wall_grind' | 'draft' | 'land' | 'rev' | 'overtake'; // juicier gameplay SFX
 
 const FILES: Record<SfxName, string> = {
   select: 'select',
@@ -23,7 +22,6 @@ const FILES: Record<SfxName, string> = {
   crash: 'crash',
   combo: 'combo',
   start: 'start',
-  squish: 'squish',
   nitro: 'nitro',
   bump: 'bump',
   count: 'count',
@@ -38,10 +36,7 @@ const FILES: Record<SfxName, string> = {
   draft: 'draft_whoosh',
   land: 'land_thump',
   rev: 'engine_rev',
-  overtake: 'overtake_whoosh',
-  zombie_splat_multi: 'splat_multi',
-  boss_roar: 'boss_roar',
-  virus_cure: 'virus_cure'
+  overtake: 'overtake_whoosh'
 };
 
 const EXTENSIONS = ['ogg', 'mp3', 'wav'];
@@ -51,7 +46,6 @@ const EXTENSIONS = ['ogg', 'mp3', 'wav'];
 const HAPTICS: Partial<Record<SfxName, number | number[]>> = {
   crash: [90, 40, 90],
   bump: 35,
-  squish: 14,
   blowout: 70,
   shot: 20,
   nitro: 30,
@@ -60,9 +54,6 @@ const HAPTICS: Partial<Record<SfxName, number | number[]>> = {
   wall_grind: [15, 10, 15],
   land: 50,
   overtake: 18,
-  zombie_splat_multi: [20, 15, 20],
-  boss_roar: [60, 30, 60],
-  virus_cure: [30, 40, 80]
 };
 
 /**
@@ -100,10 +91,17 @@ export class AudioManager {
   private engineBuf: AudioBuffer | null = null;
   private engineSrc: AudioBufferSourceNode | null = null;
   private engineGain: GainNode | null = null;
+  private sirenOsc: OscillatorNode | null = null;
+  private sirenBuf: AudioBuffer | null = null;
+  private sirenSrc: AudioBufferSourceNode | null = null;
+  private sirenLevel = 0;
+  private sirenLfo: OscillatorNode | null = null;
+  private sirenGain: GainNode | null = null;
   private musicBufs = new Map<string, AudioBuffer>();
   private musicSrc: AudioBufferSourceNode | null = null;
   private musicGain: GainNode | null = null;
   private musicName: string | null = null;
+  private musicRequest = 0;
   private synthTimer: number | null = null;
   private musicVol = 0.3;
   private masterGain: GainNode | null = null;
@@ -112,7 +110,9 @@ export class AudioManager {
 
   private static loadVolume(): number {
     try {
-      const v = Number(localStorage.getItem('minirush.volume'));
+      const saved = localStorage.getItem('minirush.volume');
+      if (saved === null) return 1;
+      const v = Number(saved);
       return Number.isFinite(v) && v >= 0 && v <= 1 ? v : 1;
     } catch {
       return 1;
@@ -145,11 +145,14 @@ export class AudioManager {
     this.muted = m;
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
+    this.musicGain?.gain.cancelScheduledValues(t);
     if (m) {
       this.engineGain?.gain.setTargetAtTime(0, t, 0.05);
       this.musicGain?.gain.setTargetAtTime(0, t, 0.05);
+      this.sirenGain?.gain.setTargetAtTime(0, t, 0.05);
     } else {
       this.musicGain?.gain.setTargetAtTime(this.musicVol, t, 0.1);
+      this.siren(this.sirenLevel);
       // music that was requested while muted never started — start it now
       if (this.musicName && !this.musicSrc && this.synthTimer === null) {
         const name = this.musicName;
@@ -178,7 +181,14 @@ export class AudioManager {
         const buf = await this.fetchBuffer(`${this.base}${FILES[name]}`);
         if (buf) this.buffers.set(name, buf);
       }),
-      this.fetchBuffer(`${this.base}engine`).then((buf) => (this.engineBuf = buf))
+      this.fetchBuffer(`${this.base}engine`).then((buf) => (this.engineBuf = buf)),
+      this.fetchBuffer(`${this.base}police_siren`).then(buf => {
+        this.sirenBuf = buf;
+        // A quick first launch may start the fallback before the file arrives.
+        if (buf && this.sirenOsc) {
+          this.stopSiren(); this.startSiren(); this.siren(this.sirenLevel);
+        }
+      })
     ]);
   }
 
@@ -220,6 +230,66 @@ export class AudioManager {
     this.engineGain.gain.setTargetAtTime(this.muted ? 0 : volume, t, 0.1);
   }
 
+  /**
+   * Loop the recorded police siren, with a synthesized fallback if absent.
+   * Volume follows the nearest police unit's distance.
+   */
+  startSiren(): void {
+    if (!this.ctx || this.sirenOsc || this.sirenSrc) return;
+    const gain = this.ctx.createGain();
+    gain.gain.value = 0;
+    gain.connect(this.out);
+    this.sirenGain = gain;
+    if (this.sirenBuf) {
+      const src = this.ctx.createBufferSource();
+      src.buffer = this.sirenBuf; src.loop = true;
+      src.connect(gain); src.start(); this.sirenSrc = src;
+      return;
+    }
+    const osc = this.ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.value = 760;
+    const lfo = this.ctx.createOscillator();
+    lfo.type = 'sine';
+    lfo.frequency.value = 1.35;       // wail rate
+    const swing = this.ctx.createGain();
+    swing.gain.value = 190;           // ± Hz
+    lfo.connect(swing).connect(osc.frequency);
+    osc.connect(gain);
+    osc.start();
+    lfo.start();
+    this.sirenOsc = osc;
+    this.sirenLfo = lfo;
+    this.sirenGain = gain;
+  }
+
+  /** 0 = out of earshot, 1 = right on your bumper. */
+  siren(level: number): void {
+    this.sirenLevel = Number.isFinite(level) ? Math.max(0, Math.min(1, level)) : 0;
+    if (!this.ctx || !this.sirenGain) return;
+    const v = this.muted ? 0 : this.sirenLevel * 0.15;
+    this.sirenGain.gain.setTargetAtTime(v, this.ctx.currentTime, 0.15);
+  }
+
+  stopSiren(): void {
+    if (!this.ctx || !this.sirenGain) return;
+    const osc = this.sirenOsc;
+    const lfo = this.sirenLfo;
+    const src = this.sirenSrc;
+    const gain = this.sirenGain;
+    gain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.08);
+    const end = this.ctx.currentTime + 0.4;
+    if (src) { src.onended = () => { src.disconnect(); gain.disconnect(); }; src.stop(end); }
+    if (osc) {
+      osc.onended = () => { osc.disconnect(); lfo?.disconnect(); gain.disconnect(); };
+      osc.stop(end); lfo?.stop(end);
+    }
+    this.sirenSrc = null;
+    this.sirenOsc = null;
+    this.sirenLfo = null;
+    this.sirenGain = null;
+  }
+
   stopEngine(): void {
     if (!this.ctx || !this.engineSrc || !this.engineGain) return;
     const src = this.engineSrc;
@@ -235,15 +305,17 @@ export class AudioManager {
    */
   async playMusic(name: string, volume = 0.3): Promise<void> {
     if (!this.ctx || this.musicName === name) return;
+    const request = ++this.musicRequest;
     this.musicName = name;
     this.musicVol = volume;
-    if (this.muted) return; // remembered — setMuted(false) starts it
+    this.stopMusicSource();
+    if (this.muted) { this.stopMusicSource(); return; } // remembered for unmute
     let buf = this.musicBufs.get(name) ?? null;
     if (!buf) {
       buf = await this.fetchBuffer(`${this.musicBase}${name}`);
       if (buf) this.musicBufs.set(name, buf);
     }
-    if (this.musicName !== name) return; // superseded while loading
+    if (request !== this.musicRequest || this.muted) return;
     if (!buf) {
       this.startSynthMusic(name);
       return;
@@ -262,6 +334,7 @@ export class AudioManager {
   }
 
   stopMusic(): void {
+    this.musicRequest++;
     this.musicName = null;
     this.stopMusicSource();
   }
@@ -273,6 +346,7 @@ export class AudioManager {
     }
     if (!this.ctx || !this.musicSrc || !this.musicGain) return;
     const src = this.musicSrc;
+    this.musicGain.gain.cancelScheduledValues(this.ctx.currentTime);
     this.musicGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.25);
     setTimeout(() => src.stop(), 1000);
     this.musicSrc = null;
@@ -444,24 +518,6 @@ export class AudioManager {
         tone(659, 0.1, 0.1, 'square', 0.09);
         tone(784, 0.2, 0.18, 'square', 0.1);
         break;
-      case 'squish': {
-        const len = 0.14;
-        const noise = ctx.createBufferSource();
-        const buf = ctx.createBuffer(1, ctx.sampleRate * len, ctx.sampleRate);
-        const data = buf.getChannelData(0);
-        for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
-        noise.buffer = buf;
-        const filter = ctx.createBiquadFilter();
-        filter.type = 'lowpass';
-        filter.frequency.setValueAtTime(900, t);
-        filter.frequency.exponentialRampToValueAtTime(140, t + len);
-        const g = ctx.createGain();
-        g.gain.value = 0.22 * volume;
-        noise.connect(filter).connect(g).connect(this.out);
-        noise.start(t);
-        tone(120, 0, 0.1, 'sine', 0.14);
-        break;
-      }
       case 'nitro': {
         const len = 0.55;
         const noise = ctx.createBufferSource();
@@ -646,39 +702,6 @@ export class AudioManager {
         oNoise.start(t);
         break;
       }
-      case 'zombie_splat_multi': {
-        // wet multi-splat: layered squishes
-        const smLen = 0.22;
-        const smNoise = ctx.createBufferSource();
-        const smBuf = ctx.createBuffer(1, ctx.sampleRate * smLen, ctx.sampleRate);
-        const smData = smBuf.getChannelData(0);
-        for (let i = 0; i < smData.length; i++) smData[i] = (Math.random() * 2 - 1) * (1 - i / smData.length);
-        smNoise.buffer = smBuf;
-        const smFilter = ctx.createBiquadFilter();
-        smFilter.type = 'lowpass';
-        smFilter.frequency.setValueAtTime(1200, t);
-        smFilter.frequency.exponentialRampToValueAtTime(180, t + smLen);
-        const smG = ctx.createGain();
-        smG.gain.value = 0.28 * volume;
-        smNoise.connect(smFilter).connect(smG).connect(this.out);
-        smNoise.start(t);
-        tone(100, 0, 0.08, 'sine', 0.16);
-        tone(80, 0.06, 0.1, 'sine', 0.14);
-        break;
-      }
-      case 'boss_roar':
-        // deep growl + overtone
-        tone(55, 0, 0.4, 'sawtooth', 0.2);
-        tone(82, 0.02, 0.35, 'sawtooth', 0.12);
-        tone(110, 0.05, 0.3, 'square', 0.06);
-        break;
-      case 'virus_cure':
-        // ascending chime — cleansing
-        tone(523, 0, 0.1, 'triangle', 0.1);
-        tone(659, 0.08, 0.1, 'triangle', 0.1);
-        tone(784, 0.16, 0.1, 'triangle', 0.1);
-        tone(1047, 0.24, 0.22, 'triangle', 0.12);
-        break;
     }
     gain.disconnect();
   }

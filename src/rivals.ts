@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { AssetLibrary } from './assets';
+import type { CarSpec } from './cars';
 import { BASE_SPEED, END_SPEED_BONUS, RIVAL_LAT_GRIP, ROAD_HALF_WIDTH } from './constants';
-import { Entities } from './entities';
-import { buildCar } from './meshes';
+import { buildCar, syncCarGroundFx } from './meshes';
 import { Track } from './track';
 
 /**
@@ -53,7 +53,20 @@ export interface Rival {
   tune: PersonalityTune;
   overtakeCooldown: number; // seconds until the AI tries another overtake lane change
   lastOvertakeDir: number;  // -1 or 1, which side they went last time
+  laneBias: number;         // pursuit: this unit's flank offset from the player (m)
+  pursuitPhase: PursuitPhase; // police chase: what this unit is currently doing
+  pursuitT: number;           // seconds left in the current phase
+  pursuitSide: number;        // -1 / 1 — which side it runs the player down
 }
+
+/**
+ * Police Chase manoeuvre cycle. A unit that only ever tails sits in the chase
+ * camera's blind spot forever, which reads as nothing chasing you at all — so
+ * each one takes turns running the player down: up one side, across the nose,
+ * then holds the road in front and rams. Units that start down the road wait
+ * in `block` and attack as the player arrives.
+ */
+type PursuitPhase = 'tail' | 'surge' | 'cut' | 'block' | 'drop';
 
 const NAMES = ['BLAZE', 'VOLT', 'RUST', 'HAVOC', 'JINX', 'DIESEL', 'MAULER'];
 
@@ -69,16 +82,24 @@ export class RivalManager {
     scene: THREE.Scene, assets: AssetLibrary, private track: Track,
     avoidModel = -1, // traffic slot the player is driving
     count = 3,
-    private pursuit = false // Cop Chase: the single rival is THE HEAT
+    private pursuit = false, // Cop Chase: the single rival is THE HEAT
+    // Class modes (Hyper Cup) hand over a shelf of garage cars to race in
+    // place of the traffic shells. Empty ⇒ the usual civilian pool.
+    carPool: CarSpec[] = []
   ) {
     for (let i = 0; i < count; i++) {
-      const mesh = (pursuit ? assets.clonePolice() : assets.cloneTraffic(i, avoidModel))
+      const spec = carPool.length ? carPool[i % carPool.length] : null;
+      const mesh = (pursuit
+        ? assets.clonePolice()
+        : spec ? assets.cloneCar(spec) : assets.cloneTraffic(i, avoidModel))
         ?? buildCar(i + 1);
       scene.add(mesh);
       const personality = pursuit ? 'aggressive' as Personality : PERSONALITIES[i % PERSONALITIES.length];
       const tune = PERSONALITY_TUNES[personality];
       this.rivals.push({
-        name: pursuit ? 'THE HEAT' : NAMES[i % NAMES.length],
+        // the lead car is THE HEAT; the rest of the squad are numbered units
+        name: pursuit ? (i === 0 ? 'THE HEAT' : `UNIT ${i + 1}`)
+          : spec ? spec.name : NAMES[i % NAMES.length],
         mesh,
         s: 0, x: 0, v: 0,
         baseSpeed: BASE_SPEED - 1.5 + (i % 4) * 1.2 + tune.speedBias,
@@ -93,7 +114,16 @@ export class RivalManager {
         personality,
         tune,
         overtakeCooldown: 0,
-        lastOvertakeDir: i % 2 === 0 ? 1 : -1
+        lastOvertakeDir: i % 2 === 0 ? 1 : -1,
+        // a pursuing squad fans out instead of queueing in one lane, so the
+        // mirrors show cars on both quarters rather than a single tailgater
+        laneBias: count > 1
+          ? ((i / (count - 1)) - 0.5) * 2 * 1.7
+          : 0,
+        pursuitPhase: 'tail',
+        // staggered, so the squad takes turns rather than all lunging at once
+        pursuitT: 2.5 + i * 2.4,
+        pursuitSide: i % 2 === 0 ? 1 : -1
       });
     }
   }
@@ -110,6 +140,10 @@ export class RivalManager {
       r.tumbleT = 0;
       r.rollA = 0;
       r.overtakeCooldown = 0;
+      // Police Chase: units gridded behind the player chase (first run
+      // staggered per unit); units gridded ahead lie in wait and attack.
+      r.pursuitPhase = grid[i].s > 0 ? 'block' : 'tail';
+      r.pursuitT = grid[i].s > 0 ? 6 : 2.5 + i * 2.4;
       this.sync(r, 0);
     });
   }
@@ -124,8 +158,7 @@ export class RivalManager {
 
   update(
     dt: number, elapsed: number, raceTime: number, playerS: number,
-    driving: boolean, playerX = 0, aggression = 0, playerV = 0,
-    entities?: Entities
+    driving: boolean, playerX = 0, aggression = 0, playerV = 0
   ): void {
     const total = this.raceLength || this.track.length;
     for (const r of this.rivals) {
@@ -147,9 +180,7 @@ export class RivalManager {
         const progression = Math.min(1, r.s / total) * END_SPEED_BONUS;
         const gap = r.s - playerS;
         if (this.pursuit) {
-          target = playerV + THREE.MathUtils.clamp((-3.5 - gap) * 0.7, -30, 10);
-          if (gap > -8) target += playerV > BASE_SPEED * 0.75 ? -1.2 : 2.5;
-          target = Math.min(target, r.baseSpeed + 12 + progression);
+          target = this.pursue(r, dt, gap, playerV, progression);
         } else {
           const wobble = Math.sin(elapsed * 0.7 * r.tune.wobbleFreq + r.wobblePhase);
           target = r.baseSpeed + progression + wobble * 1.2;
@@ -195,19 +226,6 @@ export class RivalManager {
       // racing line: personality-modulated weave
       const wAmp = (ROAD_HALF_WIDTH - 1.8) * r.tune.wobbleAmp;
       let line = Math.sin(r.s * 0.015 * r.tune.wobbleFreq + r.wobblePhase) * wAmp;
-
-      // zombie dodge: cautious/balanced rivals swerve away from clusters ahead
-      if (entities && !this.pursuit && r.tune.brakeLookahead >= 1.0) {
-        const zombie = entities.nearestZombieAhead(this.track.wrap(r.s), 18);
-        if (zombie && Math.abs(zombie.zx - r.x) < 2.2) {
-          const dodgeDir = zombie.zx > 0 ? -1 : 1;
-          const dodgeLine = THREE.MathUtils.clamp(
-            zombie.zx + dodgeDir * 2.8,
-            -(ROAD_HALF_WIDTH - 1), ROAD_HALF_WIDTH - 1
-          );
-          line = THREE.MathUtils.lerp(line, dodgeLine, 0.4 * r.tune.brakeLookahead);
-        }
-      }
 
       // overtaking: if a rival is close ahead and slower, swerve around it
       if (driving && !this.pursuit && r.overtakeCooldown <= 0) {
@@ -255,15 +273,101 @@ export class RivalManager {
         }
       }
 
-      // aggressive modes: nearby rivals abandon the line and hunt the player
-      const huntRange = this.pursuit ? 16 : 9;
-      if (aggression > 0 && driving && Math.abs(r.s - playerS) < huntRange) {
+      // Pursuit lane control runs well beyond the ordinary hunt range,
+      // because a surge starts from behind and has to arrive alongside.
+      if (this.pursuit && driving && Math.abs(r.s - playerS) < 45) {
+        const lane = r.pursuitPhase === 'surge'
+          ? playerX + r.pursuitSide * 3.4   // up the outside, clear of the wing
+          : r.pursuitPhase === 'cut' || r.pursuitPhase === 'block'
+            ? playerX                        // across the nose, or ramming from in front
+            : playerX + r.laneBias;          // tailing on its flank
+        line = THREE.MathUtils.lerp(
+          line,
+          THREE.MathUtils.clamp(lane, -(ROAD_HALF_WIDTH - 1), ROAD_HALF_WIDTH - 1),
+          r.pursuitPhase === 'tail' ? 0.6 : 0.92
+        );
+      } else if (aggression > 0 && driving && Math.abs(r.s - playerS) < 9) {
+        // aggressive modes: nearby rivals abandon the line and hunt the player
         line = THREE.MathUtils.clamp(playerX, -(ROAD_HALF_WIDTH - 1), ROAD_HALF_WIDTH - 1);
       }
       r.x = THREE.MathUtils.damp(r.x, line, 1.2 + aggression * 1.6, dt);
 
       if (r.finishTime < 0 && r.s >= total) r.finishTime = raceTime;
       this.sync(r, elapsed);
+    }
+  }
+
+  /**
+   * Advance one unit's manoeuvre cycle and return its speed target. Phases
+   * chain tail → surge → cut → drop → tail, so a unit is regularly alongside
+   * or ahead of the player rather than permanently out of shot.
+   */
+  private pursue(
+    r: Rival, dt: number, gap: number, playerV: number, progression: number
+  ): number {
+    r.pursuitT -= dt;
+    // Whatever it was doing, a unit that ends up in front of the player turns
+    // on them — the cops ahead are as dangerous as the ones behind.
+    if (gap > 4 && gap < 45 && (r.pursuitPhase === 'tail' || r.pursuitPhase === 'drop')) {
+      r.pursuitPhase = 'block';
+      r.pursuitT = 6;
+    }
+    switch (r.pursuitPhase) {
+      case 'tail':
+        // close enough to make a move, and its turn has come round
+        if (r.pursuitT <= 0 && gap > -26) {
+          r.pursuitPhase = 'surge';
+          r.pursuitT = 5;
+          r.pursuitSide = r.x >= 0 ? 1 : -1; // commit to the side it's already on
+        }
+        break;
+      case 'surge':
+        // hold it until the nose is clear ahead, or the run simply fails
+        if (gap > 5 || r.pursuitT <= 0) {
+          r.pursuitPhase = 'cut';
+          r.pursuitT = 1.8;
+        }
+        break;
+      case 'cut':
+        // across the nose; if it made it in front, stay there and attack
+        if (r.pursuitT <= 0) {
+          r.pursuitPhase = gap > 0 ? 'block' : 'drop';
+          r.pursuitT = gap > 0 ? 6 : 2.2;
+        }
+        break;
+      case 'block':
+        // still waiting down the road: the attack clock doesn't run yet
+        if (gap > 45) {
+          r.pursuitT = 6;
+        } else if (gap < -4 || r.pursuitT <= 0) {
+          // player got past (join the chase) or it has held the door long enough
+          const passed = gap < -4;
+          r.pursuitPhase = passed ? 'tail' : 'drop';
+          r.pursuitT = passed ? 1.5 + Math.random() * 2 : 2.2;
+        }
+        break;
+      case 'drop':
+        if (r.pursuitT <= 0) {
+          r.pursuitPhase = 'tail';
+          r.pursuitT = 2 + Math.random() * 3;
+        }
+        break;
+    }
+
+    switch (r.pursuitPhase) {
+      case 'surge': return playerV + 9;    // run them down
+      case 'cut':   return playerV - 3.5;  // across the nose, on the brakes
+      case 'block':
+        // far down the road it crawls so the player arrives; in range it
+        // brake-checks in the player's path so the hit comes from the front,
+        // with a floor so the chase never grinds to walking pace
+        return gap > 45 ? BASE_SPEED * 0.5 : Math.max(playerV - 4, BASE_SPEED * 0.55);
+      case 'drop':  return playerV - 7;    // fall back for another run
+      default: {
+        let t = playerV + THREE.MathUtils.clamp((-3.5 - gap) * 0.7, -30, 10);
+        if (gap > -8) t += playerV > BASE_SPEED * 0.75 ? -1.2 : 2.5;
+        return Math.min(t, r.baseSpeed + 12 + progression);
+      }
     }
   }
 
@@ -276,5 +380,6 @@ export class RivalManager {
       r.mesh.rotation.z = r.rollA;
       r.mesh.position.y += Math.sin(Math.min(1, k) * Math.PI) * 1.1;
     }
+    syncCarGroundFx(r.mesh);
   }
 }

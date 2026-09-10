@@ -1,11 +1,13 @@
 import * as THREE from 'three';
-import { AssetLibrary } from './assets';
+import './presentation.css';
+import { AssetLibrary, disposeCarInstance } from './assets';
 import { AudioManager } from './audio';
 import { CARS } from './cars';
 import { districtIndexAt, TRACK_LENGTH_DEFAULT } from './constants';
 import { dailyMapIndex, dailySeed } from './daily';
-import { deposit, racePayout } from './economy';
+import { deposit, owned, racePayout } from './economy';
 import { Entities } from './entities';
+import { buildHorizon, buildReflectionSky, disposeHorizon, environmentTheme } from './environment';
 import {
   GhostData, GhostRecorder, ghostKey, ghostMesh, ghostPos, loadGhost, saveGhost
 } from './ghost';
@@ -19,18 +21,22 @@ import { activeColor } from './skins';
 import { applyUpgrades } from './upgrades';
 import { Rival } from './rivals';
 import { InputManager } from './input';
+import { setUnderglow } from './meshes';
 import { Player } from './player';
+import { createPostFX, PostFX } from './postfx';
+import { detectTier, QUALITY, QualityTier } from './quality';
 import { RivalManager } from './rivals';
 import { Scenery } from './scenery';
-import { buildSkyline } from './skyline';
 import { SmokePool } from './smoke';
 import { recordLocalRace } from './stats';
 import { checkReward, recordDay } from './streak';
-import { toonMat } from './toon';
+import { TrafficManager } from './traffic';
 import { Track } from './track';
 import { bakedPath, loadTrackPaths } from './trackPaths';
 import { UI } from './ui';
 import { Wallet } from './wallet';
+import { Build, workshopSpec } from './workshop';
+import { Showroom } from './showroom';
 import { rollWeather, WeatherSpec } from './weather';
 import { claimWeeklyPrize, weeklyMapIndex, weeklyModeIndex, weeklySeed } from './weekly';
 
@@ -58,18 +64,25 @@ export class Game {
   private camera: THREE.PerspectiveCamera;
   private clock = new THREE.Clock();
   // Adaptive render resolution — holds ~60fps on weak GPUs by trading pixels
-  // under load (horde draw-call spikes) and reclaiming them when there's slack.
+  // under load (draw-call spikes) and reclaiming them when there's slack.
   private dprCap = Math.min(window.devicePixelRatio, 2);
   private curDpr = Math.min(window.devicePixelRatio, 2);
   private frameEma = 1 / 60; // smoothed frame time (s)
-  private dprCooldown = 0;    // frames to wait between resolution changes
+  private dprCooldown = 1.5; // seconds to settle before a resolution change
+  private quality: QualityTier;
+  private postfx: PostFX | null = null;
   private hemi: THREE.HemisphereLight;
+  private sun: THREE.DirectionalLight;
+  private sunOffset = new THREE.Vector3(-35, 50, -30);
   private ground: THREE.Mesh;
-  private groundMat: THREE.MeshToonMaterial;
+  private groundMat: THREE.MeshStandardMaterial;
   private sky!: THREE.Group;
   private skyMat!: THREE.ShaderMaterial;
-  private skyline: THREE.Mesh | null = null;
+  private skyline: THREE.Group | null = null;
+  private sunDisc!: THREE.Mesh;
+  private sunGlow!: THREE.Mesh;
 
+  private traffic!: TrafficManager;
   private assets = new AssetLibrary();
   private audio = new AudioManager();
   private wallet = new Wallet();
@@ -90,10 +103,8 @@ export class Game {
   private playerTime = 0;
   private playerPlace = 1;
   private coins = 0;
-  private zombiesSquashed = 0;
-  private zombieCombo = 0;
-  private zombieScore = 0;
-  private lastSquashAt = -10;
+  // points that aren't coins, takedowns or style: drift payouts, heist loot
+  private bonusScore = 0;
   private shake = 0;
   private seedCounter: number;
   private trackLength: number;
@@ -103,16 +114,22 @@ export class Game {
   private mapIndex = 0;
   private modeIndex = 0;
   private takedowns = 0;
+  private trafficHits = 0;
+  // Impact cinematic: Burnout's insight was that the crash should be the best
+  // thing in the game, not the penalty box. Time dilates, the camera drops to
+  // the wreck, the frame whites out, then control comes straight back.
+  private cine = { t: 0, s: 0, flash: 0 };
+  private boostFx = 0;
   private busted = false;
   private lastDistrict = -1;
   private gun!: GunHud;
   private ammo = 0;
   private gunCooldown = 0;
   private ammoWarnAt = -10;
-  private latchedZombies = 0;
-  private latchMeshes: THREE.Object3D[] = [];
   // menu-family camera: which page is up, turntable angle, flyby distance
-  private uiScene: 'menu' | 'garage' | 'tour' = 'menu';
+  private uiScene: 'menu' | 'garage' | 'tour' | 'workshop' = 'menu';
+  private showroom: Showroom | null = null;
+  private workshopPreview: Build | null = null;
   private garageLiftPx = 0;
   private garageLiftAt = 0;   // viewport height garageLiftPx was measured for
   private viewOffset = 0;     // lens shift currently applied to the camera
@@ -134,7 +151,7 @@ export class Game {
   private daily = false;
   private preDaily = { seed: 0, map: 0, mode: 0, laps: 2 }; // restored afterwards
   private weekly = false;
-  private preWeekly = { seed: 0, map: 0, mode: 0, laps: 2 }; // restored afterwards
+  private preWeekly = { seed: 0, map: 0, mode: 0, laps: 2, len: TRACK_LENGTH_DEFAULT }; // restored afterwards
   private raceSeed = 0;           // seed this race was actually built from
   private ghostRec: GhostRecorder | null = null;
   private ghostData: GhostData | null = null;
@@ -143,7 +160,6 @@ export class Game {
   // --- new features ---
   private driftChain = 0;           // seconds of continuous drift
   private driftBestThisRace = 0;    // longest single chain this race
-  private bossKillsThisRace = 0;
   private weather: WeatherSpec | null = null;
   private rainOverlay: HTMLElement | null = null;
   private weatherLabel: HTMLElement | null = null;
@@ -155,7 +171,7 @@ export class Game {
     const qp = new URLSearchParams(location.search);
     this.trackLength = THREE.MathUtils.clamp(Math.floor(numberParam(qp, 'len', TRACK_LENGTH_DEFAULT)), 600, 5000);
     this.seedCounter = Math.floor(numberParam(qp, 'seed', Math.floor(Math.random() * 1e9)));
-    this.laps = THREE.MathUtils.clamp(Math.floor(numberParam(qp, 'laps', 2)), 1, 4);
+    this.laps = THREE.MathUtils.clamp(Math.floor(numberParam(qp, 'laps', 2)), 1, 6);
     const car = Number(qp.get('car') ?? localStorage.getItem('minirush.car'));
     this.carIndex = THREE.MathUtils.clamp(Math.floor(car) || 0, 0, CARS.length - 1);
     // ?map= takes a city id ("beijing") or an index; falls back to the saved pick
@@ -172,33 +188,59 @@ export class Game {
     this.modeIndex = modeById >= 0
       ? modeById
       : THREE.MathUtils.clamp(Math.floor(Number(modeQ)) || 0, 0, MODES.length - 1);
+    // A restored class mode has to agree with the restored car, or the player
+    // boots onto a grid they can't start: move them onto an owned car of that
+    // class, and give the mode up entirely if that shelf is still empty.
+    const needClass = MODES[this.modeIndex].requiresClass;
+    if (needClass && CARS[this.carIndex].class !== needClass) {
+      const have = owned();
+      const fit = CARS.findIndex((c) => c.class === needClass
+        && (c.price === 0 || have.has(c.id)));
+      if (fit >= 0) this.carIndex = fit;
+      else this.modeIndex = 0; // nothing on the shelf — back to Grand Prix
+    }
 
-    this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+    this.quality = detectTier(qp);
+    const q = QUALITY[this.quality];
+    this.renderer = new THREE.WebGLRenderer({ antialias: q.antialias, powerPreference: 'high-performance' });
+    this.renderer.shadowMap.enabled = q.shadows;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.08;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     container.appendChild(this.renderer.domElement);
 
     const map = MAPS[this.mapIndex];
-    const d0 = map.districts[0];
+    // The map's own palette seats the world before the first race dresses it.
+    const theme = environmentTheme(map);
     this.camera = new THREE.PerspectiveCamera(68, window.innerWidth / window.innerHeight, 0.1, 300);
-    this.scene.background = new THREE.Color(d0.skyTop);
-    this.scene.fog = new THREE.Fog(d0.fog, map.fogNear, map.fogFar);
+    this.scene.background = new THREE.Color(theme.sky);
+    this.scene.fog = new THREE.Fog(theme.fog, map.fogNear, map.fogFar);
     this.sky = this.buildSky();
     this.scene.add(this.sky);
 
-    this.hemi = new THREE.HemisphereLight(d0.hemi, 0x30364a, 1.15);
+    this.hemi = new THREE.HemisphereLight(0xe9f3f5, 0x30364a, 1.15);
     this.scene.add(this.hemi);
-    this.groundMat = toonMat(d0.ground);
-    const sun = new THREE.DirectionalLight(0xfff4e0, 1.5);
-    sun.position.set(8, 18, 6);
-    this.scene.add(sun);
+    this.groundMat = new THREE.MeshStandardMaterial({ color: theme.ground, roughness: 1 });
+    this.sun = new THREE.DirectionalLight(0xfff4e0, 1.65);
+    this.sun.position.set(-30, 45, -25);
+    this.sun.castShadow = q.shadows;
+    this.sun.shadow.mapSize.setScalar(q.shadowMapSize || 1024);
+    this.sun.shadow.radius = 3.5;
+    Object.assign(this.sun.shadow.camera, { left: -42, right: 42, top: 42, bottom: -42, near: 1, far: 145 });
+    this.sun.shadow.normalBias = 0.08;
+    this.sun.shadow.bias = -0.00015;
+    this.scene.add(this.sun, this.sun.target);
 
     this.ground = new THREE.Mesh(new THREE.PlaneGeometry(900, 900), this.groundMat);
     this.ground.rotation.x = -Math.PI / 2;
-    this.ground.position.y = -0.05;
+    this.ground.position.y = -0.24;
+    this.ground.receiveShadow = true;
     this.scene.add(this.ground);
 
     this.smoke = new SmokePool(this.scene);
+    this.postfx = createPostFX(this.renderer, this.scene, this.camera, this.quality);
 
     this.ui = new UI(this.wallet, this.audio);
     this.ui.setLaps(this.laps);
@@ -209,6 +251,7 @@ export class Game {
     this.ui.onRetrySame = () => this.retrySameTrack();
     this.ui.onLaps = (n) => (this.laps = n);
     this.ui.onCar = (i) => this.setCar(i);
+    this.ui.onWorkshopPreview = build => { this.workshopPreview = build; };
     this.ui.onMap = (i) => this.setMap(i);
     this.ui.onMode = (i) => this.setMode(i);
     this.ui.onPage = (p) => {
@@ -269,11 +312,11 @@ export class Game {
   /** Gradient sky dome + retro sun disc; follows the camera on x/z. */
   private buildSky(): THREE.Group {
     const g = new THREE.Group();
-    const d0 = MAPS[this.mapIndex].districts[0];
+    const theme = environmentTheme(MAPS[this.mapIndex]);
     this.skyMat = new THREE.ShaderMaterial({
       uniforms: {
-        top: { value: new THREE.Color(d0.skyTop) },
-        bottom: { value: new THREE.Color(d0.skyBottom) }
+        top: { value: new THREE.Color(theme.sky) },
+        bottom: { value: new THREE.Color(theme.horizon) }
       },
       vertexShader: `
         varying vec3 vPos;
@@ -286,8 +329,9 @@ export class Game {
         void main() {
           float h = clamp(normalize(vPos).y * 1.6 + 0.12, 0.0, 1.0);
           vec3 c = mix(bottom, top, pow(h, 0.75));
-          // uniforms arrive linear; renderer expects sRGB from raw shaders
-          gl_FragColor = vec4(pow(c, vec3(1.0 / 2.2)), 1.0);
+          gl_FragColor = vec4(c, 1.0);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
         }`,
       side: THREE.BackSide,
       depthWrite: false
@@ -298,39 +342,45 @@ export class Game {
     g.add(dome);
 
     const glow = new THREE.Mesh(
-      new THREE.CircleGeometry(32, 24),
+      new THREE.CircleGeometry(13, 32),
       new THREE.MeshBasicMaterial({
-        color: 0xffc46a, transparent: true, opacity: 0.35, depthWrite: false, fog: false
+        color: 0xffdab1, transparent: true, opacity: 0.12, depthWrite: false, fog: false
       })
     );
-    glow.position.set(55, 80, -180).multiplyScalar(1.05);
+    glow.position.set(-120, 105, -150).multiplyScalar(1.01);
     glow.lookAt(0, 5, 0);
     glow.renderOrder = -2;
     g.add(glow);
+    this.sunGlow = glow;
 
     const sun = new THREE.Mesh(
-      new THREE.CircleGeometry(24, 24),
+      new THREE.CircleGeometry(7, 32),
       new THREE.MeshBasicMaterial({ color: 0xffe9a3, depthWrite: false, fog: false })
     );
-    sun.position.set(55, 80, -180);
+    sun.position.set(-120, 105, -150);
     sun.lookAt(0, 5, 0);
     sun.renderOrder = -1;
     g.add(sun);
+    this.sunDisc = sun;
     return g;
   }
 
-  // keep the sun hanging over the road ahead, outrun-style
-  private syncSky(cx: number, cz: number, theta: number, dt: number): void {
+  // A fixed compass direction makes sunlight, shadows and skyline agree in turns.
+  private syncSky(cx: number, cz: number): void {
     this.sky.position.set(cx, 0, cz);
-    let d = -theta - this.sky.rotation.y;
-    d = Math.atan2(Math.sin(d), Math.cos(d)); // shortest way around
-    this.sky.rotation.y += d * Math.min(1, dt * 1.5);
+    const focus = this.track.frame(this.state === 'menu' && this.uiScene === 'tour'
+      ? this.tourS + 15 : this.player.s + 14);
+    // Snap the shadow camera to texels to avoid shimmering as the car moves.
+    const x = Math.round(focus.x * 12) / 12, z = Math.round(focus.z * 12) / 12;
+    this.sun.position.set(x + this.sunOffset.x, this.sunOffset.y, z + this.sunOffset.z);
+    this.sun.target.position.set(x, 0, z);
   }
 
   private onResize(): void {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.postfx?.setSize(window.innerWidth, window.innerHeight, this.curDpr);
     this.garageLiftAt = 0; // re-measure the garage's clear band at the new size
   }
 
@@ -398,9 +448,12 @@ export class Game {
     if (this.weekly) return;
     this.weekly = true;
     this.preWeekly = {
-      seed: this.seedCounter, map: this.mapIndex, mode: this.modeIndex, laps: this.laps
+      seed: this.seedCounter, map: this.mapIndex, mode: this.modeIndex, laps: this.laps,
+      len: this.trackLength
     };
     this.seedCounter = weeklySeed();
+    // everyone races the same circuit: a ?len= link must not shorten the cup
+    this.trackLength = TRACK_LENGTH_DEFAULT;
     this.mapIndex = weeklyMapIndex(MAPS.length);
     this.modeIndex = weeklyModeIndex(MODES.length);
     this.laps = MODES[this.modeIndex].lapsLocked ?? 2;
@@ -418,6 +471,7 @@ export class Game {
     this.mapIndex = this.preWeekly.map;
     this.modeIndex = this.preWeekly.mode;
     this.laps = this.preWeekly.laps;
+    this.trackLength = this.preWeekly.len;
     this.ui.setMap(this.mapIndex);
     this.ui.setMode(this.modeIndex);
     if (this.state === 'menu') {
@@ -466,20 +520,62 @@ export class Game {
     // horizon panorama ring (rides in the sky group so it follows the camera)
     if (this.skyline) {
       this.sky.remove(this.skyline);
+      disposeHorizon(this.skyline);
       this.skyline = null;
     }
-    if (map.skyline) {
-      this.skyline = buildSkyline(map.skyline, map.districts.map((d) => d.skyBottom));
-      this.sky.add(this.skyline);
+    const theme = environmentTheme(map);
+    this.scene.environment?.dispose();
+    this.scene.environment = buildReflectionSky(theme);
+    this.scene.environmentIntensity = theme.night ? 1.0 : 0.85;
+    this.skyline = buildHorizon(theme);
+    this.sky.add(this.skyline);
+    (this.skyMat.uniforms.top.value as THREE.Color).setHex(theme.sky);
+    (this.skyMat.uniforms.bottom.value as THREE.Color).setHex(theme.horizon);
+    (this.scene.background as THREE.Color).setHex(theme.sky);
+    (this.scene.fog as THREE.Fog).color.setHex(theme.fog);
+    this.groundMat.color.setHex(theme.ground);
+    this.hemi.color.setHex(theme.night ? 0xa6c6df : 0xe9f3f5);
+    this.hemi.groundColor.setHex(theme.night ? 0x394253 : 0x6d6e62);
+    this.hemi.intensity = 1.65;
+    this.sun.color.setHex(theme.night ? 0xaacbea : 0xffe2b5);
+    this.sun.intensity = theme.night ? 1.5 : 2.7;
+    if (map.id === 'lagos') {
+      this.hemi.intensity = 1.45;
+      this.hemi.groundColor.setHex(0x687365);
+      this.sun.color.setHex(0xffefd3);
+      this.sun.intensity = 2.35;
     }
-    this.scenery = new Scenery(this.scene, this.track, this.assets, seed, map);
-    this.entities = new Entities(
-      this.scene, this.track, this.assets, seed, map, mode.zombieMul, !!mode.latchers
-    );
+    this.sunDisc.scale.setScalar(theme.night ? 0.65 : 1);
+    (this.sunDisc.material as THREE.MeshBasicMaterial).color.setHex(theme.night ? 0xdceaff : 0xffecc8);
+    this.sunGlow.visible = !theme.night;
+    this.postfx?.setMood(theme.night);
+    setUnderglow(theme.night ? 1 : 0.2);
+    this.scenery = new Scenery(this.scene, this.track, seed, map);
+    this.sunOffset.set(-35, 50, -30);
+    if (theme.coast) {
+      const f = this.track.frame(65), side = this.scenery.group.userData.shoreSide as number;
+      this.sunOffset.set(f.nx * side * 50 + Math.sin(f.theta) * 25, 48,
+        f.nz * side * 50 - Math.cos(f.theta) * 25);
+    }
+    this.sunDisc.position.copy(this.sunOffset).normalize().multiplyScalar(215);
+    this.sunDisc.lookAt(0, 0, 0);
+    this.sunGlow.position.copy(this.sunDisc.position).multiplyScalar(1.01);
+    this.sunGlow.lookAt(0, 0, 0);
+    this.entities = new Entities(this.scene, this.track, seed);
     this.player = new Player(this.scene, this.assets, this.track, this.carSpec(this.carIndex));
+    // Civilian traffic: the substrate near-misses and takedowns need, and the
+    // thing that makes speed legible. Denser on the wide-open layouts.
+    this.traffic = new TrafficManager(
+      this.scene, this.assets, this.track, seed, 10, CARS[this.carIndex].model, map.id
+    );
+    // A class mode fields the rest of that shelf; everything else races the
+    // civilian traffic shells.
+    const rivalPool = mode.requiresClass
+      ? CARS.filter((c) => c.class === mode.requiresClass && c.id !== CARS[this.carIndex].id)
+      : [];
     this.rivals = new RivalManager(
       this.scene, this.assets, this.track, CARS[this.carIndex].model,
-      mode.rivals, mode.pursuit
+      mode.rivals, mode.pursuit, rivalPool
     );
     // weather grip modifier applies to the whole field, so bad weather slows
     // the player and the AI alike (no rubber-band advantage in the rain)
@@ -489,7 +585,7 @@ export class Game {
     }
     this.resetGrid();
     this.ui.setRacers(mode.rivals + 1);
-    this.ui.drawTrackMap(this.track.outline(), map.districts.map((d) => d.skyBottom));
+    this.ui.drawTrackMap(this.track.outline(), map.districts.map((d) => d.accent));
     if (this.state === 'boot') {
       // seat the menu camera immediately so boot doesn't swoop in from origin
       const b = this.track.frame(-6 - CAMS[0].back);
@@ -501,6 +597,7 @@ export class Game {
 
   /** The car spec to race/park: upgrades applied, active paint-job color swapped in. */
   private carSpec(i: number) {
+    if (CARS[i].model === 300) return workshopSpec(CARS[i]);
     return { ...applyUpgrades(CARS[i]), color: activeColor(CARS[i].id) };
   }
 
@@ -511,6 +608,7 @@ export class Game {
     localStorage.setItem('minirush.car', String(i));
     if (this.state === 'menu') {
       this.scene.remove(this.player.mesh);
+      disposeCarInstance(this.player.mesh);
       this.player = new Player(this.scene, this.assets, this.track, this.carSpec(i));
       this.player.reset({ s: -6, x: -2 });
     }
@@ -541,8 +639,13 @@ export class Game {
   private disposeRace(): void {
     this.scenery.dispose(this.scene);
     this.entities.dispose(this.scene);
+    this.traffic?.dispose(this.scene);
     this.scene.remove(this.player.mesh);
-    for (const r of this.rivals.rivals) this.scene.remove(r.mesh);
+    disposeCarInstance(this.player.mesh);
+    for (const r of this.rivals.rivals) {
+      this.scene.remove(r.mesh);
+      disposeCarInstance(r.mesh);
+    }
     if (this.ghostObj) {
       this.scene.remove(this.ghostObj);
       this.ghostObj = null;
@@ -550,10 +653,17 @@ export class Game {
   }
 
   private resetGrid(): void {
-    // Cop Chase: you get a head start, the law lines up in your mirrors
+    this.traffic?.reset(0);
+    // Police Chase: you get a head start. The first units line up in your
+    // mirrors, staggered back across both lanes; the rest lie in wait down
+    // the road and attack as you arrive.
     if (MODES[this.modeIndex].pursuit) {
+      const chasers = 3;
       this.player.reset({ s: 0, x: -2 });
-      this.rivals.reset([{ s: -10, x: 2 }]);
+      this.rivals.reset(this.rivals.rivals.map((_, i) => i < chasers
+        ? { s: -10 - i * 6, x: i % 2 === 0 ? 2 : -2 }
+        : { s: 90 + (i - chasers) * 110, x: i % 2 === 0 ? -1.5 : 1.5 }
+      ));
       return;
     }
     // rows of two, player in the last slot so overtaking feels earned
@@ -582,30 +692,29 @@ export class Game {
     this.lastCount = -1;
     this.audio.play('ignition');
     this.audio.startEngine();
+    if (MODES[this.modeIndex].pursuit) this.audio.startSiren();
     void this.audio.playMusic(MAPS[this.mapIndex].music ?? 'race');
     this.raceTime = 0;
+    this.frameEma = 1 / 60;
+    this.dprCooldown = 1.5;
     this.playerTime = 0;
     this.coins = 0;
-    this.zombiesSquashed = 0;
-    this.zombieCombo = 0;
-    this.zombieScore = 0;
+    this.bonusScore = 0;
     this.takedowns = 0;
+    this.trafficHits = 0;
     this.busted = false;
-    this.lastSquashAt = -10;
     this.shake = 0;
     this.lastDistrict = -1;
     this.driftChain = 0;
     this.driftBestThisRace = 0;
-    this.bossKillsThisRace = 0;
     this.ui.showDrift(null);
     const mode = MODES[this.modeIndex];
     this.ammo = mode.guns ? 8 : 0;
     this.gunCooldown = 0;
     this.ammoWarnAt = -10;
-    this.clearLatchedZombies();
     this.gun.setVisible(!!mode.guns);
+    this.player.setShooter(!!mode.guns);
     this.gun.setAmmo(this.ammo);
-    this.player.infected = false;
     this.player.voltageMode = !!mode.voltage;
     this.player.voltageLevel = 100;
 
@@ -670,18 +779,19 @@ export class Game {
     this.paused = !this.paused;
     if (this.paused) {
       this.audio.stopEngine();
+      this.audio.stopSiren();
       this.ui.showPause();
     } else {
       this.ui.hidePause();
       this.audio.startEngine();
+      if (MODES[this.modeIndex].pursuit) this.audio.startSiren();
     }
   }
 
   /**
-   * Hitscan straight up the current lane — the first thing inside the
-   * corridor eats the bullet. Zombies splat into the combo chain; in Gun Run
-   * a rival takes a tire shot and rolls; in Cop Chase the cruiser is
-   * indestructible but gets knocked off your bumper.
+   * Hitscan straight up the current lane — the first rival inside the
+   * corridor eats the bullet and takes a tire shot. A pursuit mode with guns
+   * fires rearward and knocks the cruiser off your bumper instead.
    */
   private shoot(): void {
     const p = this.player;
@@ -700,18 +810,11 @@ export class Game {
     this.ammo--;
     this.gunCooldown = 0.24;
     this.gun.recoil();
+    this.player.shooterRecoil();
     this.gun.setAmmo(this.ammo);
     this.audio.play('shot');
     if (navigator.vibrate) navigator.vibrate(15);
 
-    if (MODES[this.modeIndex].latchers && this.latchedZombies > 0) {
-      this.knockOffLatched(1);
-      this.ui.popText('SHAKEN OFF!', '#a3ff2e');
-      this.style.stoke(0.18);
-      return;
-    }
-
-    const elapsed = this.clock.elapsedTime;
     const RANGE = 48;
     // Cop Chase fires out the REAR window — that's where the law lives
     const rear = !!MODES[this.modeIndex].pursuit;
@@ -725,24 +828,6 @@ export class Game {
         hitS = r.s;
         targetRival = r;
       }
-    }
-
-    // anything shambling in front of the car soaks it up first (forward fire)
-    const ws = this.track.wrap(p.s);
-    const zHit = rear
-      ? null
-      : this.entities.tryShoot(ws + 2, ws + (hitS - p.s), p.x, elapsed);
-    if (zHit) {
-      if (elapsed - this.lastSquashAt > 4) this.zombieCombo = 0;
-      this.lastSquashAt = elapsed;
-      this.zombieCombo++;
-      this.zombieScore += 15 * this.zombieCombo;
-      this.zombiesSquashed++;
-      this.audio.play('squish');
-      this.ui.popText(`SPLAT x${this.zombieCombo}`, '#7fae5a');
-      const f = this.track.frame(zHit.s);
-      this.smoke.spawn(f.x + f.nx * zHit.x, 0.7, f.z + f.nz * zHit.x, 0x7fae5a, 0.6);
-      return;
     }
 
     if (targetRival) {
@@ -780,13 +865,14 @@ export class Game {
     if (done <= this.lapsDone) return;
     this.lapsDone = done;
     if (done > 0 && done < this.raceLaps) {
-      this.ui.popText(`LAP ${done + 1}/${this.raceLaps}`, '#fcff52');
+      this.ui.popText(done === this.raceLaps - 1 ? 'FINAL LAP' : `LAP ${done + 1}/${this.raceLaps}`, '#fcff52');
       this.audio.play('go');
-      this.entities.beginLap(); // fresh zombies and pickups every lap
+      this.entities.beginLap(); // fresh pickups every lap
     }
   }
 
   private finishRace(): void {
+    if (this.state === 'finished') return;
     this.state = 'finished';
     this.finishT = 0;
     this.playerTime = this.raceTime;
@@ -800,12 +886,18 @@ export class Game {
     if (navigator.vibrate) navigator.vibrate([40, 60, 120]);
     this.ui.endTutorial();
     this.audio.stopEngine();
+    this.audio.stopSiren();
+    if (!this.busted) {
+      this.cine.t = 0;
+      this.cine.flash = 0;
+      this.ui.showFinishMoment(this.playerPlace, this.playerTime);
+    }
     void this.audio.playMusic('menu');
 
     // pay out any remaining drift chain
     if (this.driftChain > 0.5) {
       const driftPts = Math.floor(this.driftChain * 40);
-      this.zombieScore += driftPts;
+      this.bonusScore += driftPts;
       this.ui.popText(`DRIFT ${this.driftChain.toFixed(1)}s +${driftPts}`, '#ffb84a');
     }
     this.driftChain = 0;
@@ -822,7 +914,6 @@ export class Game {
     const payout = racePayout({
       place: this.playerPlace,
       field: this.rivals.rivals.length + 1,
-      zombies: this.zombiesSquashed,
       laps: this.raceLaps
     });
     this.coins += payout;
@@ -833,12 +924,10 @@ export class Game {
     recordLocalRace({
       place: this.playerPlace,
       score: this.score(),
-      zombies: this.zombiesSquashed,
       coins: this.coins,
       modeId: MODES[this.modeIndex].id,
       mapId: MAPS[this.mapIndex].id,
-      driftBest: this.driftBestThisRace,
-      bossKills: this.bossKillsThisRace
+      driftBest: this.driftBestThisRace
     });
 
     // Daily streak
@@ -892,7 +981,7 @@ export class Game {
 
   private score(): number {
     return Math.round(
-      this.zombieScore + this.coins * 10 + this.takedowns * 150 + this.style.score +
+      this.bonusScore + this.coins * 10 + this.takedowns * 150 + this.style.score +
       placeBonus(this.playerPlace, this.rivals.rivals.length + 1) +
       Math.max(0, ((this.raceLaps * this.track.length) / 18 - this.playerTime) * 4)
     );
@@ -906,31 +995,113 @@ export class Game {
    * cap when there's headroom. A cooldown guards against resolution oscillation.
    */
   private adaptResolution(dt: number): void {
-    if (this.state !== 'racing') return;
-    this.frameEma += (dt - this.frameEma) * 0.1;
-    if (this.dprCooldown > 0) { this.dprCooldown--; return; }
+    if (this.state !== 'racing' || this.paused) return;
+    this.frameEma += (dt - this.frameEma) * (1 - Math.exp(-6 * dt));
+    this.dprCooldown = Math.max(0, this.dprCooldown - dt);
+    if (this.dprCooldown > 0) return;
     const fps = 1 / this.frameEma;
     const MIN = 0.75, STEP = 0.25;
+    // Out of resolution to give back: drop a quality tier instead. One-way — a
+    // device that could not hold the budget will not be asked to prove it twice.
+    if (fps < 45 && this.curDpr <= MIN && this.quality > 0) {
+      this.demoteQuality();
+      this.dprCooldown = 4;
+      return;
+    }
     let next = this.curDpr;
     if (fps < 50 && this.curDpr > MIN) next = Math.max(MIN, this.curDpr - STEP);
     else if (fps > 58 && this.curDpr < this.dprCap) next = Math.min(this.dprCap, this.curDpr + STEP);
     if (next !== this.curDpr) {
       this.curDpr = next;
       this.renderer.setPixelRatio(next);
-      this.dprCooldown = 90; // ~1.5s before the next change
+      this.postfx?.setSize(window.innerWidth, window.innerHeight, next);
+      this.dprCooldown = 1.5;
     }
   }
 
-  private tick(): void {
-    const dt = Math.min(this.clock.getDelta(), 0.05);
-    const elapsed = this.clock.elapsedTime;
-    this.adaptResolution(dt);
-    const dragPx = this.input.consumeDrag();
+  /**
+   * Step down one tier: a smaller shadow map, then no shadows at all. Toggling
+   * `shadowMap.enabled` changes how every lit material compiles, so the scene's
+   * materials are marked for a rebuild — a one-frame hitch, at most twice a session.
+   */
+  private demoteQuality(): void {
+    this.quality = (this.quality - 1) as QualityTier;
+    const q = QUALITY[this.quality];
+    // Rebuild rather than keep a composer built for a tier we no longer are —
+    // demoting off the desktop tier has to actually drop the bloom passes.
+    this.postfx?.dispose();
+    this.postfx = createPostFX(this.renderer, this.scene, this.camera, this.quality);
+    this.postfx?.setSize(window.innerWidth, window.innerHeight, this.curDpr);
+    this.postfx?.setMood(environmentTheme(MAPS[this.mapIndex]).night);
+    this.sun.castShadow = q.shadows;
+    this.renderer.shadowMap.enabled = q.shadows;
+    // A resized map has to be thrown away before three will allocate the new one.
+    this.sun.shadow.map?.dispose();
+    this.sun.shadow.map = null;
+    if (q.shadows) this.sun.shadow.mapSize.setScalar(q.shadowMapSize);
+    this.scene.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+        m.needsUpdate = true;
+      }
+    });
+  }
 
-    if (this.paused) {
-      this.renderer.render(this.scene, this.camera);
+  /**
+   * Every frame goes through here. On tiers 1-2 that means the composer (ACES +
+   * grade + vignette, plus bloom on desktop); tier 0 renders straight to the
+   * canvas, where the renderer's own tone mapping still applies.
+   */
+  renderFrame(forceWorld = false): void {
+    if (!forceWorld && this.state === 'menu' && this.uiScene !== 'tour') {
+      this.showroom ??= new Showroom(this.assets);
+      const spec = this.workshopPreview ? workshopSpec(CARS.find(c => c.model === 300)!, this.workshopPreview) : this.carSpec(this.carIndex);
+      this.showroom.setCar(spec);
+      this.showroom.render(this.renderer, this.uiScene === 'workshop', this.uiScene === 'garage');
       return;
     }
+    if (this.postfx) this.postfx.composer.render();
+    else this.renderer.render(this.scene, this.camera);
+  }
+
+  /** Kick off an impact cinematic centred on a point of the lap. */
+  private cinematic(s: number, label: string): void {
+    this.cine.t = 0.85;
+    this.cine.s = s;
+    this.cine.flash = 1;
+    this.shake = Math.max(this.shake, 1.6);
+    this.ui.popText(label, '#ff8a3d');
+    this.audio.play('crash');
+    if (navigator.vibrate) navigator.vibrate([50, 40, 110]);
+  }
+
+  private tick(): void {
+    const frameTime = this.clock.getDelta();
+    const real = Math.min(frameTime, 0.05);
+    const elapsed = this.clock.elapsedTime;
+    const dragPx = this.input.consumeDrag();
+    if (this.paused) {
+      this.renderFrame();
+      return;
+    }
+    // The showroom renders its own scene. Do not simulate the hidden race
+    // while browsing the home screen or customs workshop.
+    if (this.state === 'menu' && this.uiScene !== 'tour') {
+      this.renderFrame();
+      return;
+    }
+    // Bullet time: the world slows, the clock the cinematic runs on does not.
+    if (this.cine.t > 0) this.cine.t -= real;
+    const dilation = this.state === 'finished' && !this.busted ? 0.35 : this.cine.t > 0 ? 0.3 : 1;
+    const dt = real * dilation;
+    let trafficUpdated = false;
+    this.cine.flash = Math.max(0, this.cine.flash - real * 5.5);
+    // Boost drama ramps in fast and falls away slowly, so the release breathes.
+    const wanted = this.player.nitroActive ? 1 : 0;
+    this.boostFx += (wanted - this.boostFx) * Math.min(1, real * (wanted ? 9 : 3.5));
+    this.postfx?.setDrama(this.boostFx, this.cine.flash);
+    this.adaptResolution(Math.min(frameTime, 0.25));
 
     switch (this.state) {
       case 'menu':
@@ -968,19 +1139,24 @@ export class Game {
           dt, elapsed, dragPx, this.input.keySteer, true,
           this.input.braking, this.input.gas
         );
-        if (this.latchedZombies > 0) {
-          this.player.v *= Math.exp(-this.latchedZombies * 0.16 * dt);
-        }
         // engine pitch rides the speedo; nitro shoves it into the red
         this.audio.engine(
           0.55 + (this.player.v / 55) * (this.player.nitroActive ? 1.15 : 0.95),
           0.1 + Math.min(0.16, this.player.v / 300)
         );
+        // siren rides the nearest unit's distance — the chase you can hear
+        // before you can see it
+        if (MODES[this.modeIndex].pursuit) {
+          let nearest = Infinity;
+          for (const r of this.rivals.rivals) {
+            nearest = Math.min(nearest, Math.abs(r.s - this.player.s));
+          }
+          this.audio.siren(Number.isFinite(nearest) ? 1 - Math.min(1, nearest / 60) : 0);
+        }
         this.handleWall(elapsed);
         this.rivals.update(
           dt, elapsed, this.raceTime, this.player.s, true,
-          this.player.x, MODES[this.modeIndex].aggression, this.player.v,
-          this.entities
+          this.player.x, MODES[this.modeIndex].aggression, this.player.v
         );
 
         // Slipstream drafting: check if player is directly behind a rival inside draft cone
@@ -1026,6 +1202,8 @@ export class Game {
         }
 
         this.simulateContacts(dt, elapsed);
+        this.traffic.update(dt, this.player.s, this.track.length, this.player.v);
+        trafficUpdated = true;
         this.updateStyle(dt, elapsed);
         this.updateGhost(dt);
         this.emitSmoke(dt, elapsed);
@@ -1033,7 +1211,7 @@ export class Game {
         const gunMode = MODES[this.modeIndex];
         if (gunMode.guns) {
           this.gunCooldown = Math.max(0, this.gunCooldown - dt);
-          if (gunMode.pursuit && this.ammo < 8) {
+          if (gunMode.guns && gunMode.pursuit && this.ammo < 8) {
             // the chase reloads for you — slowly; Gun Run lives off crates
             const before = Math.floor(this.ammo);
             this.ammo = Math.min(8, this.ammo + dt * 0.4);
@@ -1047,16 +1225,15 @@ export class Game {
       }
 
       case 'finished': {
-        this.raceTime += dt;
-        this.finishT += dt;
+        this.finishT += real;
         this.player.update(dt, elapsed, 0, 0, false);
         this.rivals.update(dt, elapsed, this.raceTime, this.player.s, true);
-        if (this.finishT > 2.0) {
+        if (this.finishT > (this.busted ? 2 : 3.2)) {
           this.state = 'menu';
           this.ui.showResults(
-            this.playerPlace, this.playerTime, this.zombiesSquashed, this.coins,
+            this.playerPlace, this.playerTime, this.coins,
             this.score(), this.raceLaps, CARS[this.carIndex].name, this.busted,
-            this.style.score, this.daily, this.weekly
+            this.style.score, this.daily, this.weekly, this.takedowns
           );
           // rebuild behind the results overlay so the menu previews the next circuit
           this.disposeRace();
@@ -1069,15 +1246,16 @@ export class Game {
     if (this.state !== 'boot') {
       // the world streams in around the camera's subject: the tour flyby
       // point while the World Tour page is up, the player otherwise
-      const focus = this.state === 'menu' && this.uiScene === 'tour'
-        ? this.track.wrap(this.tourS)
-        : this.track.wrap(this.player.s);
+      const distance = this.state === 'menu' && this.uiScene === 'tour'
+        ? this.tourS : this.player.s;
+      const focus = this.track.wrap(distance);
       this.smoke.update(dt);
       this.entities.update(dt, elapsed, focus);
+      if (!trafficUpdated) this.traffic.update(dt, distance, this.track.length);
       this.scenery.update(focus);
-      this.blendBiome(focus);
+      this.announceDistrict(focus);
       this.updateCamera(dt);
-      this.renderer.render(this.scene, this.camera);
+      this.renderFrame();
     }
   }
 
@@ -1126,15 +1304,10 @@ export class Game {
   private handleWall(elapsed: number): void {
     const p = this.player;
     if (p.wallHit === 2) {
-      this.knockOffLatched(this.latchedZombies);
       p.wreck();
       this.style.crash();
-      this.ui.popText('SLAMMED!', '#ff5252');
-      this.audio.play('crash');
-      this.shake = 1.7;
-      if (navigator.vibrate) navigator.vibrate(220);
+      this.cinematic(p.s, 'SLAMMED');
     } else if (p.wallHit === 1 && p.v > 14) {
-      this.knockOffLatched(1);
       p.v *= 0.93; // scraping the wall bleeds speed — get off it
       if (elapsed - this.lastWallGrindAt > 0.8) {
         this.lastWallGrindAt = elapsed;
@@ -1160,7 +1333,7 @@ export class Game {
     } else if (this.driftChain > 0.5) {
       // drift ended — pay out the chain
       const driftPts = Math.floor(this.driftChain * 40);
-      this.zombieScore += driftPts;
+      this.bonusScore += driftPts;
       this.ui.popText(`DRIFT ${this.driftChain.toFixed(1)}s +${driftPts}`, '#ffb84a');
       if (navigator.vibrate) navigator.vibrate(25);
       this.driftChain = 0;
@@ -1169,11 +1342,64 @@ export class Game {
       this.driftChain = 0;
       this.ui.showDrift(null);
     }
-    if (this.style.update(dt)) {
-      this.ui.popText(`STYLE ×${this.style.mult}`, '#ffb84a');
+    // A full style gauge pays out in speed, not just points — this is the loop.
+    const styled = this.style.update(dt);
+    if (styled.tanks) {
+      p.nitroTanks += styled.tanks;
+      this.ui.popText(styled.levelled
+        ? `STYLE ×${this.style.mult} · +NITRO` : '+NITRO', '#ffb84a');
       this.audio.play('combo');
       if (navigator.vibrate) navigator.vibrate(30);
     }
+    // Threading civilian traffic is the main way the gauge fills now: a clean
+    // pass inside the near-miss band pays, clipping one costs you the chain.
+    for (const car of this.traffic.cars) {
+      if (!car.mesh.visible || car.wrecked > 0) continue;
+      const gap = car.s - p.s;
+      const dx = Math.abs(car.x - p.x);
+      const overlapping = Math.abs(gap) < car.contactLength;
+      if (overlapping) {
+        car.closestPass = Math.min(car.closestPass, dx);
+        // Contact during cooldown and airborne passes cannot earn a clean pass.
+        if (dx < 1.55 || p.airborne || p.tumbleT > 0) car.nearMissed = true;
+      }
+      if (dx < 1.55 && overlapping && p.tumbleT <= 0 && !p.airborne && p.canBump) {
+        // Clipping traffic costs speed and the chain — it does not total the
+        // car. Only a genuinely fast closing hit does damage, or ploughing
+        // through a busy lane wrecks you before you can ever build a run.
+        const closing = p.v - car.v;
+        this.traffic.hit(car, closing > 24 ? 1 : 0.4);
+        this.trafficHits++;
+        const hardHit = closing > 24;
+        p.bump(Math.sign(p.x - car.x) || 1, hardHit ? 4 : 2.5, hardHit ? 0.72 : 0.88);
+        this.style.crash();
+        this.audio.play('bump');
+        this.shake = Math.max(this.shake, closing > 24 ? 1 : 0.55);
+        if (navigator.vibrate) navigator.vibrate(closing > 24 ? 60 : 25);
+        if (closing > 24) {
+          p.damage++;
+          p.lastHitAt = elapsed;
+          if (p.damage >= 3) {
+            p.wreck();
+            this.cinematic(p.s, 'WRECKED');
+          }
+        }
+        continue;
+      }
+      if (
+        !car.nearMissed && gap < -car.contactLength &&
+        Number.isFinite(car.closestPass)
+      ) {
+        car.nearMissed = true;
+        if (car.closestPass >= TrafficManager.NEAR_MISS_BAND.min && car.closestPass <= TrafficManager.NEAR_MISS_BAND.max &&
+          p.v > 24 && p.v > car.v && p.tumbleT <= 0 && !p.airborne) {
+          this.style.nearMiss();
+          this.ui.popText('NEAR MISS!', '#ffb84a');
+          if (navigator.vibrate) navigator.vibrate(12);
+        }
+      }
+    }
+
     const pursuit = !!MODES[this.modeIndex].pursuit;
     this.rivals.rivals.forEach((r, i) => {
       const gap = r.s - p.s;
@@ -1214,84 +1440,6 @@ export class Game {
     const ws = this.track.wrap(p.s);
     const mode = MODES[this.modeIndex];
 
-    // zombies under the wheels
-    const squashed = this.entities.trySquash(ws, p.x, elapsed);
-    if (squashed > 0) {
-      if (mode.latchers) {
-        this.addLatchedZombies(squashed);
-        p.v = Math.max(8, p.v - 2.2 * squashed);
-        this.audio.play('squish');
-        this.audio.play('bump', 0.55);
-        this.ui.popText(`CLINGERS +${squashed}`, '#a3ff2e');
-        if (navigator.vibrate) navigator.vibrate([20, 30, 20]);
-      } else {
-        if (elapsed - this.lastSquashAt > 4) this.zombieCombo = 0;
-        this.lastSquashAt = elapsed;
-        for (let i = 0; i < squashed; i++) {
-          this.zombieCombo++;
-          this.zombieScore += 15 * this.zombieCombo;
-        }
-        this.zombiesSquashed += squashed;
-        this.style.stoke(0.12 * squashed);
-        p.v = Math.max(10, p.v - 1.4 * squashed); // gore is not aerodynamic
-        this.audio.play(squashed >= 3 ? 'zombie_splat_multi' : 'squish');
-        this.ui.popText(`SPLAT x${this.zombieCombo}`, '#7fae5a');
-        if (navigator.vibrate) navigator.vibrate(squashed >= 3 ? [20, 15, 20] : 30);
-
-        if (mode.infected && p.infected && this.zombiesSquashed % 10 < squashed) {
-          p.infected = false;
-          this.ui.popText('VIRUS CURED! EMP SHOCKWAVE!', '#00ffcc');
-          this.audio.play('virus_cure');
-          for (const r of this.rivals.rivals) {
-            if (Math.abs(this.track.wrap(r.s) - this.track.wrap(p.s)) < 24) {
-              this.rivals.wreck(r);
-            }
-          }
-        }
-      }
-    }
-
-    // boss zombie: nitro drive-over is an instant kill, otherwise 3 hits
-    const boss = this.entities.trySquashBoss(ws, p.x, elapsed, p.nitroActive);
-    if (boss) {
-      if (boss.killed) {
-        this.zombieScore += 500;
-        this.coins += boss.coins;
-        this.bossKillsThisRace++;
-        this.zombiesSquashed++;
-        this.style.stoke(0.4);
-        this.shake = Math.max(this.shake, 1.6);
-        this.audio.play('crash');
-        this.audio.play('combo');
-        this.ui.popText('BOSS KILLED! +500', '#ff4a4a');
-        if (navigator.vibrate) navigator.vibrate([60, 40, 120]);
-      } else {
-        p.v = Math.max(9, p.v - 4); // brute shrugs you off
-        this.shake = Math.max(this.shake, 0.7);
-        this.audio.play('boss_roar');
-        this.ui.popText('BOSS HIT!', '#ff8a3d');
-        if (navigator.vibrate) navigator.vibrate(45);
-      }
-    }
-
-    const obstacles = this.entities.tryHitObstacle(ws, p.x);
-    if (obstacles > 0) {
-      const knocked = this.latchedZombies;
-      this.knockOffLatched(Math.max(1, knocked));
-      p.v *= knocked > 0 ? 0.72 : 0.58;
-      this.style.crash();
-      this.audio.play('crash');
-      this.audio.play('swoosh', 0.7);
-      this.shake = Math.max(this.shake, 1.0);
-      this.ui.popText(knocked > 0 ? 'SCRAPED CLEAN!' : 'BARRICADE!', knocked > 0 ? '#a3ff2e' : '#ff8a3d');
-      if (navigator.vibrate) navigator.vibrate(knocked > 0 ? [30, 30, 60] : 100);
-    }
-
-    // rivals plow through zombies too (no points for robots)
-    for (const r of this.rivals.rivals) {
-      this.entities.trySquash(this.track.wrap(r.s), r.x, elapsed);
-    }
-
     // rival-to-rival jostling: when two AI cars overlap, the slower one
     // gets shoved sideways. This makes the pack fight for position instead
     // of ghosting through each other.
@@ -1331,10 +1479,7 @@ export class Game {
           if (p.damage >= 3) {
             p.wreck();
             this.busted = true;
-            this.ui.popText('BUSTED!', '#ff5252');
-            this.audio.play('squish');
-            this.shake = 1.7;
-            if (navigator.vibrate) navigator.vibrate(240);
+            this.cinematic(p.s, 'BUSTED');
             this.finishRace();
           } else {
             this.ui.popText(`HEAT ${p.damage}/3 — SHAKE THEM!`, '#ff8a3d');
@@ -1346,20 +1491,14 @@ export class Game {
         }
         const dir = Math.sign(p.x - r.x) || 1;
         p.bump(dir);
-        this.knockOffLatched(1);
         r.v *= burnout ? 0.8 : 0.86;
         r.x -= dir * (burnout ? 2.0 : 1.2);
         this.lastBumpAt = elapsed;
         if (mode.heist && r === this.rivals.rivals[0]) {
-          this.zombieScore += 50;
+          this.bonusScore += 50;
           this.coins += 5;
           this.ui.popText('HEIST LOOT +$50!', '#00ffcc');
           this.audio.play('coin');
-        }
-        if (mode.infected && !p.infected) {
-          p.infected = true;
-          this.ui.popText('VIRUS INFECTED! SPLAT 10 TO CURE', '#ff5252');
-          this.audio.play('squish');
         }
         // Grand Prix wants clean racing — trading paint drops the style chain.
         // In Burnout contact IS the game; only TAKING a hit breaks it (below).
@@ -1378,15 +1517,14 @@ export class Game {
               this.takedowns++;
               this.style.stoke(0.5);
               if (mode.heist && r === this.rivals.rivals[0]) {
-                this.zombieScore += 1000;
+                this.bonusScore += 1000;
                 p.nitroTanks += 2;
                 this.ui.popText('HEIST BOSS TAKEDOWN! +1000 & 2x NITRO!', '#ffe93b');
               } else {
                 this.ui.popText(`TAKEDOWN! ${r.name} +150`, '#ff8a3d');
               }
               this.audio.play('combo');
-              this.shake = 1.1;
-              if (navigator.vibrate) navigator.vibrate([40, 40, 80]);
+              this.cinematic(r.s, `TAKEDOWN · ${r.name}`);
             }
           } else {
             p.damage++;
@@ -1394,10 +1532,7 @@ export class Game {
             this.style.crash();
             if (p.damage >= 3) {
               p.wreck();
-              this.ui.popText('WRECKED!', '#ff5252');
-              this.audio.play('squish');
-              this.shake = 1.7;
-              if (navigator.vibrate) navigator.vibrate(220);
+              this.cinematic(p.s, 'WRECKED');
             }
           }
         }
@@ -1428,75 +1563,6 @@ export class Game {
     }
   }
 
-  private addLatchedZombies(count: number): void {
-    for (let i = 0; i < count && this.latchedZombies < 5; i++) {
-      const marker = this.buildLatchMarker(this.latchedZombies);
-      this.player.mesh.add(marker);
-      this.latchMeshes.push(marker);
-      this.latchedZombies++;
-    }
-  }
-
-  private knockOffLatched(count: number): void {
-    for (let i = 0; i < count && this.latchMeshes.length > 0; i++) {
-      const obj = this.latchMeshes.pop()!;
-      obj.removeFromParent();
-      this.latchedZombies = Math.max(0, this.latchedZombies - 1);
-      const f = this.track.frame(this.player.s - 1);
-      this.smoke.spawn(
-        f.x + f.nx * (this.player.x + (Math.random() * 2 - 1) * 1.4),
-        0.8,
-        f.z + f.nz * this.player.x,
-        0x7fae5a,
-        0.55
-      );
-    }
-  }
-
-  private clearLatchedZombies(): void {
-    while (this.latchMeshes.length > 0) this.latchMeshes.pop()!.removeFromParent();
-    this.latchedZombies = 0;
-  }
-
-  private buildLatchMarker(slot: number): THREE.Group {
-    const g = new THREE.Group();
-    const zombie = this.assets.zombies[slot % this.assets.zombies.length];
-    if (zombie) {
-      const z = zombie.clone(true);
-      z.visible = true;
-      z.scale.multiplyScalar(0.52);
-      z.rotation.y = Math.PI;
-      g.add(z);
-    } else {
-      const green = toonMat(0x6fbf4a);
-      const dark = toonMat(0x23301f);
-      const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.52, 0.32), green);
-      body.position.y = 0.28;
-      g.add(body);
-      const head = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.3, 0.3), green);
-      head.position.y = 0.78;
-      g.add(head);
-      for (const x of [-0.32, 0.32]) {
-        const arm = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.42, 0.12), dark);
-        arm.position.set(x, 0.38, 0);
-        arm.rotation.z = x > 0 ? -0.45 : 0.45;
-        g.add(arm);
-      }
-    }
-    const spots = [
-      [-0.45, 1.16, -0.35],
-      [0.46, 1.12, -0.12],
-      [-0.2, 1.24, 0.32],
-      [0.22, 1.2, 0.48],
-      [0, 1.32, 0]
-    ];
-    const p = spots[slot % spots.length];
-    g.position.set(p[0], p[1], p[2]);
-    g.rotation.set(-0.28, slot * 0.9, (slot % 2 ? 1 : -1) * 0.18);
-    g.scale.setScalar(0.95);
-    return g;
-  }
-
   private updateHud(): void {
     const ahead = this.rivals.rivals.filter((r) => r.s > this.player.s).length;
     const total = this.raceLaps * this.track.length;
@@ -1505,7 +1571,6 @@ export class Game {
       this.rivals.rivals.length + 1,
       this.raceTime,
       this.coins,
-      this.zombiesSquashed,
       this.player.nitroTanks,
       this.player.nitroActive,
       this.player.v,
@@ -1520,22 +1585,18 @@ export class Game {
     );
   }
 
-  private blendBiome(s: number): void {
+  /**
+   * District identity lives in local geometry now, so crossing a boundary only
+   * announces itself. Recoloring the whole world here made asphalt, shadows and
+   * the horizon change mid-turn.
+   */
+  private announceDistrict(s: number): void {
     const di = districtIndexAt(s, this.track.length);
+    if (this.state !== 'racing' || di === this.lastDistrict) return;
     const b = MAPS[this.mapIndex].districts[di];
-    // announce mid-lap district crossings (0 coincides with the lap pop)
-    if (this.state === 'racing' && di !== this.lastDistrict) {
-      if (di > 0 && this.lastDistrict >= 0) this.ui.popText(b.label.toUpperCase(), '#fff');
-      this.lastDistrict = di;
-    }
-    const k = 0.02;
-    (this.skyMat.uniforms.top.value as THREE.Color).lerp(new THREE.Color(b.skyTop), k);
-    (this.skyMat.uniforms.bottom.value as THREE.Color).lerp(new THREE.Color(b.skyBottom), k);
-    (this.scene.background as THREE.Color).lerp(new THREE.Color(b.skyTop), k);
-    (this.scene.fog as THREE.Fog).color.lerp(new THREE.Color(b.fog), k);
-    this.groundMat.color.lerp(new THREE.Color(b.ground), k);
-    this.hemi.color.lerp(new THREE.Color(b.hemi), k);
-    this.scenery.tintRoad(new THREE.Color(b.road), k);
+    // 0 coincides with the lap pop, so it stays silent
+    if (di > 0 && this.lastDistrict >= 0) this.ui.popText(b.label.toUpperCase(), '#fff');
+    this.lastDistrict = di;
   }
 
   private updateCamera(dt: number): void {
@@ -1546,8 +1607,43 @@ export class Game {
     this.setViewLift(0); // racing frames the road centred, never lens-shifted
     const p = this.player;
 
+    if (this.state === 'finished' && !this.busted) {
+      // A trackside camera follows the real car just after the final crossing.
+      // The race result is already fixed; intermediate laps keep the chase view.
+      const progress = Math.min(1, this.finishT / 3.2);
+      const line = this.raceLaps * this.track.length;
+      const f = this.track.frame(line + 20 - progress * 8);
+      const car = this.track.frame(p.s);
+      this.camera.position.set(f.x + f.nx * (18 - progress * 7), 4.8, f.z + f.nz * (18 - progress * 7));
+      this.camera.lookAt(car.x + car.nx * p.x * 0.8, 1.8, car.z + car.nz * p.x * 0.8);
+      this.camera.fov = 58;
+      this.camera.updateProjectionMatrix();
+      this.ground.position.set(this.camera.position.x, this.ground.position.y, this.camera.position.z);
+      this.syncSky(this.camera.position.x, this.camera.position.z);
+      return;
+    }
+
+    if (this.cine.t > 0) {
+      // Low and close, off to the side, looking back into the impact.
+      const f = this.track.frame(this.cine.s);
+      const k = 1 - this.cine.t / 0.85; // pushes in over the shot
+      this.camera.position.set(
+        f.x + f.nx * 7.5 - Math.sin(f.theta) * (9 - k * 4),
+        1.5 + k * 0.8,
+        f.z + f.nz * 7.5 - Math.cos(f.theta) * (9 - k * 4)
+      );
+      this.camera.lookAt(f.x, 0.8, f.z);
+      this.camera.fov = THREE.MathUtils.lerp(48, 40, k);
+      this.camera.updateProjectionMatrix();
+      this.ground.position.set(this.camera.position.x, this.ground.position.y, this.camera.position.z);
+      this.syncSky(this.camera.position.x, this.camera.position.z);
+      return;
+    }
+
     // glide between camera modes rather than snapping
-    const m = CAMS[this.camMode];
+    const m = MAPS[this.mapIndex].id === 'lagos' && this.camMode === 0
+      ? { back: 7.2, h: 3.7, ahead: 15, fov: 63 }
+      : CAMS[this.camMode];
     this.cam.back = THREE.MathUtils.damp(this.cam.back, m.back, 4, dt);
     this.cam.h = THREE.MathUtils.damp(this.cam.h, m.h, 4, dt);
     this.cam.ahead = THREE.MathUtils.damp(this.cam.ahead, m.ahead, 4, dt);
@@ -1572,7 +1668,7 @@ export class Game {
     // keep the ground carpet and sky dome under/around the action
     this.ground.position.x = back.x;
     this.ground.position.z = back.z;
-    this.syncSky(cx, cz, back.theta, dt);
+    this.syncSky(cx, cz);
 
     // FOV: camera-mode base + speed stretch + nitro punch
     const targetFov = this.cam.fov + p.v * 0.12 + (p.nitroActive ? 9 : 0);
@@ -1603,7 +1699,6 @@ export class Game {
     let pos: THREE.Vector3;
     let look: THREE.Vector3;
     let fov: number;
-    let skyTheta: number;
 
     if (this.uiScene === 'garage') {
       const f = this.track.frame(p.s);
@@ -1617,7 +1712,6 @@ export class Game {
       );
       look = new THREE.Vector3(cx, 0.0, cz);
       fov = 52;
-      skyTheta = f.theta;
     } else if (this.uiScene === 'tour') {
       this.tourS += dt * 30;
       const b = this.track.frame(this.tourS - 9);
@@ -1625,7 +1719,6 @@ export class Game {
       pos = new THREE.Vector3(b.x, 5.2, b.z);
       look = new THREE.Vector3(a.x, 1.2, a.z);
       fov = 60;
-      skyTheta = this.track.frame(this.tourS).theta;
     } else {
       // mirrors the race chase cam so the countdown handoff is seamless
       const lat = p.x * 0.55;
@@ -1634,7 +1727,6 @@ export class Game {
       pos = new THREE.Vector3(back.x + back.nx * lat, this.cam.h, back.z + back.nz * lat);
       look = new THREE.Vector3(ahead.x + ahead.nx * p.x * 0.3, 1.1, ahead.z + ahead.nz * p.x * 0.3);
       fov = this.cam.fov;
-      skyTheta = back.theta;
     }
 
     // Lens-shift the garage turntable up into the clear band. Offsetting the
@@ -1652,6 +1744,6 @@ export class Game {
     }
     this.ground.position.x = this.camera.position.x;
     this.ground.position.z = this.camera.position.z;
-    this.syncSky(this.camera.position.x, this.camera.position.z, skyTheta, dt);
+    this.syncSky(this.camera.position.x, this.camera.position.z);
   }
 }

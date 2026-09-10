@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { AssetLibrary } from './assets';
 import { CarSpec } from './cars';
+import { buildShooterArm, syncCarGroundFx } from './meshes';
 import {
   ACCEL, BASE_SPEED, BRAKE, BRAKE_SPEED, CENTRIFUGAL, COAST_DECEL, COAST_SPEED,
   END_SPEED_BONUS, NITRO_SPEED, NITRO_TIME, OFFROAD_SPEED, ROAD_HALF_WIDTH,
@@ -27,7 +28,6 @@ export class Player {
 
   draftGauge = 0;       // 0..1 slipstream charge
   draftingActive = false; // true when inside draft cone behind an AI
-  infected = false;     // Infected Juggernaut mode: caught virus from rival
   voltageLevel = 100;   // Voltage Surge mode: battery level (0..100)
   voltageMode = false;  // whether voltage mode is active
 
@@ -45,12 +45,35 @@ export class Player {
 
   private static readonly TUMBLE_TIME = 1.4;
 
+  /** Hand-out-the-window shooter, shown in gun modes only. */
+  private shooter: THREE.Group;
+  private shooterKick = 0;
+  private static readonly SHOOTER_REST_Z = -0.16;
+  private static readonly SHOOTER_KICK_TIME = 0.14;
+
   constructor(
     scene: THREE.Scene, assets: AssetLibrary, private track: Track,
     private spec: CarSpec
   ) {
     this.mesh = assets.cloneCar(spec);
     scene.add(this.mesh);
+    // Rides on the car rather than the camera, so it leans and rolls with the
+    // body. Offsets suit the normalized car bodies (max dimension 3.9).
+    this.shooter = buildShooterArm();
+    this.shooter.position.set(0.70, 0.54, Player.SHOOTER_REST_Z);
+    this.shooter.visible = false;
+    this.mesh.add(this.shooter);
+  }
+
+  /** Gun modes: the hand comes out of the window. */
+  setShooter(on: boolean): void {
+    this.shooter.visible = on;
+    if (!on) this.shooterKick = 0;
+  }
+
+  /** Kick the arm back on a shot. */
+  shooterRecoil(): void {
+    this.shooterKick = Player.SHOOTER_KICK_TIME;
   }
 
   reset(gridSlot: { s: number; x: number }): void {
@@ -71,7 +94,6 @@ export class Player {
     this.rollA = 0;
     this.draftGauge = 0;
     this.draftingActive = false;
-    this.infected = false;
     this.voltageLevel = 100;
     this.airH = 0;
     this.airV = 0;
@@ -138,10 +160,10 @@ export class Player {
     return true;
   }
 
-  bump(pushDir: number, shove = 6): void {
+  bump(pushDir: number, shove = 6, retainedSpeed = 0.72): void {
     if (this.bumpCooldown > 0) return;
     this.bumpCooldown = 0.5;
-    this.v *= 0.72;
+    this.v *= retainedSpeed;
     this.xVel += pushDir * shove;
   }
 
@@ -187,10 +209,6 @@ export class Player {
       if (this.offroad && !this.nitroActive && !this.airborne) target = Math.min(target, OFFROAD_SPEED);
       if (braking && !this.nitroActive) target = Math.min(target, BRAKE_SPEED);
       if (this.tumbleT > 0) target = 2;
-      if (this.infected && this.tumbleT <= 0) {
-        target *= 0.85; // infected speed decay
-        this.xVel += Math.sin(elapsed * 18) * 6 * dt; // steering jitter
-      }
       if (this.voltageMode && this.tumbleT <= 0) {
         this.nitroTanks = Math.max(1, this.nitroTanks); // nitro locked ready
         this.voltageLevel = Math.max(0, this.voltageLevel - dt * 12);
@@ -261,6 +279,7 @@ export class Player {
       THREE.MathUtils.clamp(this.xVel * 0.05 - dragMeters * 2.2, -0.45, 0.45),
       10, dt
     );
+    this.shooterKick = Math.max(0, this.shooterKick - dt);
     this.syncMesh(elapsed);
   }
 
@@ -277,5 +296,13 @@ export class Player {
       this.mesh.rotation.z = this.rollA;
       this.mesh.position.y += Math.sin(Math.min(1, k) * Math.PI) * 1.1;
     }
+    if (this.shooter.visible) {
+      const k = this.shooterKick > 0
+        ? Math.sin((this.shooterKick / Player.SHOOTER_KICK_TIME) * Math.PI)
+        : 0;
+      this.shooter.position.z = Player.SHOOTER_REST_Z - k * 0.17;
+      this.shooter.rotation.x = -k * 0.45;
+    }
+    syncCarGroundFx(this.mesh);
   }
 }

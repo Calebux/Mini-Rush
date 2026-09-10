@@ -50,7 +50,7 @@ hot-swaps them in; procedural fallbacks cover anything missing:
 
 | File | Source pack | Used for |
 |------|-------------|----------|
-| `sprites/gun.png` | Guns Asset Pack v1 (arcadeisland) | Doom-style weapon overlay in Gun Run / Cop Chase (transparent PNG, gun pointing up-forward) |
+| `sprites/gun.png` | Guns Asset Pack v1 (arcadeisland) | Not loaded any more: gun modes draw an aim reticle and show the weapon as a hand out of the car window. Kept on disk only. |
 | `sfx/gun_shot.(ogg|mp3|wav)` | Universal UI Soundpack or any SFX pack | firing |
 | `sfx/gun_empty.(ogg|mp3|wav)` | 〃 | dry trigger click |
 | `sfx/tire_blowout.(ogg|mp3|wav)` | 〃 | tire shot / cop knockback |
@@ -103,15 +103,18 @@ Looping tracks, loaded lazily when present (`.ogg`/`.mp3`/`.wav`):
 
 | Filename | Plays |
 |---|---|
-| `menu.(ogg\|mp3)` | menus, garage, results |
-| `race.(ogg\|mp3)` | countdown + race |
+| `menu.mp3` | Dirty Games — Hybridas; menus, garage, results |
+| `race.mp3` | Race Heat — Abbynoise; countdown + race, including Police Chase |
 | `offroad.(ogg\|mp3)` | nature/country races (Norway, Iceland, Canada, New Zealand, Finland) |
 
-Suggested source: **Cozy Tunes** (pizzadoggy.itch.io/cozy-tunes) — requires
-claiming with an itch.io account (100%-off sale), so grab it logged in, then
-drop two tracks here with those names. Until files exist, synthesized
-chiptune loops play instead (laid-back arpeggio in menus, driving beat in
-races) — real tracks take over automatically.
+The Uppbeat tracks and their supplied licence codes are recorded in
+`music/CREDITS.txt`, the repository `CREDITS.md`, and the in-game Driver Card.
+Missing music files retain the synthesized chiptune fallback.
+
+`sfx/police_siren.wav` is Mixkit's **Police siren US** (item 1643). It loops in
+Police Chase, gets louder as the nearest unit approaches, and stops on pause or
+race completion. The synthesized siren remains the fallback while loading or
+if the file is unavailable.
 
 For `offroad`, use any loop from **Free 25 Fantasy RPG Game Tracks Vol. 2**
 (alkakrab). Export/rename the chosen file to `public/assets/music/offroad.ogg`

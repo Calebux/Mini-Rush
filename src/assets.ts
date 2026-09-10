@@ -1,8 +1,22 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { CarSpec } from './cars';
-import { buildCar, CAR_COLORS, carGroundFx } from './meshes';
-import { toonify } from './toon';
+import { buildCar, CAR_COLORS, carGroundFx, polishCar } from './meshes';
+import { finishVehicle, toonify } from './toon';
+import { buildWorkshopCar } from './workshopCar';
+
+/** Release instance-owned resources, never the cached GLB or shared contact texture. */
+export function disposeCarInstance(root: THREE.Group): void {
+  const ownedRoot = root.userData.workshopCar ? root : root.getObjectByName('car-ground-fx');
+  if (!ownedRoot) return;
+  const geometry = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>();
+  ownedRoot.traverse(o => {
+    if (!(o instanceof THREE.Mesh)) return;
+    geometry.add(o.geometry);
+    for (const m of Array.isArray(o.material) ? o.material : [o.material]) materials.add(m);
+  });
+  geometry.forEach(g => g.dispose()); materials.forEach(m => m.dispose());
+}
 
 /**
  * Loads real kit models from /assets/models when present, falling back to
@@ -29,7 +43,6 @@ export class AssetLibrary {
   cityBuildings: THREE.Group[] = [];
   desertBuildings: THREE.Group[] = [];
   medievalBuildings: THREE.Group[] = [];
-  zombies: THREE.Group[] = [];
   cacti: THREE.Group[] = [];
   streetlight: THREE.Group | null = null;
   bonusPlane: THREE.Group | null = null;
@@ -55,7 +68,8 @@ export class AssetLibrary {
       }));
     }
     for (let i = 1; i <= 5; i++) {
-      jobs.push(this.tryLoad(`car_super_${i}.glb`, 4.0).then((m) => {
+      const paint = [0x4dd8ff, 0xd8ff2f, 0xff4a1f, 0x2fd8ff, 0x6f7cff][i - 1];
+      jobs.push(this.tryLoad(`car_super_${i}.glb`, 4.0, 'max', false, paint).then((m) => {
         if (m) this.superCars[i - 1] = this.addWheels(m);
       }));
     }
@@ -73,40 +87,12 @@ export class AssetLibrary {
         if (m) this.medievalBuildings.push(m);
       }));
     }
-    for (let i = 1; i <= 4; i++) {
-      jobs.push(this.tryLoad(`zombie_${i}.glb`, 1.7, 'y').then((m) => {
-        if (m) this.zombies.push(m);
-      }));
-    }
     for (let i = 1; i <= 3; i++) {
       jobs.push(this.tryLoad(`prop_cactus_${i}.glb`, 2.4, 'y').then((m) => {
         if (m) this.cacti.push(m);
       }));
     }
     await Promise.all(jobs);
-
-    // no zombie GLBs → try the sprite-sheet pack (Zombie Sprite Sheet Pack,
-    // square frames in a horizontal strip) as crossed pixel billboards
-    if (this.zombies.length === 0) {
-      const sheets = await Promise.all(
-        [1, 2, 3].map((i) => this.trySprite(`zombie_${i}.png`))
-      );
-      for (const tex of sheets) {
-        if (tex) this.zombies.push(spriteBillboard(tex, 1.7));
-      }
-    }
-  }
-
-  /** Load a sprite sheet from /assets/sprites; null when the pack is absent. */
-  private trySprite(file: string): Promise<THREE.Texture | null> {
-    return new Promise((resolve) => {
-      new THREE.TextureLoader().load(
-        `${import.meta.env.BASE_URL}assets/sprites/${file}`,
-        (t) => resolve(t),
-        undefined,
-        () => resolve(null)
-      );
-    });
   }
 
   /** Mount 4 wheels on a wheel-less car body, placed off its bounding box. */
@@ -144,6 +130,7 @@ export class AssetLibrary {
     const pick = pool[index % pool.length];
     const g = pick.m.clone(true);
     g.add(carGroundFx(CAR_COLORS[(pick.i + 1) % CAR_COLORS.length]));
+    polishCar(g);
     return g;
   }
 
@@ -161,11 +148,17 @@ export class AssetLibrary {
     if (!src) return null;
     const g = src.clone(true);
     g.add(carGroundFx(0xff3333));
+    polishCar(g);
     return g;
   }
 
   /** Clone the garage pick for the player; procedural fallback if missing. */
   cloneCar(spec: CarSpec): THREE.Group {
+    if (spec.model === 300) {
+      const g = buildWorkshopCar(spec);
+      g.add(carGroundFx(spec.color));
+      return g;
+    }
     const model = Number.isSafeInteger(spec.model) ? spec.model : -1;
     const src = model < 0
       ? this.playerCar
@@ -177,14 +170,15 @@ export class AssetLibrary {
     if (!src) return buildCar(0, spec.color);
     const g = src.clone(true);
     g.add(carGroundFx(spec.color));
+    polishCar(g);
     return g;
   }
 
   /**
    * Load one GLB and normalize it: sit on y=0, centered on x/z, scaled so its
    * largest ('max') or vertical ('y') dimension equals targetSize.
-   * flip: rotate 180° for kits authored front-at-+z (the game wants -z inside
-   * the wrapper; the drive code adds its own π).
+   * All shipped cars face +Z; racers AND traffic use π - track heading.
+   * flip is available for future models authored front-at-minus-Z.
    */
   private tryLoad(
     file: string,
@@ -198,6 +192,7 @@ export class AssetLibrary {
       this.loader.load(
         this.base + file,
         (gltf) => {
+          if (/(^|\/)car_/.test(file)) finishVehicle(gltf.scene, paint);
           resolve(this.normalizeModel(gltf.scene, targetSize, axis, flip, paint, adjust));
         },
         undefined,
@@ -214,7 +209,7 @@ export class AssetLibrary {
     paint?: number,
     adjust?: { rotateX?: number; stretchY?: number }
   ): THREE.Group {
-    toonify(g, paint); // match the game's cel look
+    if (!g.userData.vehicleFinish) toonify(g, paint);
     if (adjust?.rotateX) g.rotation.x = adjust.rotateX;
     if (flip) g.rotation.y = Math.PI; // applied before box math below
     const box = new THREE.Box3().setFromObject(g);
@@ -232,31 +227,3 @@ export class AssetLibrary {
   }
 }
 
-/**
- * Two crossed planes showing frame 0 of a horizontal strip of square frames,
- * feet on y=0 — reads from every angle without per-frame camera billboarding,
- * and survives the squash (scale.y) the entities layer applies.
- */
-function spriteBillboard(tex: THREE.Texture, height: number): THREE.Group {
-  const img = tex.image as { width: number; height: number };
-  const frames = Math.max(1, Math.round(img.width / img.height));
-  tex.repeat.x = 1 / frames;
-  tex.magFilter = THREE.NearestFilter;
-  tex.minFilter = THREE.NearestFilter;
-  tex.colorSpace = THREE.SRGBColorSpace;
-
-  const mat = new THREE.MeshBasicMaterial({
-    map: tex,
-    transparent: true,
-    alphaTest: 0.5,
-    side: THREE.DoubleSide
-  });
-  const g = new THREE.Group();
-  for (const rot of [0, Math.PI / 2]) {
-    const plane = new THREE.Mesh(new THREE.PlaneGeometry(height, height), mat);
-    plane.position.y = height / 2;
-    plane.rotation.y = rot;
-    g.add(plane);
-  }
-  return g;
-}

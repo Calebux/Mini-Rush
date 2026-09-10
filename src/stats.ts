@@ -6,19 +6,17 @@ const KEY = 'minirush.stats';
 export interface LocalStats {
   totalRaces: number;
   wins: number;          // 1st place finishes
-  zombiesTotal: number;  // lifetime zombies squashed
   coinsTotal: number;    // lifetime coins collected
   bestScore: number;
   modeRaces: Record<string, number>;  // modeId → count
   mapRaces: Record<string, number>;   // mapId → count
   driftBest: number;     // longest single drift chain (seconds)
-  bossKills: number;     // lifetime boss zombies killed
 }
 
 function defaultStats(): LocalStats {
   return {
-    totalRaces: 0, wins: 0, zombiesTotal: 0, coinsTotal: 0, bestScore: 0,
-    modeRaces: {}, mapRaces: {}, driftBest: 0, bossKills: 0
+    totalRaces: 0, wins: 0, coinsTotal: 0, bestScore: 0,
+    modeRaces: {}, mapRaces: {}, driftBest: 0
   };
 }
 
@@ -43,13 +41,11 @@ function load(): LocalStats {
     return {
       totalRaces: whole(raw.totalRaces),
       wins: whole(raw.wins),
-      zombiesTotal: whole(raw.zombiesTotal),
       coinsTotal: whole(raw.coinsTotal),
       bestScore: whole(raw.bestScore),
       modeRaces: countMap(raw.modeRaces),
       mapRaces: countMap(raw.mapRaces),
-      driftBest: Number.isFinite(Number(raw.driftBest)) ? Math.max(0, Number(raw.driftBest)) : 0,
-      bossKills: whole(raw.bossKills)
+      driftBest: Number.isFinite(Number(raw.driftBest)) ? Math.max(0, Number(raw.driftBest)) : 0
     };
   } catch {
     return defaultStats();
@@ -64,23 +60,19 @@ function save(s: LocalStats): void {
 export function recordLocalRace(data: {
   place: number;
   score: number;
-  zombies: number;
   coins: number;
   modeId: string;
   mapId: string;
   driftBest?: number;
-  bossKills?: number;
 }): void {
   const s = load();
   s.totalRaces++;
   if (data.place === 1) s.wins++;
-  s.zombiesTotal += whole(data.zombies);
   s.coinsTotal += whole(data.coins);
   if (data.score > s.bestScore) s.bestScore = whole(data.score);
   s.modeRaces[data.modeId] = (s.modeRaces[data.modeId] ?? 0) + 1;
   s.mapRaces[data.mapId] = (s.mapRaces[data.mapId] ?? 0) + 1;
   if (data.driftBest && data.driftBest > s.driftBest) s.driftBest = data.driftBest;
-  s.bossKills += data.bossKills ?? 0;
   save(s);
 }
 

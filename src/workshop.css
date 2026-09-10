@@ -1,0 +1,116 @@
+/* The Customs front end: a dark showroom in deep racing green with gold trim,
+   one clear car stage. The palette lives in these properties. */
+:root {
+  --rg-deep: #0f3d2e;                 /* racing green: trim and cards */
+  --rg-deep-2: #0a2c21;
+  --rg-glass: rgba(8, 20, 15, .94);   /* near-black green glass panels */
+  --gold: #d4af37;
+  --gold-hi: #e8c766;
+  --gold-ink: #17120a;                /* text on gold */
+  --cream: #f1ead3;                   /* primary text */
+  --muted: #c2b99a;                   /* secondary text */
+  --line: rgba(212, 175, 55, .22);    /* gold hairlines */
+}
+.overlay.hidden { visibility: hidden; }
+#menu, #workshop { touch-action: pan-y; }
+#workshop-parts, #workshop-tabs { touch-action: pan-x; }
+#menu { background: linear-gradient(180deg,rgba(6,16,12,.7),transparent 26%,transparent 40%,rgba(6,16,12,.86) 65%); gap: 8px; }
+#menu .menu-top, #menu .menu-panel { width: min(100%,560px); }
+#menu .menu-top { flex-wrap: nowrap; }
+#menu .brand-block { min-width: 0; }
+#menu .logo { font-size: 34px; letter-spacing: -2px; }
+#menu .sub-logo { font-size: 8px; letter-spacing: 1.7px; color: var(--gold-hi); white-space: nowrap; }
+#menu .checker, #menu .menu-track { display: none; }
+#menu .sub-logo::before, #menu .sub-logo::after { display: none; }
+#home-car-stage { flex: 1; min-height: 160px; width: min(100%,680px); margin: 0 auto; position: relative; touch-action: none; cursor: grab; outline-offset: -4px; }
+.showroom-caption { position: absolute; top: 7px; left: 0; color: #fff; text-shadow: 0 2px 14px #000000b0; pointer-events: none; }
+.showroom-caption small { display: block; font-size: 9px; letter-spacing: 2px; margin-bottom: 5px; }
+#home-car-name { font-size: 25px; font-weight: 900; font-style: italic; }
+.showroom-hint { position: absolute; bottom: 8px; right: 0; font-size: 9px; color: #fff; background: #0a1812b0; border-radius: 30px; padding: 6px 10px; pointer-events: none; }
+#menu .menu-panel { background: var(--rg-glass); border: 1px solid var(--line); border-radius: 18px; padding: 15px; gap: 10px; box-shadow: 0 12px 50px #00000073; }
+#menu #mode-select, #menu .mode-detail, #menu .menu-divider { display: none; }
+#menu .setup-pill { border: 1px solid var(--line); border-radius: 8px; background: #ffffff08; }
+#menu .menu-actions { grid-template-columns: 1fr auto; }
+.home-links { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.home-links button { background: none; border: 0; color: var(--muted); font: 700 9px sans-serif; padding: 7px 0; min-height: 30px; cursor: pointer; }
+#menu .wallet-chip { display: block; font-size: 9px; border-radius: 30px; padding: 10px; background: #0f3d2e99; }
+#menu #btn-play { transform: none; border-radius: 10px; color: var(--gold-ink); background: linear-gradient(135deg,var(--gold-hi),var(--gold)); box-shadow: none; padding: 14px; font-size: 22px; }
+#menu #btn-play span { transform: none; }
+#menu #btn-garage-menu { border-radius: 10px; }
+#btn-workshop-home { display: flex; justify-content: space-between; align-items: center; text-align: left; gap: 8px; border: 1px solid var(--line); background: linear-gradient(100deg,var(--rg-deep),var(--rg-deep-2)); color: var(--cream); padding: 12px 14px; border-radius: 10px; cursor: pointer; }
+#btn-workshop-home strong { display: block; font-size: 14px; letter-spacing: .5px; }
+#btn-workshop-home small { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; }
+#btn-workshop-home b { font-size: 26px; color: var(--gold); }
+#menu .menu-secondary button { background: #ffffff06; border-color: var(--line); border-radius: 8px; min-height: 40px; }
+/* Events: silver for the daily, gold for the weekly. The daily's neon mint sat
+   badly against the racing green. No box-shadow on the weekly: the bounty
+   glow owns it. */
+#menu #btn-daily { color: #dfe3e6; background: linear-gradient(100deg, rgba(223,227,230,.12), rgba(15,61,46,.4)); border-color: rgba(223,227,230,.45); box-shadow: 0 4px 22px rgba(0,0,0,.25); }
+#menu #btn-daily:hover { border-color: #dfe3e6; }
+#menu #btn-weekly { color: var(--gold-hi); background: linear-gradient(100deg, rgba(212,175,55,.18), rgba(15,61,46,.4)); border-color: rgba(212,175,55,.55); }
+#menu #menu-stats { border: 0; padding: 0; }
+#menu #best-line { display: none; }
+#menu #bank-line { color: var(--gold); }
+#menu .home-links #btn-how { margin: 0; padding: 7px 0; font: 700 9px sans-serif; min-width: 0; width: auto; border: 0; background: none; letter-spacing: 0; color: var(--muted); }
+#btn-workshop-garage { margin: 5px 0; border: 1px solid var(--line); background: var(--rg-deep); color: var(--gold); border-radius: 8px; padding: 10px; font: 800 11px inherit; cursor: pointer; }
+#workshop { display: grid; grid-template-rows: auto minmax(180px,1fr) auto; align-items: stretch; justify-content: stretch; padding: max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left)); text-align: left; background: linear-gradient(#06100c99,transparent 25%,transparent 40%,#06100cbb 65%); backdrop-filter: none; color: var(--cream); gap: 8px; overflow-y: auto; }
+#workshop.hidden { display: none; }
+.workshop-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.workshop-head h1 { font-size: 22px; margin: 0; font-style: italic; letter-spacing: -1px; }
+.workshop-head small { display: block; font-size: 8px; letter-spacing: 2px; margin-top: 4px; }
+#workshop-back { width: 44px; height: 44px; border-radius: 50%; border: 1px solid #ffffff44; background: #0f3d2e99; color: white; font-size: 28px; cursor: pointer; }
+#workshop-balance { font-size: 11px; color: var(--gold); white-space: nowrap; }
+#workshop-car-stage { position: relative; min-height: 180px; touch-action: none; cursor: grab; }
+.workshop-stage-label { position: absolute; top: 12px; left: 0; font-size: 11px; letter-spacing: 3px; color: var(--gold); font-weight: 900; }
+.workshop-panel { padding: 16px; border-radius: 18px; background: var(--rg-glass); border: 1px solid var(--line); box-shadow: 0 20px 60px #00000073; min-width: 0; }
+.workshop-build-row { display: flex; gap: 10px; align-items: end; justify-content: space-between; }
+.workshop-build-row label { display: grid; gap: 5px; font-size: 8px; letter-spacing: 1.5px; min-width: 0; }
+#workshop-name { width: 100%; min-width: 0; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; color: var(--cream); font: 800 18px sans-serif; padding: 5px 0; }
+#workshop-presets { display: flex; gap: 5px; }
+#workshop-presets button { width: 37px; height: 38px; background: transparent; color: var(--muted); border: 1px solid var(--line); border-radius: 7px; cursor: pointer; }
+#workshop-presets button[aria-pressed=true] { background: linear-gradient(135deg,var(--gold-hi),var(--gold)); color: var(--gold-ink); }
+#workshop-stats { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin: 14px 0; }
+#workshop-stats div { display: grid; grid-template-columns: 1fr auto; gap: 6px; font-size: 9px; }
+#workshop-stats span { color: var(--muted); }
+#workshop-stats i { grid-column: 1/-1; height: 3px; border-radius: 5px; background: linear-gradient(to right,var(--gold) var(--stat),#ffffff14 var(--stat)); }
+#workshop-tabs { display: flex; overflow-x: auto; gap: 5px; padding-bottom: 9px; }
+#workshop-tabs button { flex: 1; min-height: 38px; padding: 6px 8px; text-transform: uppercase; font: 800 9px sans-serif; color: var(--muted); background: transparent; border: 0; border-bottom: 2px solid transparent; cursor: pointer; }
+#workshop-tabs button[aria-pressed=true] { border-color: var(--gold); color: var(--gold); }
+#workshop-parts { display: flex; gap: 8px; overflow-x: auto; padding: 3px 2px 7px; }
+.part-card { flex: 1 0 94px; min-width: 94px; max-width: 145px; display: grid; gap: 7px; text-align: left; border: 1px solid var(--line); border-radius: 10px; background: #ffffff06; color: var(--cream); padding: 10px; cursor: pointer; }
+.part-card[aria-pressed=true] { border-color: var(--gold); background: #d4af3718; }
+.part-card strong { font: 700 11px sans-serif; }
+.part-card small { font: 700 8px sans-serif; color: var(--muted); }
+.part-symbol { height: 29px; font: 30px sans-serif; color: var(--gold); }
+.symbol-paint { width: 29px; border-radius: 50%; box-shadow: inset 0 2px 3px #fff7; }
+#workshop-status { min-height: 30px; font: 11px/1.4 sans-serif; color: #ddd4ba; margin: 7px 0; }
+.workshop-actions { display: grid; grid-template-columns: 1fr 1.2fr; gap: 8px; }
+.workshop-actions button { min-height: 45px; padding: 9px; border-radius: 8px; border: 1px solid #d4af3766; background: transparent; color: var(--gold); font: 900 10px sans-serif; cursor: pointer; }
+.workshop-actions #workshop-save { background: linear-gradient(135deg,var(--gold-hi),var(--gold)); color: var(--gold-ink); }
+.workshop-actions button:disabled { opacity: .43; cursor: default; }
+.workshop-note { font: 9px/1.4 sans-serif; color: #b3aa8c; margin: 10px 0 0; }
+@media(min-width: 850px) {
+  #menu { display: grid; grid-template-columns: minmax(0,1fr) 390px; grid-template-rows: auto 1fr; padding: 32px; gap: 20px; }
+  #menu.hidden { display: none; }
+  #menu .menu-top { grid-column: 1/-1; width: 100%; }
+  #menu { background: linear-gradient(180deg,#06100c88,transparent 35%,#06100c33); }
+  #home-car-stage { width: 100%; max-width: none; height: 100%; min-height: 320px; }
+  #menu .menu-panel { align-self: center; padding: 22px; gap: 16px; }
+  #home-car-name { font-size: 44px; }
+  .showroom-caption { top: 30px; }
+  #workshop { grid-template-columns: minmax(0,1fr) 400px; grid-template-rows: auto 1fr; padding: 30px; gap: 24px; }
+  .workshop-head { grid-column: 1/-1; }
+  #workshop { background: linear-gradient(180deg,#06100c88,transparent 35%,#06100c33); }
+  .workshop-panel { align-self: center; padding: 22px; }
+}
+@media(max-height: 720px) and (max-width: 849px) {
+  #menu { gap: 4px; padding-top: 12px; padding-bottom: 8px; }
+  #menu .menu-panel { padding: 10px; gap: 6px; }
+  #menu { overflow-y: auto; }
+  #menu .menu-panel { flex-shrink: 0; }
+  #home-car-stage { min-height: 145px; }
+  #workshop { grid-template-rows: auto minmax(145px,1fr) auto; padding: 10px; gap: 4px; }
+  .workshop-panel { padding: 10px; }
+  #workshop-car-stage { min-height: 145px; }
+  #workshop-stats { margin: 9px 0; }
+}
