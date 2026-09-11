@@ -1,11 +1,11 @@
 import { v } from 'convex/values';
-import { mutation, query } from './_generated/server';
+import { internalMutation, mutation, query } from './_generated/server';
 import type { Doc } from './_generated/dataModel';
 
 /**
- * Anonymous player counts behind the /stats page. The game sends a random
- * per-device id (src/usage.ts) and one event at a time; nothing stored here can
- * name a player, and the only public read is the daily totals.
+ * Player counts and the driver list behind the /stats page. The game sends a
+ * random per-device id (src/usage.ts), the driver name it races under and one
+ * event at a time. No wallet addresses or Nimiq device ids are stored.
  */
 
 type DayCounts = Omit<Doc<'usageDays'>, '_id' | '_creationTime' | 'day'>;
@@ -21,17 +21,35 @@ const PLAYER_ID = /^[a-f0-9]{24}$/;
 // no race ends this soon after the last one, so a quicker "finish" is a repeat
 const RACE_GAP_MS = 10_000;
 
+// the username rules the game applies (src/driver.ts)
+const NAME_MIN = 3;
+const NAME_MAX = 16;
+
+// how many drivers /stats lists, most recently seen first
+const DRIVER_LIST = 100;
+
+/** A driver name as the game would store it, or undefined when it isn't one. */
+function cleanName(raw: string | undefined): string | undefined {
+  if (raw === undefined) return undefined;
+  const name = raw.toUpperCase().replace(/[^A-Z0-9 _-]/g, '').replace(/\s+/g, ' ')
+    .trim().slice(0, NAME_MAX).trim();
+  return name.length >= NAME_MIN ? name : undefined;
+}
+
 export const ping = mutation({
   args: {
     pid: v.string(),
     platform: v.union(v.literal('nimiq'), v.literal('web')),
     event: v.union(
       v.literal('open'), v.literal('race'), v.literal('wallet'),
-      v.literal('receipt'), v.literal('bounty'), v.literal('purchase')
-    )
+      v.literal('receipt'), v.literal('bounty'), v.literal('purchase'),
+      v.literal('name')
+    ),
+    name: v.optional(v.string())
   },
-  handler: async (ctx, { pid, platform, event }) => {
+  handler: async (ctx, { pid, platform, event, name: rawName }) => {
     if (!PLAYER_ID.test(pid)) return null;
+    const name = cleanName(rawName);
     const now = Date.now();
     const today = new Date(now).toISOString().slice(0, 10);
     const add: Partial<DayCounts> = {};
@@ -87,9 +105,14 @@ export const ping = mutation({
       case 'purchase':
         bump('purchases');
         break;
+      case 'name':
+        break; // a new username: only the name below changes
     }
 
-    const row = { pid, platform, lastSeen: now, lastDay: today, days, races, lastRaceAt, wallet };
+    const row = {
+      pid, platform, lastSeen: now, lastDay: today, days, races, lastRaceAt, wallet,
+      ...(name ? { name } : {})
+    };
     if (player) await ctx.db.patch(player._id, row);
     else await ctx.db.insert('players', { ...row, firstSeen: now });
 
@@ -112,11 +135,31 @@ export const ping = mutation({
   }
 });
 
-/** Daily counts, newest first, and all-time totals. Public: aggregates only. */
+/**
+ * Take a driver name off /stats, or put it back with "hidden": false. Their
+ * counts stay in the totals. Internal — run it from a terminal with deploy access:
+ *   npx convex run --prod usage:hide '{"name":"SOME NAME"}'
+ */
+export const hide = internalMutation({
+  args: { name: v.string(), hidden: v.optional(v.boolean()) },
+  handler: async (ctx, { name, hidden }) => {
+    const target = cleanName(name);
+    if (!target) throw new Error(`"${name}" is not a driver name`);
+    const rows = await ctx.db
+      .query('players')
+      .withIndex('by_name', (q) => q.eq('name', target))
+      .collect();
+    for (const row of rows) await ctx.db.patch(row._id, { hidden: hidden ?? true });
+    return rows.length;
+  }
+});
+
+/** Daily counts, all-time totals and the latest drivers. Public: nothing beyond /stats. */
 export const stats = query({
   args: {},
   handler: async (ctx) => {
     const rows = await ctx.db.query('usageDays').withIndex('by_day').order('desc').collect();
+    const recent = await ctx.db.query('players').withIndex('by_lastSeen').order('desc').take(DRIVER_LIST);
     const sum = (key: keyof DayCounts): number => rows.reduce((n, row) => n + row[key], 0);
     return {
       since: rows.length ? rows[rows.length - 1].day : null,
@@ -131,7 +174,14 @@ export const stats = query({
         bountyEntries: sum('bountyEntries'),
         purchases: sum('purchases')
       },
-      days: rows.slice(0, 30).map((row) => ({ day: row.day, ...counts(row) }))
+      days: rows.slice(0, 30).map((row) => ({ day: row.day, ...counts(row) })),
+      drivers: recent.filter((p) => !p.hidden).map((p) => ({
+        name: p.name ?? null,
+        platform: p.platform,
+        races: p.races,
+        days: p.days,
+        lastDay: p.lastDay
+      }))
     };
   }
 });

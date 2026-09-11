@@ -1,4 +1,4 @@
-// The /stats page: the anonymous player counts the game sends to Convex
+// The /stats page: player counts and the driver list the game sends to Convex
 // (src/usage.ts), read back through the public usage:stats query.
 const CONVEX_URL = (import.meta.env.VITE_CONVEX_URL as string | undefined)?.replace(/\/$/, '');
 
@@ -17,6 +17,14 @@ interface Day {
   purchases: number;
 }
 
+interface Driver {
+  name: string | null; // null until the player's first ping that carries a name
+  platform: 'nimiq' | 'web';
+  races: number;
+  days: number;
+  lastDay: string;
+}
+
 interface Stats {
   since: string | null;
   totals: {
@@ -31,6 +39,7 @@ interface Stats {
     purchases: number;
   };
   days: Day[];
+  drivers?: Driver[]; // absent from a Convex deployment older than this page
 }
 
 const DAY_MS = 86_400_000;
@@ -39,6 +48,9 @@ const $ = (id: string): HTMLElement => document.getElementById(id)!;
 const utcDay = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
 const dayLabel = (day: string): string => new Date(`${day}T00:00:00Z`).toLocaleDateString('en-US', {
   weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC'
+});
+const shortDay = (day: string): string => new Date(`${day}T00:00:00Z`).toLocaleDateString('en-US', {
+  month: 'short', day: 'numeric', timeZone: 'UTC'
 });
 
 function tiles(el: HTMLElement, items: [string, number][]): void {
@@ -54,9 +66,34 @@ function tiles(el: HTMLElement, items: [string, number][]): void {
   }));
 }
 
+function cell(value: string | number): HTMLTableCellElement {
+  const td = document.createElement('td');
+  td.textContent = typeof value === 'number' ? value.toLocaleString('en-US') : value;
+  if (value === 0) td.className = 'zero';
+  return td;
+}
+
+function driverRow(d: Driver, today: string, yesterday: string): HTMLTableRowElement {
+  const who = document.createElement('td');
+  who.className = 'driver';
+  const name = document.createElement('b');
+  name.textContent = d.name ?? 'Unnamed driver';
+  if (!d.name) name.className = 'unnamed';
+  const tag = document.createElement('span');
+  tag.className = `tag ${d.platform}`;
+  tag.textContent = d.platform === 'nimiq' ? 'Nimiq Pay' : 'Web';
+  who.append(name, tag);
+
+  const last = d.lastDay === today ? 'Today' : d.lastDay === yesterday ? 'Yesterday' : shortDay(d.lastDay);
+  const tr = document.createElement('tr');
+  tr.append(who, cell(d.races), cell(d.days), cell(last));
+  return tr;
+}
+
 function render(stats: Stats): void {
   const now = Date.now();
   const today = utcDay(now);
+  const yesterday = utcDay(now - DAY_MS);
   const byDay = new Map(stats.days.map((d) => [d.day, d]));
   const t = byDay.get(today);
 
@@ -81,21 +118,20 @@ function render(stats: Stats): void {
     ['Cars bought with NIM', all.purchases]
   ]);
 
+  const drivers = stats.drivers ?? [];
+  $('drivers-body').replaceChildren(...drivers.map((d) => driverRow(d, today, yesterday)));
+  $('drivers-empty').hidden = drivers.length > 0;
+
   const rows: HTMLTableRowElement[] = [];
   for (let i = 0; i < 14; i++) {
     const day = utcDay(now - i * DAY_MS);
     if (!stats.since || day < stats.since) break; // nothing was counted before the first day
     const d = byDay.get(day);
     const tr = document.createElement('tr');
-    const cells: (string | number)[] = [
-      dayLabel(day), d?.players ?? 0, d?.newPlayers ?? 0, d?.races ?? 0, d?.bountyEntries ?? 0
-    ];
-    for (const value of cells) {
-      const td = document.createElement('td');
-      td.textContent = typeof value === 'number' ? value.toLocaleString('en-US') : value;
-      if (value === 0) td.className = 'zero';
-      tr.append(td);
-    }
+    tr.append(
+      cell(dayLabel(day)), cell(d?.players ?? 0), cell(d?.newPlayers ?? 0),
+      cell(d?.races ?? 0), cell(d?.bountyEntries ?? 0)
+    );
     rows.push(tr);
   }
   $('days-body').replaceChildren(...rows);

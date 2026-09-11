@@ -1481,6 +1481,7 @@ export class UI {
       return;
     }
     this.audio.play('select');
+    track('name');
     this.closeUsername();
   }
 

@@ -1,16 +1,19 @@
 /**
- * Anonymous player counter behind the /stats page. Each device gets a random
- * id in localStorage, and the game tells Convex (convex/usage.ts) when it
- * opens, finishes a race, connects a wallet or sends something on-chain. No
- * names, wallet addresses or Nimiq device ids leave the device, and it all
- * fails silently: gameplay never waits on it.
+ * Player counter and driver list behind the /stats page. Each device gets a
+ * random id in localStorage, and the game tells Convex (convex/usage.ts) when
+ * it opens, finishes a race, connects a wallet, sends something on-chain or
+ * picks a username. The driver name goes along so /stats can list drivers;
+ * wallet addresses and Nimiq device ids never leave the device. It all fails
+ * silently: gameplay never waits on it.
  */
+import { driverName } from './driver';
+
 const CONVEX_URL = (import.meta.env.VITE_CONVEX_URL as string | undefined)?.replace(/\/$/, '');
 
 const ID_KEY = 'minirush.player';
 const PLAYER_ID = /^[a-f0-9]{24}$/;
 
-export type UsageEvent = 'open' | 'race' | 'wallet' | 'receipt' | 'bounty' | 'purchase';
+export type UsageEvent = 'open' | 'race' | 'wallet' | 'receipt' | 'bounty' | 'purchase' | 'name';
 type Platform = 'nimiq' | 'web';
 
 let platform: Promise<Platform> | null = null;
@@ -51,7 +54,11 @@ export function track(event: UsageEvent): void {
     .then((where) => fetch(`${CONVEX_URL}/api/mutation`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'usage:ping', args: { pid, platform: where, event }, format: 'json' })
+      body: JSON.stringify({
+        path: 'usage:ping',
+        args: { pid, platform: where, event, name: driverName() },
+        format: 'json'
+      })
     }))
     .catch(() => { /* offline or blocked: this event just isn't counted */ });
 }

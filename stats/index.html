@@ -57,11 +57,20 @@
     }
     tbody tr + tr td { border-top: 1px solid rgba(255,255,255,.06); }
     td.zero { color: rgba(255,255,255,.3); }
+    td.driver { white-space: normal; min-width: 120px; }
+    td.driver b { display: block; font-weight: 800; letter-spacing: .3px; overflow-wrap: anywhere; }
+    td.driver b.unnamed { font-weight: 600; color: rgba(255,255,255,.4); }
+    .tag {
+      display: inline-block; margin-top: 4px; padding: 2px 6px; border-radius: 6px;
+      font-size: 9px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase;
+      color: rgba(255,255,255,.6); background: rgba(255,255,255,.08);
+    }
+    .tag.nimiq { color: #0b1020; background: #fcff52; }
+    .empty { padding: 14px; font-size: 13px; color: rgba(255,255,255,.5); text-align: center; }
     @media (max-width: 480px) {
       th, td { padding: 10px 8px; }
       th { font-size: 10px; letter-spacing: .5px; }
     }
-    #days-empty { padding: 14px; font-size: 13px; color: rgba(255,255,255,.5); text-align: center; }
 
     .note { font-size: 12px; line-height: 1.6; color: rgba(255,255,255,.5); text-align: center; max-width: 520px; margin: 0 auto; }
     .play {
@@ -90,19 +99,30 @@
     </section>
 
     <section>
+      <h2>Drivers <small>most recent first</small></h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Driver</th><th>Races</th><th>Days</th><th>Last played</th></tr></thead>
+          <tbody id="drivers-body"></tbody>
+        </table>
+        <p class="empty" id="drivers-empty" hidden>No drivers yet.</p>
+      </div>
+    </section>
+
+    <section>
       <h2>Last 14 days</h2>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Day (UTC)</th><th>Players</th><th>New</th><th>Races</th><th>Bounty</th></tr></thead>
           <tbody id="days-body"></tbody>
         </table>
-        <p id="days-empty" hidden>No plays counted yet.</p>
+        <p class="empty" id="days-empty" hidden>No plays counted yet.</p>
       </div>
     </section>
 
     <p class="note">
-      Anonymous counts. Each device gets a random ID the first time it opens the game;
-      no names, wallet addresses or personal data are stored. Days run on UTC.
+      Each device gets a random ID the first time it opens the game, and drivers are listed
+      under the name they race with. No wallet addresses or personal data are stored. Days run on UTC.
     </p>
     <a class="play" href="../">Play MiniRush</a>
   </main>

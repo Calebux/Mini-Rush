@@ -15,9 +15,12 @@ export default defineSchema({
   }).index('by_week', ['week']),
 
   // One row per device that has played. `pid` is a random id the game makes
-  // (src/usage.ts), never a name, wallet address or Nimiq device id.
+  // (src/usage.ts) and `name` the driver name it races under; no wallet
+  // addresses or Nimiq device ids.
   players: defineTable({
     pid: v.string(),
+    name: v.optional(v.string()),          // cleaned like src/driver.ts; absent until the first named ping
+    hidden: v.optional(v.boolean()),       // true keeps the name off /stats (usage:hide)
     platform: v.union(v.literal('nimiq'), v.literal('web')), // where it was last seen
     firstSeen: v.number(),
     lastSeen: v.number(),
@@ -26,7 +29,10 @@ export default defineSchema({
     races: v.number(),
     lastRaceAt: v.number(),                // spaces race counts out (RACE_GAP_MS)
     wallet: v.boolean()                    // has connected a Nimiq wallet
-  }).index('by_pid', ['pid']),
+  })
+    .index('by_pid', ['pid'])
+    .index('by_lastSeen', ['lastSeen'])
+    .index('by_name', ['name']),
 
   // Counts per UTC day for /stats; all-time totals are sums of these rows.
   usageDays: defineTable({
