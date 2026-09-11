@@ -22,7 +22,26 @@ export const WALL_CRASH_MIN_V = 26;
 // curvature a base-grip car can no longer take flat out — chevron boards go
 // up ahead of these corners and rival AI brakes for them
 export const SHARP_CORNER_K = 0.0165;
-export const RIVAL_LAT_GRIP = 17; // v²·k ceiling the AI brakes down to
+export const RIVAL_LAT_GRIP = 60; // v²·k ceiling the AI brakes down to — a committed player carries up to ~100
+export const PURSUIT_LAT_GRIP = 17; // Police Chase keeps the corner pace it was balanced at
+export const RIVAL_BRAKE = 40;    // m/s² the AI can scrub on the approach to a bend
+// Under WALL_CRASH_MIN_V, so like the player a rival can scrape through any
+// hairpin at this speed without being thrown off.
+export const RIVAL_MIN_CORNER_SPEED = 22;
+// The field races the car you brought: rivals match this share of your car's
+// top-speed edge, so a faster car is an advantage rather than a walkover.
+export const RIVAL_PACE_SHARE = 0.5;
+export const RIVAL_CATCHUP = 7;      // m/s a rival finds once it has dropped well behind you
+export const RIVAL_NITRO_EVERY = 13; // seconds between nitro tanks for an AI driver
+
+// HARDCORE's pro field: matches the whole of your car's top-speed edge, finds a
+// little more on the straights, commits harder to corners and boosts more often.
+export const PRO_PACE_SHARE = 1;
+// m/s over the ordinary field's straight-line pace. At 1.2 the best sim driver
+// never won a HARDCORE race; at 0.5 it wins now and then and loses by ~2 s.
+export const PRO_PACE_BONUS = 0.5;
+export const PRO_SKILL = 1.12;      // corner judgement floor (the ordinary field runs 0.92–1.14)
+export const PRO_NITRO_EVERY = 10;
 
 export const RIVAL_COUNT = 3;
 

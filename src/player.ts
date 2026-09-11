@@ -130,6 +130,11 @@ export class Player {
     return this.nitroTimer > 0;
   }
 
+  /** Top-speed multiplier of the car being driven, upgrades included. */
+  get speedMul(): number {
+    return this.spec.speed;
+  }
+
   /** Off the ground after a ramp — barriers and off-road drag don't apply. */
   get airborne(): boolean {
     return this.airH > 0.001;

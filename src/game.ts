@@ -2,9 +2,11 @@ import * as THREE from 'three';
 import './presentation.css';
 import { AssetLibrary, disposeCarInstance } from './assets';
 import { AudioManager } from './audio';
+import { BOUNTY_MODE, bountyMapIndex, bountySeed } from './bounty';
 import { CARS } from './cars';
 import { districtIndexAt, TRACK_LENGTH_DEFAULT } from './constants';
 import { dailyMapIndex, dailySeed } from './daily';
+import { driverName } from './driver';
 import { deposit, owned, racePayout } from './economy';
 import { Entities } from './entities';
 import { buildHorizon, buildReflectionSky, disposeHorizon, environmentTheme } from './environment';
@@ -14,7 +16,7 @@ import {
 import { GunHud } from './gun';
 import { StyleMeter } from './style';
 import { MAPS } from './maps';
-import { MODES } from './modes';
+import { CUP_MODES, MODES } from './modes';
 import { mapUnlocked, stamp } from './passport';
 import { captureReferrer, creditReferral } from './referral';
 import { activeColor } from './skins';
@@ -33,7 +35,7 @@ import { checkReward, recordDay } from './streak';
 import { TrafficManager } from './traffic';
 import { Track } from './track';
 import { bakedPath, loadTrackPaths } from './trackPaths';
-import { UI } from './ui';
+import { Standing, UI } from './ui';
 import { Wallet } from './wallet';
 import { Build, workshopSpec } from './workshop';
 import { Showroom } from './showroom';
@@ -54,7 +56,11 @@ const CAMS = [
 ];
 
 const numberParam = (qp: URLSearchParams, key: string, fallback: number): number => {
-  const n = Number(qp.get(key));
+  // an absent param is null, and Number(null) is 0 — which silently made every
+  // default lap 600 m, one lap, on seed 0
+  const raw = qp.get(key);
+  if (raw === null || raw.trim() === '') return fallback;
+  const n = Number(raw);
   return Number.isFinite(n) ? n : fallback;
 };
 
@@ -147,11 +153,15 @@ export class Game {
 
   private style = new StyleMeter();
   private prevGap: number[] = []; // rival s-gaps last frame — sign flip = a pass
+  private lastPassedAt = -10; // last "rival gets by" callout, so a scrum doesn't spam it
   private lastBumpAt = -10;       // trades paint ≠ a near miss
   private daily = false;
   private preDaily = { seed: 0, map: 0, mode: 0, laps: 2 }; // restored afterwards
   private weekly = false;
   private preWeekly = { seed: 0, map: 0, mode: 0, laps: 2, len: TRACK_LENGTH_DEFAULT }; // restored afterwards
+  private bounty = false;
+  private preBounty = { seed: 0, map: 0, mode: 0, laps: 2 }; // restored afterwards
+  private standings: Standing[] = []; // finishing order, snapshotted as the player crosses the line
   private raceSeed = 0;           // seed this race was actually built from
   private ghostRec: GhostRecorder | null = null;
   private ghostData: GhostData | null = null;
@@ -264,6 +274,8 @@ export class Game {
     this.ui.onDailyExit = () => this.exitDaily();
     this.ui.onWeekly = () => this.startWeekly();
     this.ui.onWeeklyExit = () => this.exitWeekly();
+    this.ui.onBounty = () => this.startBounty();
+    this.ui.onBountyExit = () => this.exitBounty();
 
     this.gun = new GunHud(document.getElementById('hud')!);
 
@@ -455,7 +467,7 @@ export class Game {
     // everyone races the same circuit: a ?len= link must not shorten the cup
     this.trackLength = TRACK_LENGTH_DEFAULT;
     this.mapIndex = weeklyMapIndex(MAPS.length);
-    this.modeIndex = weeklyModeIndex(MODES.length);
+    this.modeIndex = CUP_MODES[weeklyModeIndex(CUP_MODES.length)];
     this.laps = MODES[this.modeIndex].lapsLocked ?? 2;
     this.disposeRace();
     this.buildRace();
@@ -480,12 +492,54 @@ export class Game {
     }
   }
 
+  /**
+   * Bounty race: this week's HARDCORE circuit — seed, city and laps fixed for
+   * every entrant. The lap length comes from the mode, so a ?len= link can't
+   * shorten it either.
+   */
+  private startBounty(): void {
+    if (this.bounty) return;
+    this.bounty = true;
+    this.preBounty = {
+      seed: this.seedCounter, map: this.mapIndex, mode: this.modeIndex, laps: this.laps
+    };
+    this.seedCounter = bountySeed();
+    this.mapIndex = bountyMapIndex(MAPS.length);
+    this.modeIndex = BOUNTY_MODE;
+    this.laps = MODES[BOUNTY_MODE].lapsLocked ?? 2;
+    this.disposeRace();
+    this.buildRace();
+    this.ui.setMap(this.mapIndex);
+    this.ui.setMode(this.modeIndex);
+  }
+
+  /** Restore whatever the player had picked before the bounty race. */
+  private exitBounty(): void {
+    if (!this.bounty) return;
+    this.bounty = false;
+    this.seedCounter = this.preBounty.seed;
+    this.mapIndex = this.preBounty.map;
+    this.modeIndex = this.preBounty.mode;
+    this.laps = this.preBounty.laps;
+    this.ui.setMap(this.mapIndex);
+    this.ui.setMode(this.modeIndex);
+    if (this.state === 'menu') {
+      this.disposeRace();
+      this.buildRace();
+    }
+  }
+
+  /** Lap length to build: a mode with its own (HARDCORE's long circuit) overrides the pick. */
+  private lapLength(): number {
+    return MODES[this.modeIndex].trackLength ?? this.trackLength;
+  }
+
   private buildRace(): void {
     const seed = this.seedCounter;
     this.raceSeed = seed;
     const map = MAPS[this.mapIndex];
     const mode = MODES[this.modeIndex];
-    this.track = new Track(seed, this.trackLength, {
+    this.track = new Track(seed, this.lapLength(), {
       ...map, baked: bakedPath(map.circuit?.path)
     });
 
@@ -564,9 +618,11 @@ export class Game {
     this.entities = new Entities(this.scene, this.track, seed);
     this.player = new Player(this.scene, this.assets, this.track, this.carSpec(this.carIndex));
     // Civilian traffic: the substrate near-misses and takedowns need, and the
-    // thing that makes speed legible. Denser on the wide-open layouts.
+    // thing that makes speed legible. A no-traffic mode (HARDCORE) leaves the
+    // road to the racers.
     this.traffic = new TrafficManager(
-      this.scene, this.assets, this.track, seed, 10, CARS[this.carIndex].model, map.id
+      this.scene, this.assets, this.track, seed, mode.noTraffic ? 0 : 10,
+      CARS[this.carIndex].model, map.id
     );
     // A class mode fields the rest of that shelf; everything else races the
     // civilian traffic shells.
@@ -575,8 +631,14 @@ export class Game {
       : [];
     this.rivals = new RivalManager(
       this.scene, this.assets, this.track, CARS[this.carIndex].model,
-      mode.rivals, mode.pursuit, rivalPool
+      mode.rivals, mode.pursuit, rivalPool, mode.pro
     );
+    this.rivals.paceMul = this.player.speedMul;
+    // an AI boost you can hear coming, loudest when it's on your bumper
+    this.rivals.onNitro = (r) => {
+      const d = Math.abs(r.s - this.player.s);
+      if (this.state === 'racing' && d < 60) this.audio.play('nitro', 0.8 * (1 - d / 60));
+    };
     // weather grip modifier applies to the whole field, so bad weather slows
     // the player and the AI alike (no rubber-band advantage in the rain)
     if (this.weather && this.weather.gripMul !== 1) {
@@ -646,6 +708,7 @@ export class Game {
       this.scene.remove(r.mesh);
       disposeCarInstance(r.mesh);
     }
+    this.rivals.dispose();
     if (this.ghostObj) {
       this.scene.remove(this.ghostObj);
       this.ghostObj = null;
@@ -720,6 +783,7 @@ export class Game {
 
     this.style.reset();
     this.lastBumpAt = -10;
+    this.lastPassedAt = -10;
     this.prevGap = this.rivals.rivals.map((r) => r.s - this.player.s);
 
     // ghost of your best run on this exact circuit (no cop-chase hauntings —
@@ -752,7 +816,7 @@ export class Game {
   private currentGhostKey(): string {
     return ghostKey(
       this.raceSeed, MAPS[this.mapIndex].id, MODES[this.modeIndex].id,
-      this.raceLaps, this.trackLength
+      this.raceLaps, this.lapLength()
     );
   }
 
@@ -882,6 +946,7 @@ export class Game {
       : 1 + this.rivals.rivals.filter(
           (r) => r.finishTime >= 0 && r.finishTime < this.raceTime
         ).length;
+    this.standings = this.classify();
     this.audio.play('finish');
     if (navigator.vibrate) navigator.vibrate([40, 60, 120]);
     this.ui.endTutorial();
@@ -969,8 +1034,37 @@ export class Game {
       );
       if (beat && this.ghostData) this.ui.popText('GHOST BEATEN!', '#9adfff');
     }
-    // the daily circuit stays put all day; normal play moves to a fresh one
-    if (!this.daily) this.seedCounter++;
+    // the shared circuits (daily, cup, bounty) stay put for "race again"; normal
+    // play moves to a fresh one
+    if (!this.daily && !this.weekly && !this.bounty) this.seedCounter++;
+  }
+
+  /**
+   * Finishing order as it stands when the player crosses the line. Rivals
+   * already home keep their real times. The rest are placed by distance still
+   * to run, turned into a time gap at the player's average pace, so estimated
+   * rows always read in track order.
+   */
+  private classify(): Standing[] {
+    if (MODES[this.modeIndex].pursuit) return [];
+    const t = this.raceTime;
+    const total = this.raceLaps * this.track.length;
+    const pace = total / Math.max(t, 1);
+    const rows: Standing[] = [{
+      name: driverName(), car: CARS[this.carIndex].name, time: t, estimated: false, you: true
+    }];
+    for (const r of this.rivals.rivals) {
+      const home = r.finishTime >= 0 && r.finishTime <= t;
+      rows.push({
+        name: r.name,
+        car: r.car,
+        time: home ? r.finishTime : t + Math.max(0, total - r.s) / pace,
+        estimated: !home,
+        you: false
+      });
+    }
+    // a rival that crossed in the same frame as the player is placed behind them
+    return rows.sort((a, b) => a.time - b.time || Number(b.you) - Number(a.you));
   }
 
   /** Retry the exact same track (same seed). */
@@ -1156,7 +1250,8 @@ export class Game {
         this.handleWall(elapsed);
         this.rivals.update(
           dt, elapsed, this.raceTime, this.player.s, true,
-          this.player.x, MODES[this.modeIndex].aggression, this.player.v
+          this.player.x, MODES[this.modeIndex].aggression, this.player.v,
+          this.player.nitroActive
         );
 
         // Slipstream drafting: check if player is directly behind a rival inside draft cone
@@ -1233,7 +1328,8 @@ export class Game {
           this.ui.showResults(
             this.playerPlace, this.playerTime, this.coins,
             this.score(), this.raceLaps, CARS[this.carIndex].name, this.busted,
-            this.style.score, this.daily, this.weekly, this.takedowns
+            this.style.score, this.daily, this.weekly, this.takedowns,
+            this.bounty, this.standings
           );
           // rebuild behind the results overlay so the menu previews the next circuit
           this.disposeRace();
@@ -1417,6 +1513,13 @@ export class Game {
         this.style.nearMiss();
         this.ui.popText('NEAR MISS!', '#ffb84a');
         if (navigator.vibrate) navigator.vibrate(15);
+      } else if (
+        prev < 0 && gap > 0 && r.tumbleT <= 0 && this.raceTime > 4 &&
+        elapsed - this.lastPassedAt > 2.5
+      ) {
+        // a rival got by — put a name on it so the fight has someone to hate
+        this.lastPassedAt = elapsed;
+        this.ui.popText(`${r.name} GETS BY!`, '#ff5a5a');
       }
     });
   }
@@ -1490,8 +1593,15 @@ export class Game {
           continue;
         }
         const dir = Math.sign(p.x - r.x) || 1;
-        p.bump(dir);
-        r.v *= burnout ? 0.8 : 0.86;
+        // Racing contact is directional: whoever drives into the back of the
+        // other car pays, and door to door both get shoved apart. A flat 28%
+        // loss for every touch turned a fierce field into a penalty box.
+        const ds = r.s - p.s;
+        const rammedByRival = !burnout && ds < -1.6;
+        const rammedRival = !burnout && ds > 1.6;
+        if (burnout) p.bump(dir);
+        else p.bump(dir, rammedRival ? 4 : 5, rammedRival ? 0.8 : rammedByRival ? 0.97 : 0.93);
+        r.v *= burnout ? 0.8 : rammedByRival ? 0.82 : rammedRival ? 0.98 : 0.93;
         r.x -= dir * (burnout ? 2.0 : 1.2);
         this.lastBumpAt = elapsed;
         if (mode.heist && r === this.rivals.rivals[0]) {
@@ -1500,9 +1610,10 @@ export class Game {
           this.ui.popText('HEIST LOOT +$50!', '#00ffcc');
           this.audio.play('coin');
         }
-        // Grand Prix wants clean racing — trading paint drops the style chain.
-        // In Burnout contact IS the game; only TAKING a hit breaks it (below).
-        if (!burnout) this.style.crash();
+        // Grand Prix wants clean racing — trading paint drops the style chain,
+        // unless a rival ran into you. In Burnout contact IS the game; only
+        // TAKING a hit breaks it (below).
+        if (!burnout && !rammedByRival) this.style.crash();
         this.audio.play('bump');
         this.shake = 0.7;
         if (navigator.vibrate) navigator.vibrate(60);

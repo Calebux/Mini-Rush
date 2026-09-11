@@ -9,11 +9,11 @@ export interface RaceRecord {
   modeId: number;
 }
 
-/** A Weekly Cup run, as entered into the bounty. */
-export interface CupRecord {
+/** A win on the week's bounty race, as entered into the bounty. */
+export interface BountyRecord {
   week: string;  // ISO week key, e.g. "2026-W38"
   score: number;
-  time: number;  // finish time in seconds
+  time: number;  // finish time in seconds — what the bounty is ranked on
   place: number;
 }
 
@@ -32,14 +32,16 @@ export function encodeReceipt(run: RaceRecord): string {
 }
 
 /**
- * Weekly Cup bounty entry. `MR2`, the ISO week as YYWW, score (8 hex), finish
- * time in centiseconds (6 hex) and place (2 hex) — 23 bytes. The week names the
- * circuit, city and mode (all derived from it), so unlike MR1 an entry doesn't
- * depend on the order of the mode or map lists.
+ * Bounty entry. `MR3`, the ISO week as YYWW, score (8 hex), finish time in
+ * centiseconds (6 hex) and place (2 hex) — 23 bytes. The week names the
+ * circuit and city (both derived from it) and the race is always HARDCORE, so
+ * unlike MR1 an entry doesn't depend on the order of the mode or map lists.
+ * MR2 was the same layout for the old score-ranked Weekly Cup bounty; a new
+ * tag keeps those receipts from ever counting as a win.
  */
-export function encodeCupReceipt(run: CupRecord): string {
+export function encodeBountyReceipt(run: BountyRecord): string {
   const m = /^(\d{4})-W(\d{2})$/.exec(run.week);
   const yyww = m ? `${m[1].slice(2)}${m[2]}` : '0000';
-  return `MR2${yyww}${hex(run.score, 0xffffffff, 8)}` +
+  return `MR3${yyww}${hex(run.score, 0xffffffff, 8)}` +
     `${hex(run.time * 100, 0xffffff, 6)}${hex(run.place, 0xff, 2)}`;
 }

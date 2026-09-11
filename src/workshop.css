@@ -37,10 +37,10 @@
 #menu #btn-play { transform: none; border-radius: 10px; color: var(--gold-ink); background: linear-gradient(135deg,var(--gold-hi),var(--gold)); box-shadow: none; padding: 14px; font-size: 22px; }
 #menu #btn-play span { transform: none; }
 #menu #btn-garage-menu { border-radius: 10px; }
-#btn-workshop-home { display: flex; justify-content: space-between; align-items: center; text-align: left; gap: 8px; border: 1px solid var(--line); background: linear-gradient(100deg,var(--rg-deep),var(--rg-deep-2)); color: var(--cream); padding: 12px 14px; border-radius: 10px; cursor: pointer; }
-#btn-workshop-home strong { display: block; font-size: 14px; letter-spacing: .5px; }
-#btn-workshop-home small { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; }
-#btn-workshop-home b { font-size: 26px; color: var(--gold); }
+#btn-workshop-garage { display: flex; justify-content: space-between; align-items: center; text-align: left; gap: 8px; border: 1px solid var(--line); background: linear-gradient(100deg,var(--rg-deep),var(--rg-deep-2)); color: var(--cream); font-family: inherit; padding: 12px 14px; border-radius: 10px; cursor: pointer; }
+#btn-workshop-garage strong { display: block; font-size: 14px; letter-spacing: .5px; }
+#btn-workshop-garage small { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; }
+#btn-workshop-garage b { font-size: 26px; color: var(--gold); }
 #menu .menu-secondary button { background: #ffffff06; border-color: var(--line); border-radius: 8px; min-height: 40px; }
 /* Events: silver for the daily, gold for the weekly. The daily's neon mint sat
    badly against the racing green. No box-shadow on the weekly: the bounty
@@ -52,7 +52,6 @@
 #menu #best-line { display: none; }
 #menu #bank-line { color: var(--gold); }
 #menu .home-links #btn-how { margin: 0; padding: 7px 0; font: 700 9px sans-serif; min-width: 0; width: auto; border: 0; background: none; letter-spacing: 0; color: var(--muted); }
-#btn-workshop-garage { margin: 5px 0; border: 1px solid var(--line); background: var(--rg-deep); color: var(--gold); border-radius: 8px; padding: 10px; font: 800 11px inherit; cursor: pointer; }
 #workshop { display: grid; grid-template-rows: auto minmax(180px,1fr) auto; align-items: stretch; justify-content: stretch; padding: max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left)); text-align: left; background: linear-gradient(#06100c99,transparent 25%,transparent 40%,#06100cbb 65%); backdrop-filter: none; color: var(--cream); gap: 8px; overflow-y: auto; }
 #workshop.hidden { display: none; }
 .workshop-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }

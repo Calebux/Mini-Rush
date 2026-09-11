@@ -1,7 +1,7 @@
 {
   "name": "minirush",
   "version": "0.1.0",
-  "description": "MiniRush Outbreak GP \u2014 mobile-first zombie racing Mini App for Nimiq Pay",
+  "description": "MiniRush Outbreak GP — mobile-first zombie racing Mini App for Nimiq Pay",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -25,6 +25,7 @@
     "@gltf-transform/core": "^4.4.1",
     "@gltf-transform/extensions": "^4.4.1",
     "@gltf-transform/functions": "^4.4.1",
+    "convex": "^1.45.0",
     "meshoptimizer": "^1.2.0",
     "obj2gltf": "^3.2.0",
     "playwright": "^1.61.1",

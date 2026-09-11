@@ -256,6 +256,11 @@ export class Track {
     );
   }
 
+  /** Signed curvature at s without building a Frame — for dense per-frame scans. */
+  curvatureAt(s: number): number {
+    return this.kv[Math.floor(this.wrap(s) / SAMPLE_STEP) % this.kv.length];
+  }
+
   private mk(x: number, z: number, theta: number, curvature: number): Frame {
     return { x, z, theta, nx: -Math.cos(theta), nz: -Math.sin(theta), curvature };
   }

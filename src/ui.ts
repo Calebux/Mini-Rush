@@ -1,14 +1,20 @@
 import { AudioManager } from './audio';
-import { BOUNTY_CLOSES, bountyActive, bountyPrize } from './bounty';
+import {
+  BOUNTY_CLOSES, BOUNTY_MODE, bountyActive, bountyMapIndex, bountyPrize, bountyQualifies,
+  bountyReceiver, bountySplit, loadBounty
+} from './bounty';
 import { CarClass, CARS } from './cars';
 import { dailyMapIndex, dayKey } from './daily';
+import { driverName, hasUsername, keepDriverName, setUsername, USERNAME_MAX } from './driver';
 import { weekKey, weeklyMapIndex, weeklyModeIndex, WEEKLY_PRIZES } from './weekly';
 import { bank, grantCar, owned, racePayout, unlock } from './economy';
 import { Leaderboard } from './leaderboard';
 import { MAPS } from './maps';
-import { MODES, ModeSpec } from './modes';
+import { CUP_MODES, MODES, ModeSpec } from './modes';
 import { mapUnlocked, stamps } from './passport';
-import { playerId, remoteEnabled, submitDaily, topDaily } from './remoteBoard';
+import {
+  playerId, remoteEnabled, submitBounty, submitDaily, topBounty, topDaily
+} from './remoteBoard';
 import { shareUrl } from './referral';
 import { RunCard, shareRun } from './share';
 import { activeSkinIndex, buySkin, CAR_SKINS, equipSkin, skinOwned } from './skins';
@@ -41,6 +47,25 @@ const BEST_KEY = 'minirush.best';
 const PLACE_SUFFIX = ['st', 'nd', 'rd', 'th'];
 const suffix = (place: number) => PLACE_SUFFIX[Math.min(place, 4) - 1];
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+/** Race clock, m:ss.cc. */
+const raceClock = (t: number): string =>
+  `${Math.floor(t / 60)}:${(t % 60).toFixed(2).padStart(5, '0')}`;
+/** A text-only element: driver names come from other players, so never innerHTML. */
+const textEl = (tag: string, className: string, text: string): HTMLElement => {
+  const el = document.createElement(tag);
+  el.className = className;
+  el.textContent = text;
+  return el;
+};
+
+/** One car in the finishing order on the results screen. */
+export interface Standing {
+  name: string;
+  car: string;        // '' when the rival drives a street shell
+  time: number;       // finish time (s) — estimated for cars still on track
+  estimated: boolean;
+  you: boolean;
+}
 const activateOnEnter = (el: HTMLElement, fn: () => void): void => {
   el.addEventListener('click', fn);
   if (el.tagName === 'BUTTON') return;
@@ -62,7 +87,8 @@ const MODE_RISK: Record<string, string> = {
   trafficjam: 'DENSE',
   heist: 'HEIST',
   voltage: 'SURGE',
-  hypercup: 'HYPER'
+  hypercup: 'HYPER',
+  hardcore: 'PRO'
 };
 // Each mode owns a colour on the select deck: card edge, glow, CTA and the
 // overlay grade all take it, so flicking between modes reads as a scene change.
@@ -76,7 +102,8 @@ const MODE_ACCENT: Record<string, string> = {
   trafficjam: '#ffb020',
   heist: '#00e0a4',
   hypercup: '#4dd8ff',
-  voltage: '#b6ff2e'
+  voltage: '#b6ff2e',
+  hardcore: '#ff4d6d'
 };
 const hexAlpha = (hex: string, a: number): string => {
   const v = parseInt(hex.slice(1), 16);
@@ -136,6 +163,8 @@ export class UI {
   onDailyExit: () => void = () => {};  // backed out of / done with the daily
   onWeekly: () => void = () => {};     // Weekly Cup picked from the menu
   onWeeklyExit: () => void = () => {}; // backed out of / done with the Weekly Cup
+  onBounty: () => void = () => {};     // bounty race picked from the bounty board
+  onBountyExit: () => void = () => {}; // backed out of / done with the bounty race
 
   private menu = $('menu');
   private results = $('results');
@@ -174,12 +203,14 @@ export class UI {
   private pickedLaps = 2; // the user's own choice, restored when a lock lifts
   private dailyUi = false; // garage reached via DAILY RUN, not the tour flow
   private weeklyUi = false; // garage reached via WEEKLY CUP, not the tour flow
+  private bountyUi = false; // garage reached via the bounty board
   private tutTimers: number[] = [];
   private keyHintTimer = 0;
   private modeIndex = 0;
   private lastRun: RunCard | null = null;
-  private lastWeekly = false;                // the results on screen are a Weekly Cup run
-  private bountyReturn: HTMLElement | null = null; // page the bounty rules were opened from
+  private lastBounty = false;                // the results on screen are a bounty race
+  private bountyReturn: HTMLElement | null = null; // page the bounty board was opened from
+  private afterUsername: () => void = () => {};    // where the username prompt returns to
   private guideMode: 'paused' | 'first-run' | 'menu' = 'paused';
   private marketPending = false;
 
@@ -221,6 +252,7 @@ export class UI {
     on('btn-mint', () => void this.mintReceipt());
     on('btn-bounty', () => this.openBounty(this.menu));
     on('btn-bounty-results', () => this.openBounty($('results')));
+    on('btn-bounty-race', () => this.raceBounty());
     on('btn-bounty-close', () => {
       this.audio.play('back');
       $('bounty').classList.add('hidden');
@@ -232,28 +264,47 @@ export class UI {
       this.menu.classList.remove('hidden');
       this.exitDaily();
       this.exitWeekly();
+      this.exitBounty();
       this.refreshDaily();
       this.refreshWeekly();
+      this.refreshBounty();
       this.refreshBank();
     });
     this.prepareWalletChip(); // Account permission is requested only after an explicit tap.
 
     // wallet chip → driver card (connecting first if needed)
     on('wallet-chip', () => void this.onWalletChip());
-    let workshopOrigin: 'menu' | 'garage' = 'menu';
+    // the customs workshop lives in the garage, beside the cars it builds
     const workshop = new WorkshopUI(
       build => this.onWorkshopPreview(build),
-      () => { $(workshopOrigin).classList.remove('hidden'); this.onPage(workshopOrigin); this.refreshBank(); this.renderCar(); },
+      () => { $('garage').classList.remove('hidden'); this.onPage('garage'); this.refreshBank(); this.renderCar(); },
       () => { const index = CARS.findIndex(c => c.model === 300); this.setCar(index); this.onCar(index); }
     );
-    for (const [id, origin] of [['btn-workshop-home', 'menu'], ['btn-workshop-garage', 'garage']] as const) {
-      on(id, () => { workshopOrigin = origin; $(origin).classList.add('hidden'); this.onPage('workshop'); workshop.open(); });
-    }
+    on('btn-workshop-garage', () => { $('garage').classList.add('hidden'); this.onPage('workshop'); workshop.open(); });
     on('btn-profile-close', () => {
       this.audio.play('back');
       $('profile').classList.add('hidden');
       this.menu.classList.remove('hidden');
     });
+
+    // username: picked after a Nimiq sign-in, editable from the driver card and board
+    const nameInput = $<HTMLInputElement>('username-input');
+    nameInput.maxLength = USERNAME_MAX;
+    nameInput.addEventListener('pointerdown', (e) => e.stopPropagation());
+    nameInput.addEventListener('input', () => { $('username-error').textContent = ''; });
+    nameInput.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      this.saveUsername();
+    });
+    on('btn-username-save', () => this.saveUsername());
+    on('btn-username-skip', () => {
+      this.audio.play('back');
+      if (!hasUsername()) keepDriverName();
+      this.closeUsername();
+    });
+    on('btn-profile-name', () => this.askUsername($('profile'), () => this.openProfile()));
+    on('btn-board-name', () => void this.boardNameAction());
 
     // race setup flow: RACE → city (tour flyby) → car (garage turntable)
     // + laps → START. The game camera follows each step via onPage.
@@ -317,7 +368,7 @@ export class UI {
       goto('menu', 'garage');
     });
     on('btn-market-home', () => {
-      this.exitDaily(); this.exitWeekly();
+      this.exitDaily(); this.exitWeekly(); this.exitBounty();
       this.selectCar(CARS.findIndex(c => c.class === 'hyper'));
       goto('menu', 'garage');
     });
@@ -329,10 +380,11 @@ export class UI {
     on('tour-back', () => goto('tour', 'menu', 'back'));
     on('btn-tour-done', () => goto('tour', 'garage'));
     on('garage-back', () => {
-      // the daily / weekly skip the tour, so backing out returns to the menu
-      if (this.dailyUi || this.weeklyUi) {
+      // the daily / weekly / bounty skip the tour, so backing out returns to the menu
+      if (this.dailyUi || this.weeklyUi || this.bountyUi) {
         this.exitDaily();
         this.exitWeekly();
+        this.exitBounty();
         goto('garage', 'menu', 'back');
       } else {
         goto('garage', 'tour', 'back');
@@ -426,13 +478,6 @@ export class UI {
       this.audio.play('back');
       $('modes').classList.add('hidden');
       this.menu.classList.remove('hidden');
-    });
-    const tag = $<HTMLInputElement>('tag-input');
-    tag.value = this.board.tag;
-    tag.addEventListener('pointerdown', (e) => e.stopPropagation());
-    tag.addEventListener('input', () => {
-      tag.value = tag.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 3);
-      this.board.tag = tag.value;
     });
 
     // pedals: hold, don't click. stopPropagation (down AND move) keeps the
@@ -620,11 +665,15 @@ export class UI {
       page.classList.add('intro');
     });
 
+    $('home-mode-count').textContent = String(MODES.length);
     this.setRacers(4);
     this.refreshBest();
     this.refreshBank();
     this.refreshDaily();
     this.refreshWeekly();
+    this.refreshBounty();
+    // a bounty posted in Convex lights the card up once it answers
+    void loadBounty().then(() => this.refreshBounty());
     this.refreshModeLocks();
   }
 
@@ -744,31 +793,135 @@ export class UI {
   /** The Weekly Cup button shows this week's city + mode and top prize. */
   private refreshWeekly(): void {
     const m = MAPS[weeklyMapIndex(MAPS.length)];
-    const mode = MODES[weeklyModeIndex(MODES.length)];
+    const mode = MODES[CUP_MODES[weeklyModeIndex(CUP_MODES.length)]];
     const best = this.board.weeklyEntries(weekKey())[0];
-    const bounty = bountyActive();
-    $('btn-weekly').classList.toggle('bounty', bounty);
-    $('btn-bounty').classList.toggle('hidden', !bounty);
     $('btn-weekly').innerHTML =
       `<span class="ev-label">WEEKLY CUP</span>` +
       `<strong class="ev-title">${m.flag} ${m.name} · ${mode.name}</strong>` +
-      `<small class="ev-meta">${bounty
-        ? `💰 ${bountyPrize()} bounty`
-        : best
-          ? `Top ${best.score} · ${best.tag} · win ⬤ ${WEEKLY_PRIZES[1]}`
-          : `Top 3 wins up to ⬤ ${WEEKLY_PRIZES[1]}`}</small>`;
+      `<small class="ev-meta">${best
+        ? `Top ${best.score} · ${best.tag} · win ⬤ ${WEEKLY_PRIZES[1]}`
+        : `Top 3 wins up to ⬤ ${WEEKLY_PRIZES[1]}`}</small>`;
   }
 
-  /** Bounty rules, opened from the menu banner or a Weekly Cup result. */
+  /**
+   * The bounty card on the menu. Always there: the bounty race and its board
+   * run every week, and a posted prize lights the card up.
+   */
+  private refreshBounty(): void {
+    const m = MAPS[bountyMapIndex(MAPS.length)];
+    const best = this.board.bountyEntries(weekKey())[0];
+    const live = bountyActive();
+    const card = $('btn-bounty');
+    card.classList.toggle('live', live);
+    card.replaceChildren(
+      textEl('span', 'ev-label', live ? '💰 BOUNTY BOARD · PRIZE POSTED' : '💰 BOUNTY BOARD'),
+      textEl('strong', 'ev-title', live
+        ? `${bountyPrize()} · ${bountySplit() ? `top ${bountySplit()!.length} HARDCORE wins` : 'fastest HARDCORE win'}`
+        : 'Fastest HARDCORE win tops the board'),
+      textEl('small', 'ev-meta', `${m.flag} ${m.name} · ${best
+        ? `your fastest win ${raceClock(best.time)}`
+        : 'street cars · 7 pro drivers · no traffic'}`)
+    );
+  }
+
+  /** The bounty board: this week's race, the prize, the fastest wins and the rules. */
   private openBounty(from: HTMLElement): void {
-    const m = MAPS[weeklyMapIndex(MAPS.length)];
-    const mode = MODES[weeklyModeIndex(MODES.length)];
     this.bountyReturn = from;
     this.audio.play('open');
-    $('bounty-prize').textContent = bountyPrize();
-    $('bounty-sub').textContent = `${m.flag} ${m.name} · ${mode.name} · closes ${BOUNTY_CLOSES}`;
+    this.renderBountyHead();
+    // opened from a result it's the rules they came for
+    $<HTMLDetailsElement>('bounty-how').open = from === this.results;
+    this.renderBountyBoard();
     from.classList.add('hidden');
     $('bounty').classList.remove('hidden');
+    // read Convex again, so a bounty posted since the game opened shows up here
+    void loadBounty(true).then(() => {
+      this.renderBountyHead();
+      this.refreshBounty();
+    });
+  }
+
+  /** Prize, race and status lines at the top of the bounty board. */
+  private renderBountyHead(): void {
+    const m = MAPS[bountyMapIndex(MAPS.length)];
+    const mode = MODES[BOUNTY_MODE];
+    const live = bountyActive();
+    $('bounty-prize').textContent = live ? bountyPrize() : 'NO PRIZE THIS WEEK';
+    // a shared prize names each place, on the board and in the rules
+    const split = live ? bountySplit() : null;
+    const places = split?.map((p, i) => `${i + 1}${suffix(i + 1)} ${p}`) ?? [];
+    $('bounty-split').textContent = places.join(' · ');
+    $('bounty-rule-prize').replaceChildren(
+      textEl('strong', '', split
+        ? `The ${split.length} fastest winning times share the prize: ${places.join(', ')}.`
+        : 'The fastest winning time takes the prize.'),
+      document.createTextNode(split
+        ? ' One prize per person; ties go to the earlier entry.'
+        : ' Ties go to the earlier entry.')
+    );
+    $('bounty-sub').textContent = `${m.flag} ${m.name} · ${mode.name} · ${mode.lapsLocked ?? 2} laps` +
+      ` · ${((mode.trackLength ?? 0) / 1000).toFixed(1)} km lap`;
+    $('bounty-status').textContent = live
+      ? `Prize posted. Win the race, then enter from the results screen in Nimiq Pay. Closes ${BOUNTY_CLOSES}.`
+      : `Wins still rank on the board. No prize is posted for ${weekKey()} yet — when one is, this card lights up.`;
+  }
+
+  /** Fastest bounty wins this week: worldwide when the global board is set up, then this phone's. */
+  private renderBountyBoard(): void {
+    const list = $('bounty-list');
+    list.replaceChildren();
+    const week = weekKey();
+    if (remoteEnabled()) {
+      const title = textEl('div', 'board-head', '🌍 FASTEST WINS · WORLDWIDE');
+      const slot = textEl('div', 'board-empty', 'Loading…');
+      list.append(title, slot);
+      const me = playerId(this.wallet.address);
+      void topBounty(week).then((rows) => {
+        if (!slot.isConnected) return; // board was rebuilt meanwhile
+        if (rows.length === 0) {
+          slot.textContent = 'No wins posted yet. The first one tops the board.';
+          return;
+        }
+        slot.remove();
+        title.after(...rows.map((e, i) =>
+          this.boardRow(i + 1, e.tag, e.car, raceClock(e.time_s), e.player_id === me)));
+      });
+    }
+    list.appendChild(textEl('div', 'board-head', '📱 YOUR WINS · THIS PHONE'));
+    const mine = this.board.bountyEntries(week);
+    if (mine.length === 0) {
+      list.appendChild(textEl('div', 'board-empty', 'No wins yet. Finish 1st in the bounty race to post a time.'));
+    }
+    mine.forEach((e, i) => list.appendChild(this.boardRow(i + 1, e.tag, e.car, raceClock(e.time))));
+  }
+
+  /** Bounty board → this week's bounty race, straight to the garage like the Weekly Cup. */
+  private raceBounty(): void {
+    this.audio.unlock();
+    this.audio.play('click');
+    this.exitDaily();
+    this.exitWeekly();
+    this.bountyUi = true;
+    this.onBounty();
+    // street cars only: seat the player in one rather than in front of a locked START
+    const need = MODES[BOUNTY_MODE].requiresClass;
+    if (need && CARS[this.carIndex].class !== need) {
+      const fit = eligibleCars(need)[0];
+      if (fit !== undefined) this.selectCar(fit);
+    }
+    $('lap-select').classList.add('locked');
+    $('bounty').classList.add('hidden');
+    $('garage').classList.remove('hidden');
+    this.onPage('garage');
+  }
+
+  /** Leaving the bounty race flow: unlock the lap picker and tell the game. */
+  private exitBounty(): void {
+    if (!this.bountyUi) return;
+    this.bountyUi = false;
+    $('lap-select').classList.remove('locked');
+    this.selectLapChip(this.pickedLaps, false);
+    this.onBountyExit();
   }
 
   /** Flame + day count next to the daily; hidden until a streak exists. */
@@ -814,6 +967,9 @@ export class UI {
     $('mode-tag').textContent = m.tagline;
     $('mode-name-line').textContent = `${m.icon} ${m.name} · ${MODE_RISK[m.id] ?? 'MODE'}`;
     $('home-mode-name').textContent = m.name;
+    $('home-mode-icon').textContent = m.icon;
+    $('home-mode-tag').textContent = m.tagline;
+    $('mode-all').style.setProperty('--accent', MODE_ACCENT[m.id] ?? '#fcff52');
     $('lap-select').classList.toggle('locked', m.lapsLocked !== undefined);
     // dimmed chips still tell the truth about how many laps you'll race;
     // the user's own pick comes back when the lock lifts
@@ -1116,12 +1272,12 @@ export class UI {
     const status = $('mint-status');
     button.disabled = true;
     status.textContent = 'Confirm in Nimiq Pay…';
-    // a Weekly Cup run while the bounty runs is written as an MR2 entry
-    const bountyRun = this.lastWeekly && bountyActive();
+    // a bounty race win while a prize is posted is written as an MR3 entry
+    const bountyRun = this.lastBounty && bountyActive() && bountyQualifies(run.place, run.busted);
     const tx = await (bountyRun
-      ? this.wallet.mintCupReceipt({
+      ? this.wallet.mintBountyReceipt({
         week: weekKey(), score: run.score, time: run.time, place: run.place
-      })
+      }, bountyReceiver())
       : this.wallet.mintRaceReceipt({
         score: run.score, place: run.place, mapId: this.mapIndex, modeId: this.modeIndex
       })
@@ -1134,7 +1290,7 @@ export class UI {
     this.audio.play('buy');
     button.classList.add('hidden');
     status.textContent = bountyRun
-      ? '✅ Entered. Beat your score and enter again: your best entry counts.'
+      ? '✅ Entered. Win faster and enter again: your fastest win counts.'
       : '⛓ Run written to Nimiq.';
   }
 
@@ -1182,29 +1338,28 @@ export class UI {
     });
   }
 
+  /** One board line: rank, driver, detail, and the figure it is ranked on. */
+  private boardRow(rank: number, name: string, meta: string, value: string, mine = false): HTMLElement {
+    const row = document.createElement('div');
+    row.className = rank === 1 ? 'board-row top' : 'board-row';
+    if (mine) row.classList.add('mine');
+    row.append(
+      textEl('span', 'rk', String(rank)), textEl('span', 'tg', name),
+      textEl('span', 'meta', meta), textEl('span', 'sc', value)
+    );
+    return row;
+  }
+
   private renderBoard(): void {
+    this.renderNameRow();
     const list = $('board-list');
-    list.innerHTML = '';
+    list.replaceChildren();
+    const runMeta = (place: number, time: number, laps: number, car: string): string =>
+      `${place}${suffix(place)} · ${time.toFixed(1)}s · ${laps} lap${laps > 1 ? 's' : ''} · ${car}`;
     const section = (title: string, entries: ReturnType<Leaderboard['entries']>) => {
-      const head = document.createElement('div');
-      head.className = 'board-head';
-      head.textContent = title;
-      list.appendChild(head);
-      entries.forEach((e, i) => {
-        const row = document.createElement('div');
-        row.className = i === 0 ? 'board-row top' : 'board-row';
-        const cell = (cls: string, text: string) => {
-          const s = document.createElement('span');
-          s.className = cls;
-          s.textContent = text;
-          row.appendChild(s);
-        };
-        cell('rk', String(i + 1));
-        cell('tg', e.tag);
-        cell('meta', `${e.place}${suffix(e.place)} · ${e.time.toFixed(1)}s · ${e.laps} lap${e.laps > 1 ? 's' : ''} · ${e.car}`);
-        cell('sc', String(e.score));
-        list.appendChild(row);
-      });
+      list.appendChild(textEl('div', 'board-head', title));
+      entries.forEach((e, i) => list.appendChild(
+        this.boardRow(i + 1, e.tag, runMeta(e.place, e.time, e.laps, e.car), String(e.score))));
     };
     const daily = this.board.dailyEntries(dayKey());
     const weekly = this.board.weeklyEntries(weekKey());
@@ -1212,14 +1367,9 @@ export class UI {
 
     // global daily first — it's the board that matters
     if (remoteEnabled()) {
-      const head = document.createElement('div');
-      head.className = 'board-head';
-      head.textContent = '🌍 GLOBAL DAILY';
-      list.appendChild(head);
-      const slot = document.createElement('div');
-      slot.className = 'board-empty';
-      slot.textContent = 'Loading…';
-      list.appendChild(slot);
+      const head = textEl('div', 'board-head', '🌍 GLOBAL DAILY');
+      const slot = textEl('div', 'board-empty', 'Loading…');
+      list.append(head, slot);
       const me = playerId(this.wallet.address);
       void topDaily(dayKey()).then((rows) => {
         if (!slot.isConnected) return; // panel was rebuilt meanwhile
@@ -1227,24 +1377,9 @@ export class UI {
           slot.textContent = 'No global runs yet — set the first one!';
           return;
         }
-        const built = rows.map((e, i) => {
-          const row = document.createElement('div');
-          row.className = i === 0 ? 'board-row top' : 'board-row';
-          if (e.player_id === me) row.style.outline = '1px solid rgba(252,255,82,.6)';
-          const cell = (cls: string, text: string) => {
-            const s = document.createElement('span');
-            s.className = cls;
-            s.textContent = text;
-            row.appendChild(s);
-          };
-          cell('rk', String(i + 1));
-          cell('tg', e.tag);
-          cell('meta', `${e.place}${suffix(e.place)} · ${e.time_s.toFixed(1)}s · ${e.laps} lap${e.laps > 1 ? 's' : ''} · ${e.car}`);
-          cell('sc', String(e.score));
-          return row;
-        });
         slot.remove();
-        head.after(...built);
+        head.after(...rows.map((e, i) => this.boardRow(
+          i + 1, e.tag, runMeta(e.place, e.time_s, e.laps, e.car), String(e.score), e.player_id === me)));
       });
     }
 
@@ -1272,21 +1407,24 @@ export class UI {
     }
   }
 
-  /** Offer explicit account permission in Nimiq Pay, or the local driver card outside it. */
+  /**
+   * Offer explicit account permission in Nimiq Pay. Outside it there is no
+   * sign-in, so the chip wears the generated driver name and opens the card.
+   */
   private prepareWalletChip(): void {
     const chip = $('wallet-chip');
     chip.classList.add('connectable');
-    chip.textContent = this.wallet.available ? 'CONNECT NIMIQ' : 'DRIVER CARD';
+    chip.textContent = this.wallet.available ? 'CONNECT NIMIQ' : driverName();
   }
 
   private async refreshChip(): Promise<void> {
     const chip = $('wallet-chip');
     chip.classList.remove('connectable');
-    chip.textContent = this.wallet.shortAddress();
+    chip.textContent = driverName();
     // Balance needs an RPC endpoint the Mini App provider doesn't supply;
-    // without one the chip just shows the address.
+    // without one the chip just shows the name.
     const nim = await this.wallet.balance().catch(() => null);
-    if (nim) chip.textContent = `${this.wallet.shortAddress()} · ${nim} NIM`;
+    if (nim) chip.textContent = `${driverName()} · ${nim} NIM`;
   }
 
   /** Chip tap: connect first if needed, then open the driver card. */
@@ -1298,17 +1436,95 @@ export class UI {
         return; // dialog dismissed — stay on the menu, chip keeps offering
       }
       void this.refreshChip();
+      // a fresh Nimiq sign-in picks the username the boards will show
+      if (!hasUsername()) {
+        this.audio.play('open');
+        this.askUsername(this.menu, () => this.openProfile());
+        return;
+      }
     }
     this.audio.play('open');
+    this.openProfile();
+  }
+
+  private openProfile(): void {
     this.renderProfile();
     this.menu.classList.add('hidden');
     $('profile').classList.remove('hidden');
   }
 
+  /**
+   * Username prompt: right after a Nimiq sign-in, and from the driver card or
+   * board. `from` is hidden while it's up; `then` runs once it closes.
+   */
+  private askUsername(from: HTMLElement, then: () => void): void {
+    this.afterUsername = then;
+    from.classList.add('hidden');
+    const input = $<HTMLInputElement>('username-input');
+    input.value = hasUsername() ? driverName() : '';
+    input.placeholder = driverName();
+    $('username-error').textContent = '';
+    // the generated name is the placeholder, so "keep it" needs no repeating
+    $('btn-username-skip').textContent = hasUsername() ? 'CANCEL' : 'KEEP IT';
+    $('username').classList.remove('hidden');
+    input.focus();
+  }
+
+  private saveUsername(): void {
+    const error = setUsername($<HTMLInputElement>('username-input').value);
+    if (error) {
+      $('username-error').textContent = error;
+      this.audio.play('empty');
+      return;
+    }
+    this.audio.play('select');
+    this.closeUsername();
+  }
+
+  private closeUsername(): void {
+    $<HTMLInputElement>('username-input').blur();
+    $('username').classList.add('hidden');
+    if (this.wallet.address) void this.refreshChip();
+    else this.prepareWalletChip();
+    this.afterUsername();
+  }
+
+  /** Who the boards credit, and how to change it. */
+  private renderNameRow(): void {
+    $('board-name').textContent = driverName();
+    const button = $('btn-board-name');
+    button.textContent = this.wallet.address ? 'EDIT' : 'SIGN IN';
+    button.classList.toggle('hidden', !this.wallet.available);
+    $('board-name-note').textContent = this.wallet.address ? ''
+      : this.wallet.available ? 'Sign in with Nimiq to pick your username.'
+      : 'Your driver name. Open MiniRush in Nimiq Pay to pick your own.';
+  }
+
+  private async boardNameAction(): Promise<void> {
+    if (!this.wallet.address) {
+      if (!this.wallet.available) return;
+      try {
+        await this.wallet.connect();
+      } catch {
+        return;
+      }
+      void this.refreshChip();
+    }
+    this.askUsername($('board'), () => {
+      this.renderBoard();
+      $('board').classList.remove('hidden');
+    });
+  }
+
   /** The driver card: identity + local progress; on-chain stats fill in async. */
   private renderProfile(): void {
-    $('profile-tag').textContent = this.board.tag;
-    $('profile-addr').textContent = this.wallet.shortAddress();
+    const name = driverName();
+    $('profile-tag').textContent = name.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('');
+    $('profile-name').textContent = name;
+    $('btn-profile-name').classList.toggle('hidden', !this.wallet.address);
+    $('profile-addr').textContent = this.wallet.address
+      ? this.wallet.shortAddress()
+      : this.wallet.available ? 'Not signed in with Nimiq' : 'Open MiniRush in Nimiq Pay to pick a username';
     $('profile-balance').textContent = '';
     void this.wallet.balance()
       .then((b) => { if (b) $('profile-balance').textContent = `${b} NIM`; })
@@ -1561,19 +1777,56 @@ export class UI {
     });
   }
 
+  /**
+   * Finishing order under the verdict: every car in the race, the winner's
+   * time and everyone else's gap to it. Cars still on track when you crossed
+   * the line carry an estimate (~).
+   */
+  private renderStandings(rows: Standing[]): void {
+    const box = $('r-standings');
+    box.replaceChildren();
+    box.classList.toggle('hidden', rows.length < 2);
+    if (rows.length < 2) return;
+    const lead = rows[0].time;
+    rows.forEach((row, i) => {
+      const line = document.createElement('div');
+      line.className = 'standing';
+      line.classList.toggle('first', i === 0);
+      line.classList.toggle('you', row.you);
+      line.style.setProperty('--i', String(i));
+      const who = document.createElement('span');
+      who.className = 'st-who';
+      who.append(textEl('strong', '', row.name));
+      if (row.you) who.append(textEl('i', '', 'YOU'));
+      if (row.car) who.append(textEl('small', '', row.car));
+      line.append(
+        textEl('span', 'st-pos', String(i + 1)),
+        who,
+        textEl('span', 'st-gap', i === 0
+          ? raceClock(row.time)
+          : `${row.estimated ? '~' : ''}+${(row.time - lead).toFixed(2)}s`)
+      );
+      box.appendChild(line);
+    });
+  }
+
   showResults(
     place: number, time: number, coins: number, score: number,
     laps: number, car: string, busted = false, style = 0, daily = false, weekly = false,
-    takedowns = 0
+    takedowns = 0, bounty = false, standings: Standing[] = []
   ): void {
     this.hideFinishMoment();
     window.clearTimeout(this.keyHintTimer);
     $('key-hints').classList.add('hidden');
     const best = Math.max(this.best, score);
     localStorage.setItem(BEST_KEY, String(best));
-    // daily / weekly runs rank on their own shared-circuit boards, not all-time
+    const won = bountyQualifies(place, busted);
+    // daily / weekly runs rank on their own shared-circuit boards, not all-time;
+    // the bounty board takes wins only, fastest first
     let rank: number;
-    if (weekly) {
+    if (bounty) {
+      rank = won ? this.board.submitBounty(weekKey(), { score, place, time, laps, car }) : 0;
+    } else if (weekly) {
       rank = this.board.submitWeekly(weekKey(), { score, place, time, laps, car });
     } else if (daily) {
       rank = this.board.submitDaily(dayKey(), { score, place, time, laps, car });
@@ -1582,20 +1835,28 @@ export class UI {
     }
     // Kept clearly subordinate to the placing: a personal-best badge sitting at
     // the same weight as the result read as a contradiction when you came last.
-    $('r-rank').textContent = rank > 0
-      ? weekly ? `PERSONAL BEST · #${rank} IN THE WEEKLY CUP`
-        : daily ? `PERSONAL BEST · #${rank} ON TODAY'S DAILY`
-        : `PERSONAL BEST · #${rank} ON YOUR BOARD`
-      : '';
+    $('r-rank').textContent = bounty
+      ? won
+        ? rank > 0 ? `💰 BOUNTY BOARD · #${rank} FASTEST WIN ON THIS PHONE` : '💰 WIN POSTED'
+        : '💰 ONLY A WIN MAKES THE BOUNTY BOARD'
+      : rank > 0
+        ? weekly ? `PERSONAL BEST · #${rank} IN THE WEEKLY CUP`
+          : daily ? `PERSONAL BEST · #${rank} ON TODAY'S DAILY`
+          : `PERSONAL BEST · #${rank} ON YOUR BOARD`
+        : '';
     // …and race the world when the global board is configured
+    const remoteRun = { tag: driverName(), score, time, place, laps, car };
     if (daily && !busted) {
-      void submitDaily(
-        dayKey(), { tag: this.board.tag, score, time, place, laps, car },
-        this.wallet.address
-      ).then((globalRank) => {
+      void submitDaily(dayKey(), remoteRun, this.wallet.address).then((globalRank) => {
         if (globalRank > 0) $('r-rank').textContent = `🌍 #${globalRank} WORLDWIDE TODAY`;
       });
     }
+    if (bounty && won) {
+      void submitBounty(weekKey(), remoteRun, this.wallet.address).then((globalRank) => {
+        if (globalRank > 0) $('r-rank').textContent = `🌍 #${globalRank} FASTEST WIN WORLDWIDE`;
+      });
+    }
+    this.renderStandings(standings);
     // The screen takes a side: winning, scraping a podium and being beaten
     // should not look identical, which is exactly what they did before.
     const results = $('results');
@@ -1632,20 +1893,24 @@ export class UI {
     };
     // minting is only offered on a finished run, inside Nimiq Pay, with a
     // receipt anchor configured
-    const canMint = !busted && this.wallet.available && this.wallet.receiptsReady;
-    const bountyRun = weekly && !busted && bountyActive();
-    this.lastWeekly = weekly;
+    const bountyRun = bounty && won && bountyActive();
+    // a posted bounty may name its own entry address
+    const receiptsReady = bountyRun
+      ? this.wallet.bountyEntriesReady(bountyReceiver())
+      : this.wallet.receiptsReady;
+    const canMint = !busted && this.wallet.available && receiptsReady;
+    this.lastBounty = bounty;
     const mint = $<HTMLButtonElement>('btn-mint');
     mint.classList.toggle('hidden', !canMint);
     mint.classList.toggle('bounty', bountyRun);
     mint.textContent = bountyRun ? '💰 ENTER THE BOUNTY' : 'MINT RECEIPT';
     mint.disabled = false;
-    // entering publishes a score and a wallet address, so say so before the tap
+    // entering publishes a time and a wallet address, so say so before the tap
     $('mint-status').textContent = !bountyRun ? ''
-      : !this.wallet.available ? `Open MiniRush in Nimiq Pay to enter the ${bountyPrize()} bounty.`
-      : !this.wallet.receiptsReady ? 'Bounty entries are not open yet.'
-      : 'Publishes your score and wallet address on the Nimiq blockchain. Your best entry counts.';
-    $('btn-bounty-results').classList.toggle('hidden', !bountyRun);
+      : !this.wallet.available ? `You won the bounty race. Open MiniRush in Nimiq Pay to enter it for ${bountyPrize()}.`
+      : !receiptsReady ? 'Bounty entries are not open yet.'
+      : 'Publishes your winning time and wallet address on the Nimiq blockchain. Your fastest win counts.';
+    $('btn-bounty-results').classList.toggle('hidden', !bounty);
 
     this.hud.classList.remove('visible');
     this.speedlines.classList.remove('on');
@@ -1654,6 +1919,7 @@ export class UI {
     this.refreshBank();
     this.refreshDaily();
     this.refreshWeekly();
+    this.refreshBounty();
   }
 
   private refreshBest(): void {

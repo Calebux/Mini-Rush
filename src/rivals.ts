@@ -1,7 +1,12 @@
 import * as THREE from 'three';
 import { AssetLibrary } from './assets';
 import type { CarSpec } from './cars';
-import { BASE_SPEED, END_SPEED_BONUS, RIVAL_LAT_GRIP, ROAD_HALF_WIDTH } from './constants';
+import {
+  BASE_SPEED, END_SPEED_BONUS, NITRO_SPEED, NITRO_TIME, PRO_NITRO_EVERY, PRO_PACE_BONUS,
+  PRO_PACE_SHARE, PRO_SKILL, PURSUIT_LAT_GRIP, RIVAL_BRAKE, RIVAL_CATCHUP, RIVAL_LAT_GRIP,
+  RIVAL_MIN_CORNER_SPEED, RIVAL_NITRO_EVERY, RIVAL_PACE_SHARE, ROAD_HALF_WIDTH, SAMPLE_STEP,
+  WALL_CRASH_MIN_V
+} from './constants';
 import { buildCar, syncCarGroundFx } from './meshes';
 import { Track } from './track';
 
@@ -17,9 +22,9 @@ interface PersonalityTune {
   brakeLookahead: number; // how far ahead the AI scans for corners (m)
   wobbleAmp: number;     // lateral line-weave amplitude multiplier
   wobbleFreq: number;    // lateral line-weave frequency multiplier
-  overtakeUrge: number;  // 0..1 how hard it tries to pass slower traffic
+  overtakeUrge: number;  // 0..1 how hard it goes for a pass (≥ 0.6 leans on you door to door)
   blockUrge: number;     // 0..1 how hard it defends its position
-  draftSeek: number;     // 0..1 tendency to tuck behind another car
+  draftSeek: number;     // 0..1 how much it gets out of a slipstream
   recoveryRate: number;  // post-wreck speed recovery multiplier
 }
 
@@ -33,10 +38,14 @@ const PERSONALITY_TUNES: Record<Personality, PersonalityTune> = {
 };
 
 const PERSONALITIES: Personality[] = ['balanced', 'aggressive', 'cautious', 'erratic', 'drafter', 'blocker'];
+// a pro field has no passengers: nobody dawdles through bends or wanders off line
+const PRO_PERSONALITIES: Personality[] = ['aggressive', 'blocker', 'balanced', 'drafter'];
 
 export interface Rival {
   name: string;
+  car: string;         // the garage car it drives; '' for a street shell
   mesh: THREE.Group;
+  flame: THREE.Mesh;   // nitro exhaust, lit while boosting
   s: number;
   x: number;
   v: number;
@@ -51,9 +60,16 @@ export interface Rival {
   skill: number;       // corner-braking judgement — the sloppy ones overcook bends
   personality: Personality;
   tune: PersonalityTune;
-  overtakeCooldown: number; // seconds until the AI tries another overtake lane change
-  lastOvertakeDir: number;  // -1 or 1, which side they went last time
-  laneBias: number;         // pursuit: this unit's flank offset from the player (m)
+  nitroTanks: number;  // boosts in hand
+  nitroT: number;      // > 0 = burning
+  nitroEarnT: number;  // seconds until the next tank arrives
+  draftT: number;      // seconds spent in someone's slipstream
+  passT: number;       // > 0 = committed to going round the car ahead
+  passSide: number;    // -1 / 1 — the side it goes round on
+  passTarget: number;  // -1 = the player, otherwise the index of the rival being passed
+  chopT: number;       // > 0 = just got by the player and is cutting across its nose
+  readX: number;       // the player's lane as this driver has registered it (lags)
+  laneBias: number;         // lateral offset from the shared line — the field fans out
   pursuitPhase: PursuitPhase; // police chase: what this unit is currently doing
   pursuitT: number;           // seconds left in the current phase
   pursuitSide: number;        // -1 / 1 — which side it runs the player down
@@ -68,15 +84,31 @@ export interface Rival {
  */
 type PursuitPhase = 'tail' | 'surge' | 'cut' | 'block' | 'drop';
 
-const NAMES = ['BLAZE', 'VOLT', 'RUST', 'HAVOC', 'JINX', 'DIESEL', 'MAULER'];
+export const RIVAL_NAMES = ['BLAZE', 'VOLT', 'RUST', 'HAVOC', 'JINX', 'DIESEL', 'MAULER'];
 
 const TUMBLE_TIME = 1.4;
+const NITRO_HELD_MAX = 2;
+/** Rivals can brake this many times harder than cornerCap plans for, so they stay on its curve. */
+const BRAKE_HEADROOM = 2;
 
-/** AI racers: personality-driven racing, overtaking, drafting, rubber-banding. */
+/**
+ * AI racers. Outside Police Chase they race to win: they corner near the pace
+ * a committed player carries, slipstream, spend nitro where it gains places,
+ * commit to passes, slam the door after one, cover the inside when you line
+ * up a move, and dig in when dropped rather than waiting for you.
+ */
 export class RivalManager {
   rivals: Rival[] = [];
   raceLength = 0; // laps × track length; set by the game each race
   gripMul = 1;    // weather grip modifier (<1 = slippery), set per race
+  paceMul = 1;    // the player's car speed multiplier; the field's pace is set against it
+  onNitro: (r: Rival) => void = () => {};
+
+  private readonly flameGeo = new THREE.ConeGeometry(0.2, 1.3, 8, 1, true).rotateX(-Math.PI / 2);
+  private readonly flameMat = new THREE.MeshBasicMaterial({
+    color: 0x7fd4ff, transparent: true, opacity: 0.85,
+    blending: THREE.AdditiveBlending, depthWrite: false
+  });
 
   constructor(
     scene: THREE.Scene, assets: AssetLibrary, private track: Track,
@@ -85,8 +117,10 @@ export class RivalManager {
     private pursuit = false, // Cop Chase: the single rival is THE HEAT
     // Class modes (Hyper Cup) hand over a shelf of garage cars to race in
     // place of the traffic shells. Empty ⇒ the usual civilian pool.
-    carPool: CarSpec[] = []
+    carPool: CarSpec[] = [],
+    private pro = false // HARDCORE: the pro field
   ) {
+    const personalities = pro ? PRO_PERSONALITIES : PERSONALITIES;
     for (let i = 0; i < count; i++) {
       const spec = carPool.length ? carPool[i % carPool.length] : null;
       const mesh = (pursuit
@@ -94,15 +128,24 @@ export class RivalManager {
         : spec ? assets.cloneCar(spec) : assets.cloneTraffic(i, avoidModel))
         ?? buildCar(i + 1);
       scene.add(mesh);
-      const personality = pursuit ? 'aggressive' as Personality : PERSONALITIES[i % PERSONALITIES.length];
+      // tip points down −z, out of the tail of a normalized body (length 3.9)
+      const flame = new THREE.Mesh(this.flameGeo, this.flameMat);
+      flame.position.set(0, 0.42, -2.6);
+      flame.visible = false;
+      mesh.add(flame);
+      const personality = pursuit ? 'aggressive' as Personality : personalities[i % personalities.length];
       const tune = PERSONALITY_TUNES[personality];
       this.rivals.push({
-        // the lead car is THE HEAT; the rest of the squad are numbered units
+        // the lead car is THE HEAT; the rest of the squad are numbered units.
+        // Racers go by a driver name even in a shared car, so a class mode's
+        // classification never lists the same name twice.
         name: pursuit ? (i === 0 ? 'THE HEAT' : `UNIT ${i + 1}`)
-          : spec ? spec.name : NAMES[i % NAMES.length],
+          : RIVAL_NAMES[i % RIVAL_NAMES.length],
+        car: spec ? spec.name : '',
         mesh,
+        flame,
         s: 0, x: 0, v: 0,
-        baseSpeed: BASE_SPEED - 1.5 + (i % 4) * 1.2 + tune.speedBias,
+        baseSpeed: this.basePace(i, tune),
         wobblePhase: i * 2.4,
         finishTime: -1,
         bumpCooldown: 0,
@@ -110,11 +153,18 @@ export class RivalManager {
         lastHitAt: -10,
         tumbleT: 0,
         rollA: 0,
-        skill: pursuit ? 1.3 : 0.92 + (i % 3) * 0.11,
+        skill: pursuit ? 1.3 : pro ? PRO_SKILL + (i % 3) * 0.04 : 0.92 + (i % 3) * 0.11,
         personality,
         tune,
-        overtakeCooldown: 0,
-        lastOvertakeDir: i % 2 === 0 ? 1 : -1,
+        nitroTanks: 1,
+        nitroT: 0,
+        nitroEarnT: this.nitroEvery,
+        draftT: 0,
+        passT: 0,
+        passSide: 1,
+        passTarget: -1,
+        chopT: 0,
+        readX: 0,
         // a pursuing squad fans out instead of queueing in one lane, so the
         // mirrors show cars on both quarters rather than a single tailgater
         laneBias: count > 1
@@ -128,18 +178,46 @@ export class RivalManager {
     }
   }
 
+  /** Straight-line pace for grid slot i, before progression and racecraft. */
+  private basePace(i: number, tune: PersonalityTune): number {
+    // Police Chase is balanced around its own fixed pace
+    if (this.pursuit) return BASE_SPEED - 1.5 + (i % 4) * 1.2 + tune.speedBias;
+    const anchor = 1 + (this.paceMul - 1) * this.paceShare;
+    return BASE_SPEED * anchor + tune.speedBias + ((i % 3) - 1) * 0.7
+      + (this.pro ? PRO_PACE_BONUS : 0);
+  }
+
+  /** How much of the player's top-speed edge the field matches. */
+  private get paceShare(): number {
+    return this.pro ? PRO_PACE_SHARE : RIVAL_PACE_SHARE;
+  }
+
+  private get nitroEvery(): number {
+    return this.pro ? PRO_NITRO_EVERY : RIVAL_NITRO_EVERY;
+  }
+
   reset(grid: { s: number; x: number }[]): void {
     this.rivals.forEach((r, i) => {
       r.s = grid[i].s;
       r.x = grid[i].x;
       r.v = 0;
+      r.baseSpeed = this.basePace(i, r.tune); // paceMul is set after construction
       r.finishTime = -1;
       r.bumpCooldown = 0;
       r.damage = 0;
       r.lastHitAt = -10;
       r.tumbleT = 0;
       r.rollA = 0;
-      r.overtakeCooldown = 0;
+      // one boost off the grid, like the player; top-ups are staggered so the
+      // field never fires in unison
+      r.nitroTanks = 1;
+      r.nitroT = 0;
+      r.nitroEarnT = this.nitroEvery * (0.8 + i * 0.12);
+      r.draftT = 0;
+      r.passT = 0;
+      r.passTarget = -1;
+      r.chopT = 0;
+      r.readX = grid[i].x;
       // Police Chase: units gridded behind the player chase (first run
       // staggered per unit); units gridded ahead lie in wait and attack.
       r.pursuitPhase = grid[i].s > 0 ? 'block' : 'tail';
@@ -154,16 +232,26 @@ export class RivalManager {
     r.rollA = 0;
     r.damage = 0;
     r.v *= 0.2 * r.tune.recoveryRate;
+    r.nitroT = 0;
+    r.passT = 0;
+    r.chopT = 0;
+  }
+
+  /** Free the field's shared nitro flame. The car bodies are the game's to free. */
+  dispose(): void {
+    this.flameGeo.dispose();
+    this.flameMat.dispose();
   }
 
   update(
     dt: number, elapsed: number, raceTime: number, playerS: number,
-    driving: boolean, playerX = 0, aggression = 0, playerV = 0
+    driving: boolean, playerX = 0, aggression = 0, playerV = 0, playerNitro = false
   ): void {
     const total = this.raceLength || this.track.length;
+    const half = ROAD_HALF_WIDTH - 1;
     for (const r of this.rivals) {
       r.bumpCooldown = Math.max(0, r.bumpCooldown - dt);
-      r.overtakeCooldown = Math.max(0, r.overtakeCooldown - dt);
+      r.nitroT = Math.max(0, r.nitroT - dt);
       if (r.damage > 0 && elapsed - r.lastHitAt > 3.5) r.damage = 0;
 
       if (r.tumbleT > 0) {
@@ -175,102 +263,65 @@ export class RivalManager {
         continue;
       }
 
+      const gap = r.s - playerS; // > 0 = ahead of the player
+      // still in the race and racing the player; pursuit has its own brain
+      const racing = driving && !this.pursuit && r.finishTime < 0;
       let target = 0;
       if (driving) {
         const progression = Math.min(1, r.s / total) * END_SPEED_BONUS;
-        const gap = r.s - playerS;
         if (this.pursuit) {
           target = this.pursue(r, dt, gap, playerV, progression);
         } else {
           const wobble = Math.sin(elapsed * 0.7 * r.tune.wobbleFreq + r.wobblePhase);
-          target = r.baseSpeed + progression + wobble * 1.2;
-          // rubber band: keep the pack racing the player
-          if (gap < -70) target += 6;
-          else if (gap < -25) target += 2.5;
-          else if (gap > 90) target -= 5;
-          else if (gap > 35) target -= 1.5;
-
-          // drafting: rivals behind another car at close range get a speed boost
-          if (r.tune.draftSeek > 0) {
-            for (const other of this.rivals) {
-              if (other === r || other.tumbleT > 0) continue;
-              const sGap = other.s - r.s;
-              if (sGap > 3 && sGap < 20 && Math.abs(other.x - r.x) < 1.5 && r.v > 18) {
-                target += 2.5 * r.tune.draftSeek;
-                break;
-              }
-            }
-          }
+          target = r.baseSpeed + progression + wobble;
+          if (racing) target = this.racePace(r, dt, gap, total, target, playerS, playerX, playerNitro);
         }
       }
       if (driving) {
-        // brake for the bend ahead — personality affects how far they look
-        let k = 0;
-        const lookDists = [8, 18, 30].map(d => d * r.tune.brakeLookahead);
-        for (const look of lookDists) {
-          k = Math.max(k, Math.abs(this.track.frame(r.s + look).curvature));
-        }
-        const grip = RIVAL_LAT_GRIP * this.gripMul;
-        if (k > 1e-4) {
-          target = Math.min(target, Math.sqrt((grip * r.skill) / k));
-        }
-        const kNow = Math.abs(this.track.frame(r.s).curvature);
-        if (!this.pursuit && kNow * r.v * r.v > grip * r.skill * 2.1) {
-          this.wreck(r);
-          continue;
+        const grip = (this.pursuit ? PURSUIT_LAT_GRIP : RIVAL_LAT_GRIP) * this.gripMul;
+        if (this.pursuit) {
+          // brake for the bend ahead — personality affects how far they look
+          let k = 0;
+          const lookDists = [8, 18, 30].map(d => d * r.tune.brakeLookahead);
+          for (const look of lookDists) {
+            k = Math.max(k, Math.abs(this.track.frame(r.s + look).curvature));
+          }
+          if (k > 1e-4) {
+            target = Math.min(target, Math.sqrt((grip * r.skill) / k));
+          }
+        } else {
+          target = Math.min(target, this.cornerCap(r, grip));
+          // the player's wall-crash rule: nobody is thrown off below crash speed
+          const kNow = Math.abs(this.track.curvatureAt(r.s));
+          if (r.v > WALL_CRASH_MIN_V && kNow * r.v * r.v > grip * r.skill * 2.1) {
+            this.wreck(r);
+            continue;
+          }
         }
       }
-      r.v = THREE.MathUtils.damp(r.v, target, 1.6, dt * 4);
+      if (!this.pursuit && r.v > target) {
+        // Brake along a straight line to the target. An exponential follower
+        // lags a falling braking curve by ~6 m/s — exactly the margin that
+        // carried rivals into hairpins above crash speed.
+        r.v = Math.max(target, r.v - RIVAL_BRAKE * BRAKE_HEADROOM * dt);
+      } else {
+        r.v = THREE.MathUtils.damp(r.v, target, 1.6, dt * 4);
+      }
       r.s += r.v * dt;
 
-      // racing line: personality-modulated weave
-      const wAmp = (ROAD_HALF_WIDTH - 1.8) * r.tune.wobbleAmp;
-      let line = Math.sin(r.s * 0.015 * r.tune.wobbleFreq + r.wobblePhase) * wAmp;
-
-      // overtaking: if a rival is close ahead and slower, swerve around it
-      if (driving && !this.pursuit && r.overtakeCooldown <= 0) {
-        for (const other of this.rivals) {
-          if (other === r || other.tumbleT > 0) continue;
-          const sGap = other.s - r.s;
-          // close ahead and going slower
-          if (sGap > 0 && sGap < 12 && Math.abs(other.x - r.x) < 2.5 && other.v < r.v - 1) {
-            if (Math.random() < r.tune.overtakeUrge) {
-              // pick the side with more room
-              const goLeft = other.x > 0 ? -1 : 1;
-              r.lastOvertakeDir = goLeft;
-              line = THREE.MathUtils.clamp(
-                other.x + goLeft * 3.2,
-                -(ROAD_HALF_WIDTH - 1), ROAD_HALF_WIDTH - 1
-              );
-              r.overtakeCooldown = 2.0 + Math.random() * 1.5;
-            }
-            break;
-          }
-        }
-        // also overtake the PLAYER if rival is faster and near
-        const pGap = playerS - r.s;
-        if (pGap > 0 && pGap < 12 && Math.abs(playerX - r.x) < 2.5 && r.v > playerV + 1) {
-          if (Math.random() < r.tune.overtakeUrge * 0.7) {
-            const goSide = playerX > 0 ? -1 : 1;
-            line = THREE.MathUtils.clamp(
-              playerX + goSide * 3.0,
-              -(ROAD_HALF_WIDTH - 1), ROAD_HALF_WIDTH - 1
-            );
-            r.overtakeCooldown = 2.5;
-          }
-        }
-      }
-
-      // blocking: if the player (or a faster rival) is close behind, weave to defend
-      if (driving && !this.pursuit && r.tune.blockUrge > 0.3) {
-        const pBehind = r.s - playerS;
-        if (pBehind > 2 && pBehind < 18 && playerV > r.v) {
-          // shift toward the player's lane to make passing harder
-          const blockLine = THREE.MathUtils.clamp(
-            playerX, -(ROAD_HALF_WIDTH - 1.2), ROAD_HALF_WIDTH - 1.2
-          );
-          line = THREE.MathUtils.lerp(line, blockLine, r.tune.blockUrge * 0.6);
-        }
+      const weave = Math.sin(r.s * 0.015 * r.tune.wobbleFreq + r.wobblePhase);
+      let line: number;
+      if (!driving) {
+        line = r.x; // hold the grid slot through the countdown
+      } else if (this.pursuit) {
+        line = weave * (ROAD_HALF_WIDTH - 1.8) * r.tune.wobbleAmp;
+      } else {
+        // racing line: apex the inside of the coming bend (corner force pushes
+        // toward +curvature, so inside is the other way), fan out on straights
+        const kLine = this.track.frame(r.s + 26).curvature;
+        const inside = -Math.sign(kLine) * Math.min(1, Math.abs(kLine) / 0.014) * (ROAD_HALF_WIDTH - 2.2);
+        line = inside + r.laneBias * 0.6 + weave * 0.9 * r.tune.wobbleAmp;
+        if (racing) line = this.raceLine(r, dt, gap, playerS, playerX, playerV, line);
       }
 
       // Pursuit lane control runs well beyond the ordinary hunt range,
@@ -283,18 +334,171 @@ export class RivalManager {
             : playerX + r.laneBias;          // tailing on its flank
         line = THREE.MathUtils.lerp(
           line,
-          THREE.MathUtils.clamp(lane, -(ROAD_HALF_WIDTH - 1), ROAD_HALF_WIDTH - 1),
+          THREE.MathUtils.clamp(lane, -half, half),
           r.pursuitPhase === 'tail' ? 0.6 : 0.92
         );
       } else if (aggression > 0 && driving && Math.abs(r.s - playerS) < 9) {
         // aggressive modes: nearby rivals abandon the line and hunt the player
-        line = THREE.MathUtils.clamp(playerX, -(ROAD_HALF_WIDTH - 1), ROAD_HALF_WIDTH - 1);
+        line = THREE.MathUtils.clamp(playerX, -half, half);
       }
-      r.x = THREE.MathUtils.damp(r.x, line, 1.2 + aggression * 1.6, dt);
+      const agility = (this.pursuit ? 1.2 : 1.4) + aggression * 1.6
+        + (r.passT > 0 || r.chopT > 0 ? 1.2 : 0);
+      r.x = THREE.MathUtils.damp(r.x, THREE.MathUtils.clamp(line, -half, half), agility, dt);
 
       if (r.finishTime < 0 && r.s >= total) r.finishTime = raceTime;
       this.sync(r, elapsed);
     }
+  }
+
+  /**
+   * Speed target for a rival racing the player: dig in when dropped,
+   * slipstream, and spend nitro where it wins a place.
+   */
+  private racePace(
+    r: Rival, dt: number, gap: number, total: number, target: number,
+    playerS: number, playerX: number, playerNitro: boolean
+  ): number {
+    const easeFrom = this.pro ? 120 : 70;
+    if (gap < -12) {
+      // dropped: chase the player down instead of waiting for them to lift
+      target += Math.min(1, (-gap - 12) / 60) * RIVAL_CATCHUP;
+    } else if (gap > easeFrom) {
+      // a runaway leader eases off, so it stays a target rather than a rumour;
+      // a pro lifts later and less
+      target -= Math.min(1, (gap - easeFrom) / 90) * (this.pro ? 3 : 6);
+    }
+
+    if (this.inTow(r, playerS, playerX)) {
+      r.draftT += dt;
+      target += 1.5 + 2.5 * r.tune.draftSeek;
+    } else {
+      r.draftT = 0;
+    }
+
+    r.nitroEarnT -= dt;
+    if (r.nitroEarnT <= 0) {
+      r.nitroTanks = Math.min(NITRO_HELD_MAX, r.nitroTanks + 1);
+      r.nitroEarnT = this.nitroEvery * (0.85 + Math.random() * 0.3);
+    }
+    if (r.nitroT <= 0 && r.nitroTanks > 0 && r.v > 22 && this.boostPays(r, target)) {
+      let urge = 0;
+      if (gap < -3 && gap > -45) urge = 0.5 + r.tune.overtakeUrge;          // the player is right there
+      else if (gap > 0 && gap < 18 && playerNitro) urge = 0.4 + r.tune.blockUrge; // answer their boost
+      else if (gap < -70) urge = 0.7;                                        // lost touch
+      if (total - r.s < 320 && gap > -90) urge = Math.max(urge, 2);          // sprint for the line
+      if (Math.random() < urge * dt) {
+        r.nitroTanks--;
+        r.nitroT = NITRO_TIME;
+        this.onNitro(r);
+      }
+    }
+    if (r.nitroT > 0) target = Math.max(target, NITRO_SPEED * (1 + (this.paceMul - 1) * this.paceShare) * 0.95);
+    if (r.passT > 0) target += 1.2; // committed to the move
+    return target;
+  }
+
+  /**
+   * Where a racing rival wants to be across the road: going round whatever is
+   * holding it up, slamming the door on the player after a pass, covering the
+   * player's line when they line up a move, leaning on them door to door.
+   */
+  private raceLine(
+    r: Rival, dt: number, gap: number, playerS: number, playerX: number, playerV: number, line: number
+  ): number {
+    if (r.passT <= 0) {
+      let aheadGap = 18, aheadX = 0, aheadV = 0, target = -2; // -2 = nothing ahead
+      const pg = playerS - r.s;
+      if (pg > 0 && pg < aheadGap && Math.abs(playerX - r.x) < 2.6) {
+        aheadGap = pg; aheadX = playerX; aheadV = playerV; target = -1;
+      }
+      this.rivals.forEach((o, j) => {
+        const og = o.s - r.s;
+        if (o !== r && o.tumbleT <= 0 && og > 0 && og < aheadGap && Math.abs(o.x - r.x) < 2.6) {
+          aheadGap = og; aheadX = o.x; aheadV = o.v; target = j;
+        }
+      });
+      const wantsBy = r.v - aheadV > 0.8 || r.draftT > 0.6 || r.nitroT > 0;
+      if (target > -2 && wantsBy && Math.random() < (0.6 + r.tune.overtakeUrge) * dt * 3) {
+        const half = ROAD_HALF_WIDTH - 1;
+        r.passSide = half - aheadX >= aheadX + half ? 1 : -1; // round the side with more road
+        r.passT = 3.2;
+        r.passTarget = target;
+      }
+    }
+    if (r.passT > 0) {
+      r.passT -= dt;
+      const t = r.passTarget < 0 ? { s: playerS, x: playerX } : this.rivals[r.passTarget];
+      line = t.x + r.passSide * 3.0;
+      if (r.s - t.s > 5.5) {
+        r.passT = 0;
+        const slam = 0.25 + r.tune.overtakeUrge * 0.35 + r.tune.blockUrge * 0.4;
+        if (r.passTarget < 0 && Math.random() < slam) r.chopT = 1.1;
+      }
+    }
+
+    if (r.chopT > 0) {
+      r.chopT -= dt;
+      if (gap > 2 && gap < 18) line = THREE.MathUtils.lerp(line, playerX, 0.85);
+      else r.chopT = 0;
+    }
+
+    // Defending reacts to where the player WAS a beat ago, so a late switch
+    // beats the block instead of the rival mirroring every twitch.
+    r.readX = THREE.MathUtils.damp(r.readX, playerX, 2 + r.tune.blockUrge * 2.5, dt);
+    if (r.passT <= 0 && r.chopT <= 0 && gap > 1.5 && gap < 22 && playerV > r.v - 1) {
+      line = THREE.MathUtils.lerp(line, r.readX, Math.min(0.9, 0.25 + r.tune.blockUrge * 0.7));
+    }
+
+    if (Math.abs(gap) < 4 && Math.abs(playerX - r.x) < 3.4 && r.tune.overtakeUrge >= 0.6) {
+      line = THREE.MathUtils.lerp(line, playerX, 0.3);
+    }
+    return line;
+  }
+
+  /**
+   * Fastest speed from which every bend in braking range can still be made.
+   * The scan runs every track sample: hairpins on the technical layouts are
+   * shorter than the gaps a sparse look-ahead leaves, and rivals used to hit
+   * them blind and wreck dozens of times a race. Below crash speed a car can
+   * scrape through anything, so no bend asks for less than that.
+   */
+  private cornerCap(r: Rival, grip: number): number {
+    const reach = (12 + r.v * 1.1) * r.tune.brakeLookahead;
+    let cap = Infinity;
+    for (let d = 0; d <= reach; d += SAMPLE_STEP) {
+      const k = Math.abs(this.track.curvatureAt(r.s + d));
+      if (k < 1e-4) continue;
+      const bend = Math.max(RIVAL_MIN_CORNER_SPEED, Math.sqrt((grip * r.skill) / k));
+      cap = Math.min(cap, Math.sqrt(bend * bend + 2 * RIVAL_BRAKE * d));
+    }
+    return cap;
+  }
+
+  /** In the slipstream of the player or another rival. */
+  private inTow(r: Rival, playerS: number, playerX: number): boolean {
+    if (r.v < 18) return false;
+    const pg = playerS - r.s;
+    if (pg > 3 && pg < 22 && Math.abs(playerX - r.x) < 1.5) return true;
+    for (const o of this.rivals) {
+      if (o === r || o.tumbleT > 0) continue;
+      const og = o.s - r.s;
+      if (og > 3 && og < 20 && Math.abs(o.x - r.x) < 1.5) return true;
+    }
+    return false;
+  }
+
+  /**
+   * The next ~70 m can be taken well above cruising pace. A fixed "is it
+   * straight" test never fired on the flowing layouts, where the road is never
+   * quite straight but a boost still pays.
+   */
+  private boostPays(r: Rival, cruise: number): boolean {
+    const grip = RIVAL_LAT_GRIP * this.gripMul * r.skill;
+    const fast = (cruise + 6) * (cruise + 6);
+    for (let d = 10; d <= 70; d += SAMPLE_STEP * 2) {
+      if (Math.abs(this.track.curvatureAt(r.s + d)) * fast > grip) return false;
+    }
+    return true;
   }
 
   /**
@@ -380,6 +584,8 @@ export class RivalManager {
       r.mesh.rotation.z = r.rollA;
       r.mesh.position.y += Math.sin(Math.min(1, k) * Math.PI) * 1.1;
     }
+    r.flame.visible = r.nitroT > 0 && r.tumbleT <= 0;
+    if (r.flame.visible) r.flame.scale.z = 0.75 + Math.random() * 0.5;
     syncCarGroundFx(r.mesh);
   }
 }

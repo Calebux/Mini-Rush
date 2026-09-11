@@ -3,10 +3,10 @@ import {
   type ErrorResponse, type NimiqProvider
 } from '@nimiq/mini-app-sdk';
 import {
-  encodeCupReceipt, encodeReceipt, type CupRecord, type RaceRecord
+  encodeBountyReceipt, encodeReceipt, type BountyRecord, type RaceRecord
 } from './receipt';
 
-export type { CupRecord, RaceRecord } from './receipt';
+export type { BountyRecord, RaceRecord } from './receipt';
 
 /**
  * Nimiq Pay Mini App wallet.
@@ -146,6 +146,11 @@ export class Wallet {
     return isAddress(RECEIPT_RECEIVER);
   }
 
+  /** A bounty entry can go out: the posted bounty names an address, or the build has one. */
+  bountyEntriesReady(receiver: string | null): boolean {
+    return isAddress(receiver) || this.receiptsReady;
+  }
+
   /** Price label for the market button, e.g. "5 NIM". */
   get marketPriceLabel(): string {
     return `${MARKET_PRICE_NIM} NIM`;
@@ -243,21 +248,23 @@ export class Wallet {
   }
 
   /**
-   * Weekly Cup bounty entry: the same dust anchor transaction, carrying an MR2
-   * payload the organizer ranks after entries close. Sent from the player's
-   * own wallet, so the sender address is where a prize would go.
+   * Bounty entry for a bounty race win: the same dust anchor transaction,
+   * carrying an MR3 payload the organizer ranks after entries close. Sent from
+   * the player's own wallet, so the sender address is where a prize would go.
    */
-  async mintCupReceipt(run: CupRecord): Promise<string | null> {
-    return this.sendReceipt(encodeCupReceipt(run));
+  async mintBountyReceipt(run: BountyRecord, receiver: string | null = null): Promise<string | null> {
+    return this.sendReceipt(encodeBountyReceipt(run), receiver);
   }
 
-  private async sendReceipt(data: string): Promise<string | null> {
-    if (!this.receiptsReady) return null;
+  /** `receiver` overrides the build's receipt address when it is a valid NQ address. */
+  private async sendReceipt(data: string, receiver: string | null = null): Promise<string | null> {
+    const recipient = isAddress(receiver) ? receiver.trim() : RECEIPT_RECEIVER;
+    if (!isAddress(recipient)) return null;
     if (!this.address) await this.connect();
     if (!this.provider) return null;
     try {
       const tx = await this.provider.sendBasicTransactionWithData({
-        recipient: RECEIPT_RECEIVER!,
+        recipient,
         value: RECEIPT_VALUE,
         data
       });
