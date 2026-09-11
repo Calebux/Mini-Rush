@@ -61,11 +61,15 @@ const LAYOUTS: Record<TrackLayout, [number, number][]> = {
     [1.04, -0.08], [0.72, 0.28], [0.2, 0.38], [-0.24, 0.72],
     [-0.8, 0.48], [-1.04, 0.02]
   ],
-  // Blocky city circuit: short straights linked by hard avenue turns.
+  // Blocky city circuit: short straights linked by hard avenue turns, starting
+  // on the long straight. Each reversal is spread over two corners — a single
+  // point turning ~140° drew a hairpin tighter than the road is wide, and its
+  // inside edge folded over itself.
   'city-grid': [
-    [-0.78, -0.78], [-0.18, -0.78], [0.46, -0.78], [0.84, -0.5],
-    [0.84, -0.04], [0.42, -0.04], [0.42, 0.44], [0.9, 0.72],
-    [0.08, 0.84], [-0.52, 0.58], [-0.9, 0.12], [-0.56, -0.34]
+    [-0.18, -0.78], [0.46, -0.78], [0.84, -0.5], [0.84, -0.04],
+    [0.42, -0.04], [0.42, 0.44], [0.94, 0.62], [0.8, 0.88],
+    [0.08, 0.84], [-0.52, 0.58], [-0.9, 0.12], [-0.56, -0.34],
+    [-0.82, -0.66], [-0.66, -0.8]
   ],
   // Fast beach road with a cliff-side hook and a narrow return.
   coastal: [
