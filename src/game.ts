@@ -36,6 +36,7 @@ import { TrafficManager } from './traffic';
 import { Track } from './track';
 import { bakedPath, loadTrackPaths } from './trackPaths';
 import { Standing, UI } from './ui';
+import { track } from './usage';
 import { Wallet } from './wallet';
 import { Build, workshopSpec } from './workshop';
 import { Showroom } from './showroom';
@@ -1325,6 +1326,7 @@ export class Game {
         this.rivals.update(dt, elapsed, this.raceTime, this.player.s, true);
         if (this.finishT > (this.busted ? 2 : 3.2)) {
           this.state = 'menu';
+          track('race');
           this.ui.showResults(
             this.playerPlace, this.playerTime, this.coins,
             this.score(), this.raceLaps, CARS[this.carIndex].name, this.busted,

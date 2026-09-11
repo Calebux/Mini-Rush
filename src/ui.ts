@@ -23,6 +23,7 @@ import { currentStreak, weekProgress } from './streak';
 import {
   applyUpgrades, buyTier, MAX_TIER, TIER_COST, tier, UPGRADE_LABEL, UpgradeStat
 } from './upgrades';
+import { track } from './usage';
 import { BADGES, earnedBadges, mintedReceipts, Wallet } from './wallet';
 import { Build, workshopSpec } from './workshop';
 import { WorkshopUI } from './workshopUI';
@@ -1248,6 +1249,7 @@ export class UI {
       button.disabled = false;
       return;
     }
+    track('purchase');
     try { grantCar(c.id); } catch {
       status.textContent = `Payment returned reference ${tx}, but this device could not save the unlock. Keep the reference; do not pay again.`;
       return;
@@ -1288,6 +1290,7 @@ export class UI {
       return;
     }
     this.audio.play('buy');
+    track(bountyRun ? 'bounty' : 'receipt');
     button.classList.add('hidden');
     status.textContent = bountyRun
       ? '✅ Entered. Win faster and enter again: your fastest win counts.'

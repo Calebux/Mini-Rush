@@ -5,6 +5,7 @@ import {
 import {
   encodeBountyReceipt, encodeReceipt, type BountyRecord, type RaceRecord
 } from './receipt';
+import { track } from './usage';
 
 export type { BountyRecord, RaceRecord } from './receipt';
 
@@ -175,6 +176,7 @@ export class Wallet {
       throw new Error('No Nimiq account available.');
     }
     this.address = accounts[0];
+    track('wallet');
     return this.address;
   }
 
