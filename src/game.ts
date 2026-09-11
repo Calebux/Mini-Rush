@@ -660,7 +660,7 @@ export class Game {
   /** The car spec to race/park: upgrades applied, active paint-job color swapped in. */
   private carSpec(i: number) {
     if (CARS[i].model === 300) return workshopSpec(CARS[i]);
-    return { ...applyUpgrades(CARS[i]), color: activeColor(CARS[i].id) };
+    return { ...applyUpgrades(CARS[i]), color: activeColor(CARS[i].id, CARS[i].color) };
   }
 
   /** Garage pick: persist, and swap the parked car live while in the menu. */

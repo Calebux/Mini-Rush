@@ -73,9 +73,9 @@ export class AssetLibrary {
         if (m) this.superCars[i - 1] = this.addWheels(m);
       }));
     }
-    jobs.push(this.tryLoad('imported/car_1.glb', 4.4).then((m) => {
-      if (m) this.importedCars[0] = this.addWheels(m);
-    }));
+    // importedCars[0] (STOCK 88) has no licensed model, so it renders
+    // procedurally. The file once loaded here was car_nascar.glb renamed —
+    // an unlicensed download wearing real sponsor logos (see CREDITS.md).
     for (let i = 1; i <= 8; i++) {
       jobs.push(this.tryLoad(`city_building_${i}.glb`, 18, 'y').then((m) => {
         if (m) this.cityBuildings.push(m);

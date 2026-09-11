@@ -151,10 +151,14 @@ export function equipSkin(carId: string, index: number): void {
   save(store);
 }
 
-/** Get the active skin's color for a car (falls back to stock). */
-export function activeColor(carId: string): number {
+/**
+ * Get the active skin's color for a car (falls back to stock). A car with no
+ * skins wears `fallback` — pass its own garage color, or a procedural body
+ * with no texture of its own renders white.
+ */
+export function activeColor(carId: string, fallback = 0xffffff): number {
   const skins = CAR_SKINS[carId];
-  if (!skins) return 0xffffff;
+  if (!skins) return fallback;
   const idx = activeSkinIndex(carId);
   return skins[idx]?.color ?? skins[0].color;
 }
