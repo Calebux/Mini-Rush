@@ -7,7 +7,31 @@
   <meta name="talentapp:project_verification" content="a707d7d865b249ab1ee0e741850db9836b2d4f02d9ed4f3c0cd8864f5b4a8406703d206e390569cf4d395eb33a6dd875823c3ed9c8b33ee1302fb0931d9f252a" />
   <link rel="icon" href="data:," />
   <title>MiniRush: Outbreak GP</title>
+  <script>
+    // On Android, Nimiq Pay's WebView can reach behind the system navigation
+    // bar while env(safe-area-inset-bottom) reports it wrong (WebViews before
+    // 140 often say 0), which left the pedals and the nitro pill under the bar.
+    // Tag in-app Android WebViews so --safe-bottom keeps a floor. The host
+    // object can land a moment after this runs, so look again once the page is up.
+    (function () {
+      var ua = navigator.userAgent;
+      if (!/Android/i.test(ua)) return;
+      var tag = function () {
+        if (/; wv\)/.test(ua) || window.nimiqPay || window.nimiq) {
+          document.documentElement.classList.add('android-inapp');
+        }
+      };
+      tag();
+      document.addEventListener('DOMContentLoaded', tag);
+      setTimeout(tag, 1500);
+    })();
+  </script>
   <style>
+    /* Bottom inset for everything pinned to the bottom edge. In an Android
+       in-app WebView it never drops below the tallest navigation bar (48px)
+       plus a thumb's margin. */
+    :root { --safe-bottom: env(safe-area-inset-bottom, 0px); }
+    :root.android-inapp { --safe-bottom: max(env(safe-area-inset-bottom, 0px), 56px); }
     * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     html, body {
       width: 100%; height: 100%; overflow: hidden;
@@ -22,7 +46,7 @@
     .overlay {
       position: fixed; inset: 0; display: flex; flex-direction: column;
       align-items: center; justify-content: center; gap: 14px;
-      padding: max(20px, env(safe-area-inset-top)) 20px max(28px, env(safe-area-inset-bottom));
+      padding: max(20px, env(safe-area-inset-top)) 20px max(28px, var(--safe-bottom));
       background: linear-gradient(180deg, rgba(6,8,20,.72), rgba(6,8,20,.86));
       backdrop-filter: blur(4px); z-index: 10; text-align: center;
       transition: opacity .25s ease;
@@ -697,7 +721,7 @@
     }
     .mode-stage-foot {
       display: flex; flex-direction: column; align-items: center; gap: 12px;
-      padding: 6px 0 max(10px, env(safe-area-inset-bottom));
+      padding: 6px 0 max(10px, var(--safe-bottom));
     }
     .mode-dots { display: flex; gap: 6px; }
     .mode-dots i {
@@ -928,7 +952,7 @@
     #btn-daily small { display: block; font-size: 10px; opacity: .65; font-weight: 600; letter-spacing: .5px; }
 
     #nitro-ui {
-      position: absolute; bottom: max(22px, env(safe-area-inset-bottom)); left: 50%;
+      position: absolute; bottom: max(22px, var(--safe-bottom)); left: 50%;
       transform: translateX(-50%);
       display: flex; align-items: center; gap: 9px;
       font-size: 13px; font-weight: 900; letter-spacing: 2px;
@@ -978,7 +1002,7 @@
 
     #hud-speed {
       position: absolute; right: 18px;
-      bottom: max(118px, calc(env(safe-area-inset-bottom) + 98px));
+      bottom: max(118px, calc(var(--safe-bottom) + 98px));
       text-align: right; line-height: 1;
     }
     #hud-speed-v { font-size: 40px; font-weight: 900; font-variant-numeric: tabular-nums; }
@@ -996,7 +1020,7 @@
     #hud-speed.redline #speed-bar i { background: #ff5e3a; box-shadow: 0 0 10px rgba(255,94,58,.8); }
 
     #btn-brake {
-      position: absolute; left: 18px; bottom: max(20px, env(safe-area-inset-bottom));
+      position: absolute; left: 18px; bottom: max(20px, var(--safe-bottom));
       width: 74px; height: 74px; border-radius: 50%;
       display: flex; align-items: center; justify-content: center;
       background: rgba(255,70,70,.16); border: 2px solid rgba(255,70,70,.55); color: #ff8a8a;
@@ -1006,7 +1030,7 @@
     #btn-brake.held { background: rgba(255,70,70,.55); color: #fff; box-shadow: 0 0 24px rgba(255,70,70,.7); }
 
     #btn-gas {
-      position: absolute; right: 18px; bottom: max(20px, env(safe-area-inset-bottom));
+      position: absolute; right: 18px; bottom: max(20px, var(--safe-bottom));
       width: 84px; height: 84px; border-radius: 50%;
       display: flex; align-items: center; justify-content: center;
       background: rgba(252,255,82,.13); border: 2px solid rgba(252,255,82,.5); color: #fcff52;
@@ -1050,7 +1074,7 @@
     /* ---------- drift chain indicator ---------- */
     #drift-ui {
       position: absolute; right: 18px;
-      bottom: max(168px, calc(env(safe-area-inset-bottom) + 148px));
+      bottom: max(168px, calc(var(--safe-bottom) + 148px));
       text-align: right; font-size: 16px; font-weight: 900; font-style: italic;
       color: #ffb84a; letter-spacing: 1px; text-shadow: 0 2px 8px rgba(0,0,0,.7);
       opacity: 0; transition: opacity .15s ease; pointer-events: none;
@@ -1092,7 +1116,7 @@
     /* A coaching banner that eats a third of the screen mid-race competes with
        the road. Small, low, and out of the racing line instead. */
     #tutorial {
-      position: fixed; bottom: max(96px, calc(env(safe-area-inset-bottom) + 76px));
+      position: fixed; bottom: max(96px, calc(var(--safe-bottom) + 76px));
       left: 50%; transform: translateX(-50%);
       max-width: 78vw; white-space: nowrap;
       padding: 6px 14px; border-radius: 999px; z-index: 5; pointer-events: none;

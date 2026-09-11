@@ -52,7 +52,7 @@
 #menu #best-line { display: none; }
 #menu #bank-line { color: var(--gold); }
 #menu .home-links #btn-how { margin: 0; padding: 7px 0; font: 700 9px sans-serif; min-width: 0; width: auto; border: 0; background: none; letter-spacing: 0; color: var(--muted); }
-#workshop { display: grid; grid-template-rows: auto minmax(180px,1fr) auto; align-items: stretch; justify-content: stretch; padding: max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left)); text-align: left; background: linear-gradient(#06100c99,transparent 25%,transparent 40%,#06100cbb 65%); backdrop-filter: none; color: var(--cream); gap: 8px; overflow-y: auto; }
+#workshop { display: grid; grid-template-rows: auto minmax(180px,1fr) auto; align-items: stretch; justify-content: stretch; padding: max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(12px,var(--safe-bottom)) max(16px,env(safe-area-inset-left)); text-align: left; background: linear-gradient(#06100c99,transparent 25%,transparent 40%,#06100cbb 65%); backdrop-filter: none; color: var(--cream); gap: 8px; overflow-y: auto; }
 #workshop.hidden { display: none; }
 .workshop-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .workshop-head h1 { font-size: 22px; margin: 0; font-style: italic; letter-spacing: -1px; }
@@ -102,13 +102,18 @@
   #workshop { background: linear-gradient(180deg,#06100c88,transparent 35%,#06100c33); }
   .workshop-panel { align-self: center; padding: 22px; }
 }
-@media(max-height: 720px) and (max-width: 849px) {
-  #menu { gap: 4px; padding-top: 12px; padding-bottom: 8px; }
-  #menu .menu-panel { padding: 10px; gap: 6px; }
+/* A phone's home card can outgrow the screen once the bottom inset is honoured
+   (Nimiq Pay on Android keeps 56px clear), so it scrolls instead of hiding its
+   last row under the navigation bar. */
+@media(max-width: 849px) {
   #menu { overflow-y: auto; }
   #menu .menu-panel { flex-shrink: 0; }
+}
+@media(max-height: 720px) and (max-width: 849px) {
+  #menu { gap: 4px; padding-top: 12px; padding-bottom: max(8px, var(--safe-bottom)); }
+  #menu .menu-panel { padding: 10px; gap: 6px; }
   #home-car-stage { min-height: 145px; }
-  #workshop { grid-template-rows: auto minmax(145px,1fr) auto; padding: 10px; gap: 4px; }
+  #workshop { grid-template-rows: auto minmax(145px,1fr) auto; padding: 10px 10px max(10px, var(--safe-bottom)); gap: 4px; }
   .workshop-panel { padding: 10px; }
   #workshop-car-stage { min-height: 145px; }
   #workshop-stats { margin: 9px 0; }
