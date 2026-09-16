@@ -1,9 +1,10 @@
 // The weekly bounty: a free-to-enter prize for the fastest WIN of the week's
 // HARDCORE race. Everyone races the same circuit — seed, city and lap length
-// all derive from the ISO week — in street cars against the pro field, so the
-// only thing that separates entries is driving. No backend for entries: an
-// entry is a race receipt minted from the winner's own wallet, the organizer
-// ranks entries after they close (scripts/bounty-entries.mjs) and pays by hand.
+// all derive from the ISO week — in fast cars (no hypercars, no workshop
+// builds) against the pro field, so the only thing that separates entries is
+// driving. No backend for entries: an entry is a race receipt minted from the
+// winner's own wallet, the organizer ranks entries after they close
+// (scripts/bounty-entries.mjs) and pays by hand.
 //
 // Which weeks carry a prize is read at runtime from the organizer's Convex
 // table (convex/bounty.ts), so a bounty is posted or pulled in the Convex

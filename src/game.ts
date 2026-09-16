@@ -16,7 +16,7 @@ import {
 import { GunHud } from './gun';
 import { StyleMeter } from './style';
 import { MAPS } from './maps';
-import { CUP_MODES, MODES } from './modes';
+import { carFits, CUP_MODES, MODES } from './modes';
 import { mapUnlocked, stamp } from './passport';
 import { captureReferrer, creditReferral } from './referral';
 import { activeColor } from './skins';
@@ -202,10 +202,10 @@ export class Game {
     // A restored class mode has to agree with the restored car, or the player
     // boots onto a grid they can't start: move them onto an owned car of that
     // class, and give the mode up entirely if that shelf is still empty.
-    const needClass = MODES[this.modeIndex].requiresClass;
-    if (needClass && CARS[this.carIndex].class !== needClass) {
+    const restored = MODES[this.modeIndex];
+    if (!carFits(restored, CARS[this.carIndex])) {
       const have = owned();
-      const fit = CARS.findIndex((c) => c.class === needClass
+      const fit = CARS.findIndex((c) => carFits(restored, c)
         && (c.price === 0 || have.has(c.id)));
       if (fit >= 0) this.carIndex = fit;
       else this.modeIndex = 0; // nothing on the shelf — back to Grand Prix
@@ -625,10 +625,10 @@ export class Game {
       this.scene, this.assets, this.track, seed, mode.noTraffic ? 0 : 10,
       CARS[this.carIndex].model, map.id
     );
-    // A class mode fields the rest of that shelf; everything else races the
-    // civilian traffic shells.
+    // A class mode fields the rest of that shelf (less workshop builds where
+    // it bars them); everything else races the civilian traffic shells.
     const rivalPool = mode.requiresClass
-      ? CARS.filter((c) => c.class === mode.requiresClass && c.id !== CARS[this.carIndex].id)
+      ? CARS.filter((c) => carFits(mode, c) && c.id !== CARS[this.carIndex].id)
       : [];
     this.rivals = new RivalManager(
       this.scene, this.assets, this.track, CARS[this.carIndex].model,

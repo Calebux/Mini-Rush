@@ -1,6 +1,6 @@
 // Game modes. One race loop, several flavors — the mode tunes grid size,
 // contact rules and lap count instead of forking the code.
-import type { CarClass } from './cars';
+import type { CarClass, CarSpec } from './cars';
 
 export interface ModeSpec {
   id: string;
@@ -25,7 +25,13 @@ export interface ModeSpec {
    * class mode reads as its own championship rather than a handicap.
    */
   requiresClass?: CarClass;
+  /** Workshop builds stay out of the grid, player and AI alike: garage cars only. */
+  noBuilds?: boolean;
 }
+
+/** Whether a car may take the grid in a mode: the right shelf, and no workshop build where barred. */
+export const carFits = (m: ModeSpec, c: CarSpec): boolean =>
+  (!m.requiresClass || c.class === m.requiresClass) && !(m.noBuilds && c.model === 300);
 
 export const MODES: ModeSpec[] = [
   {
@@ -83,9 +89,9 @@ export const MODES: ModeSpec[] = [
   // Appended, never inserted: MR1 receipts store a mode's index.
   {
     id: 'hardcore', name: 'HARDCORE', icon: '🏎️',
-    tagline: 'No traffic. Seven pro drivers on a long circuit, street cars only. Win the bounty race.',
+    tagline: 'No traffic. Seven pro drivers on a long circuit, fast cars only, no workshop builds. Win the bounty race.',
     rivals: 7, tumble: false, aggression: 0, lapsLocked: 2,
-    requiresClass: 'fast', noTraffic: true, pro: true, trackLength: 3000, featured: true
+    requiresClass: 'fast', noBuilds: true, noTraffic: true, pro: true, trackLength: 3000, featured: true
   }
 ];
 

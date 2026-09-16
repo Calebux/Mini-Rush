@@ -10,7 +10,7 @@ import { weekKey, weeklyMapIndex, weeklyModeIndex, WEEKLY_PRIZES } from './weekl
 import { bank, grantCar, owned, racePayout, unlock } from './economy';
 import { Leaderboard } from './leaderboard';
 import { MAPS } from './maps';
-import { CUP_MODES, MODES, ModeSpec } from './modes';
+import { carFits, CUP_MODES, MODES, ModeSpec } from './modes';
 import { mapUnlocked, stamps } from './passport';
 import {
   playerId, remoteEnabled, submitBounty, submitDaily, topBounty, topDaily
@@ -132,17 +132,17 @@ const tabOrder = (): number[] => CARS
   .sort((a, b) => CAR_TABS.indexOf(CARS[a].class) - CAR_TABS.indexOf(CARS[b].class)
     || CARS[a].price - CARS[b].price);
 
-// Cars on a shelf the player actually owns — what a class-restricted mode
-// needs before it will let anyone on the grid. Cheapest first.
-const eligibleCars = (cls: CarClass): number[] => {
+// Owned cars a class-restricted mode will let on the grid — its shelf, less
+// workshop builds where the mode bars them. Cheapest first.
+const eligibleCars = (m: ModeSpec): number[] => {
   const have = owned();
-  return tabOrder().filter((i) => CARS[i].class === cls
+  return tabOrder().filter((i) => carFits(m, CARS[i])
     && (CARS[i].price === 0 || have.has(CARS[i].id)));
 };
 
 /** A class mode with an empty shelf behind it: visible, but not enterable. */
 const modeLocked = (m: ModeSpec): boolean =>
-  !!m.requiresClass && eligibleCars(m.requiresClass).length === 0;
+  !!m.requiresClass && eligibleCars(m).length === 0;
 
 export class UI {
   onPlay: () => void = () => {};
@@ -327,14 +327,14 @@ export class UI {
      */
     const chooseMode = (i: number, from: 'menu' | 'modes'): void => {
       const m = MODES[i];
-      const shelf = m.requiresClass ? eligibleCars(m.requiresClass) : [];
+      const shelf = m.requiresClass ? eligibleCars(m) : [];
       if (from === 'modes') {
         $('modes').classList.add('hidden');
         this.menu.classList.remove('hidden');
       }
       if (m.requiresClass && shelf.length === 0) {
         this.audio.play('empty');
-        this.selectCar(CARS.findIndex((c) => c.class === m.requiresClass));
+        this.selectCar(CARS.findIndex((c) => carFits(m, c)));
         // set after selectCar: renderCar rewrites this line
         $('market-status').textContent =
           `${m.name} is ${KIND_LABEL[m.requiresClass]}-only — unlock one to enter.`;
@@ -342,7 +342,7 @@ export class UI {
         return;
       }
       this.audio.play('select');
-      if (m.requiresClass && CARS[this.carIndex].class !== m.requiresClass) {
+      if (m.requiresClass && !carFits(m, CARS[this.carIndex])) {
         this.selectCar(shelf[0]);
       }
       this.setMode(i);
@@ -394,8 +394,7 @@ export class UI {
     on('btn-garage-done', () => {
       const c = CARS[this.carIndex];
       if (c.price > 0 && !owned().has(c.id)) return; // still locked
-      const need = MODES[this.modeIndex].requiresClass;
-      if (need && c.class !== need) return; // wrong shelf for a class mode
+      if (!carFits(MODES[this.modeIndex], c)) return; // wrong shelf for a class mode
       $('garage').classList.add('hidden');
       this.onPage('menu'); // release the turntable camera before the grid cut
       this.onPlay();
@@ -821,7 +820,7 @@ export class UI {
         : 'Fastest HARDCORE win tops the board'),
       textEl('small', 'ev-meta', `${m.flag} ${m.name} · ${best
         ? `your fastest win ${raceClock(best.time)}`
-        : 'street cars · 7 pro drivers · no traffic'}`)
+        : 'fast cars · 7 pro drivers · no traffic'}`)
     );
   }
 
@@ -904,10 +903,10 @@ export class UI {
     this.exitWeekly();
     this.bountyUi = true;
     this.onBounty();
-    // street cars only: seat the player in one rather than in front of a locked START
-    const need = MODES[BOUNTY_MODE].requiresClass;
-    if (need && CARS[this.carIndex].class !== need) {
-      const fit = eligibleCars(need)[0];
+    // fast cars only, no workshop builds: seat the player in one rather than in front of a locked START
+    const mode = MODES[BOUNTY_MODE];
+    if (!carFits(mode, CARS[this.carIndex])) {
+      const fit = eligibleCars(mode)[0];
       if (fit !== undefined) this.selectCar(fit);
     }
     $('lap-select').classList.add('locked');
@@ -1155,14 +1154,16 @@ export class UI {
     $('car-market').classList.toggle('hidden', isOwned || !isMarketCar(c.model));
     // a class mode (Hyper Cup) needs the right shelf as well as ownership
     const activeMode = MODES[this.modeIndex];
-    const classOk = !activeMode.requiresClass || c.class === activeMode.requiresClass;
+    const classOk = carFits(activeMode, c);
     const canRace = isOwned && classOk;
     $('btn-garage-done').classList.toggle('locked', !canRace);
     $<HTMLButtonElement>('btn-garage-done').disabled = !canRace;
     $('btn-garage-done').setAttribute('aria-disabled', String(!canRace));
     $('btn-garage-done').textContent = classOk
       ? 'START\u00a0RACE'
-      : `${activeMode.name}\u00a0· ${KIND_LABEL[activeMode.requiresClass!]}\u00a0ONLY`;
+      : activeMode.requiresClass && c.class !== activeMode.requiresClass
+        ? `${activeMode.name}\u00a0· ${KIND_LABEL[activeMode.requiresClass]}\u00a0ONLY`
+        : `${activeMode.name}\u00a0· NO\u00a0BUILDS`;
     if (!isOwned) {
       $('car-price').textContent = `🔒 ⬤ ${c.price}`;
       $<HTMLButtonElement>('btn-unlock').disabled = bank() < c.price;

@@ -8,14 +8,17 @@ organizer ranks them after entries close and pays the winner by hand.
 The competition rules allow this — *"Skill-based games with clearly defined
 rules and prizes are permitted"* — as long as it stays **free to enter**. Never
 add an entry fee or pool player money: that turns it into wagering. For the
-same reason the bounty race is **street cars only**: hypercars are sold for NIM,
-and a car you can buy must not be a faster way to a cash prize.
+same reason the bounty race is **fast cars only**: hypercars are sold for NIM,
+and a car you can buy must not be a faster way to a cash prize. Workshop builds
+(RUSH ONE) are out too, so every entrant picks from the same few garage cars.
 
 ## The race
 
 - **HARDCORE**: 8 cars, no traffic, seven pro AI drivers, 2 laps of a 3 km lap.
-- Street-class cars only. VIPER GT and RUSH ONE are free; STOCK 88 is a coin
-  unlock. Coin upgrades apply — they are earned by racing, not bought.
+- Fast-shelf garage cars only: VIPER GT is free, STOCK 88 is a coin unlock.
+  No hypercars and no workshop builds — RUSH ONE sits on the fast shelf but
+  can't take the grid, and the AI field doesn't drive it either. Coin upgrades
+  apply — they are earned by racing, not bought.
 - The circuit seed and city derive from the ISO week (`src/bounty.ts`), so every
   entrant races the same track all week. It is a different circuit from the
   Weekly Cup.
@@ -24,7 +27,7 @@ and a car you can buy must not be a faster way to a cash prize.
 
 1. The menu's **Bounty Board** card opens the board: this week's race, the prize
    when one is posted, the fastest wins, and the rules. **Race for the bounty**
-   goes straight to the garage with a street car.
+   goes straight to the garage with a fast car.
 2. **Only a win counts.** On a bounty race win, inside Nimiq Pay, the player
    taps **Enter the bounty**. Nimiq Pay asks them to confirm a 1 Luna
    transaction to the receipt address whose data field carries an `MR3` entry:
