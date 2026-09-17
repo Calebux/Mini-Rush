@@ -3,11 +3,12 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { CarSpec } from './cars';
 import { buildCar, CAR_COLORS, carGroundFx, polishCar } from './meshes';
 import { finishVehicle, toonify } from './toon';
+import { buildStockCar } from './stockCar';
 import { buildWorkshopCar } from './workshopCar';
 
 /** Release instance-owned resources, never the cached GLB or shared contact texture. */
 export function disposeCarInstance(root: THREE.Group): void {
-  const ownedRoot = root.userData.workshopCar ? root : root.getObjectByName('car-ground-fx');
+  const ownedRoot = root.userData.procedural ? root : root.getObjectByName('car-ground-fx');
   if (!ownedRoot) return;
   const geometry = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>();
   ownedRoot.traverse(o => {
@@ -73,8 +74,8 @@ export class AssetLibrary {
         if (m) this.superCars[i - 1] = this.addWheels(m);
       }));
     }
-    // importedCars[0] (STOCK 88) has no licensed model, so it renders
-    // procedurally. The file once loaded here was car_nascar.glb renamed —
+    // importedCars[0] stays empty: STOCK 88 is an original procedural car
+    // (stockCar.ts). The file once loaded here was car_nascar.glb renamed —
     // an unlicensed download wearing real sponsor logos (see CREDITS.md).
     for (let i = 1; i <= 8; i++) {
       jobs.push(this.tryLoad(`city_building_${i}.glb`, 18, 'y').then((m) => {
@@ -154,8 +155,8 @@ export class AssetLibrary {
 
   /** Clone the garage pick for the player; procedural fallback if missing. */
   cloneCar(spec: CarSpec): THREE.Group {
-    if (spec.model === 300) {
-      const g = buildWorkshopCar(spec);
+    if (spec.model === 300 || spec.model === 200) {
+      const g = spec.model === 300 ? buildWorkshopCar(spec) : buildStockCar(spec);
       g.add(carGroundFx(spec.color));
       return g;
     }
