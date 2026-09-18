@@ -35,9 +35,12 @@
     /* Bottom inset for everything pinned to the bottom edge. In an Android
        in-app WebView it never drops below the tallest navigation bar (48px)
        plus a thumb's margin. */
-    :root { --safe-bottom: env(safe-area-inset-bottom, 0px); }
-    :root.android { --safe-bottom: max(env(safe-area-inset-bottom, 0px), 48px); }
-    :root.android-inapp { --safe-bottom: max(env(safe-area-inset-bottom, 0px), 56px); }
+    /* --vv-bottom is the slice of the page the browser is not showing, set in
+       src/host.ts from the visual viewport — an in-app bar that collapses on
+       scroll hides the bottom of the page until you swipe. */
+    :root { --safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--vv-bottom, 0px)); }
+    :root.android { --safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--vv-bottom, 0px), 48px); }
+    :root.android-inapp { --safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--vv-bottom, 0px), 56px); }
     * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     html, body {
       width: 100%; height: 100%; overflow: hidden;

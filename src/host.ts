@@ -25,6 +25,28 @@ const hostPresent = (): boolean => {
   return !!w.nimiq || !!w.nimiqPay;
 };
 
+/**
+ * How much of the page sits below what the WebView is actually showing.
+ *
+ * An in-app browser with a collapsing top bar lays the page out at its full
+ * height while showing less of it, so anything pinned to the bottom — the
+ * garage's buy button, the pedals — starts off the screen until the player
+ * swipes to collapse the bar. `--vv-bottom` carries that difference, and
+ * `--safe-bottom` keeps the controls above it.
+ */
+export function trackVisibleViewport(): void {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  const sync = (): void => {
+    const hidden = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+    document.documentElement.style.setProperty('--vv-bottom', `${hidden}px`);
+  };
+  sync();
+  vv.addEventListener('resize', sync);
+  vv.addEventListener('scroll', sync);
+  window.addEventListener('orientationchange', () => setTimeout(sync, 250));
+}
+
 export function watchAndroidHost(): void {
   if (typeof window === 'undefined' || !/Android/i.test(navigator.userAgent)) return;
   const mark = (): void => { document.documentElement.classList.add('android-inapp'); };
