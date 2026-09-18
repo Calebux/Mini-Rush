@@ -67,7 +67,9 @@
     }
     .overlay:not(.stage) > :first-child { margin-top: auto; }
     .overlay:not(.stage) > :last-child { margin-bottom: auto; }
-    .overlay:not(.stage) > * { flex: none; }
+    /* Cards keep their height rather than squashing; panels that size
+       themselves to the screen, like the mode deck, still grow. */
+    .profile-card, .username-card { flex-shrink: 0; }
     .overlay.stage { justify-content: center; }
     .overlay.hidden { opacity: 0; pointer-events: none; }
 
