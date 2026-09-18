@@ -16,6 +16,10 @@
     (function () {
       var ua = navigator.userAgent;
       if (!/Android/i.test(ua)) return;
+      // Every Android build keeps a floor: the navigation bar is there whether
+      // or not the WebView admits to overlaying it, and a button under it can't
+      // be tapped. In-app WebViews keep the taller floor.
+      document.documentElement.classList.add('android');
       var tag = function () {
         if (/; wv\)/.test(ua) || window.nimiqPay || window.nimiq) {
           document.documentElement.classList.add('android-inapp');
@@ -32,6 +36,7 @@
        in-app WebView it never drops below the tallest navigation bar (48px)
        plus a thumb's margin. */
     :root { --safe-bottom: env(safe-area-inset-bottom, 0px); }
+    :root.android { --safe-bottom: max(env(safe-area-inset-bottom, 0px), 48px); }
     :root.android-inapp { --safe-bottom: max(env(safe-area-inset-bottom, 0px), 56px); }
     * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     html, body {
