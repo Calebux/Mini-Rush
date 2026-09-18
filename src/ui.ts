@@ -7,7 +7,7 @@ import { CarClass, CARS } from './cars';
 import { dailyMapIndex, dayKey } from './daily';
 import { driverName, hasUsername, keepDriverName, setUsername, USERNAME_MAX } from './driver';
 import { weekKey, weeklyMapIndex, weeklyModeIndex, WEEKLY_PRIZES } from './weekly';
-import { bank, grantCar, owned, racePayout, unlock } from './economy';
+import { bank, grantCar, owned, racePayout } from './economy';
 import { Leaderboard } from './leaderboard';
 import { MAPS } from './maps';
 import { carFits, CUP_MODES, MODES, ModeSpec } from './modes';
@@ -114,9 +114,8 @@ const hexAlpha = (hex: string, a: number): string => {
 const intensity = (m: ModeSpec): number => Math.min(1,
   0.18 + m.aggression * 0.42 + (m.rivals / 7) * 0.2 +
   (m.tumble ? 0.12 : 0) + (m.guns ? 0.08 : 0) + (m.pursuit ? 0.1 : 0));
-// Only the supercar slots are NIM market buys; imported cars (200+) are
-// ordinary coin unlocks.
-const isMarketCar = (model: number): boolean => model >= 100 && model < 200;
+/** Every locked car is a NIM buy; prices read the same everywhere, e.g. "2,600 NIM". */
+const nimPrice = (nim: number): string => `${nim.toLocaleString('en-US')}\u00a0NIM`;
 
 // Garage shelves, in the order the tabs read left to right.
 const CAR_TABS: CarClass[] = ['hyper', 'fast', 'junk'];
@@ -130,14 +129,14 @@ const KIND_LABEL: Record<CarClass, string> = {
 const tabOrder = (): number[] => CARS
   .map((car, index) => index)
   .sort((a, b) => CAR_TABS.indexOf(CARS[a].class) - CAR_TABS.indexOf(CARS[b].class)
-    || CARS[a].price - CARS[b].price);
+    || CARS[a].nim - CARS[b].nim);
 
 // Owned cars a class-restricted mode will let on the grid — its shelf, less
 // workshop builds where the mode bars them. Cheapest first.
 const eligibleCars = (m: ModeSpec): number[] => {
   const have = owned();
   return tabOrder().filter((i) => carFits(m, CARS[i])
-    && (CARS[i].price === 0 || have.has(CARS[i].id)));
+    && (CARS[i].nim === 0 || have.has(CARS[i].id)));
 };
 
 /** A class mode with an empty shelf behind it: visible, but not enterable. */
@@ -376,7 +375,7 @@ export class UI {
     on('pill-laps', () => {
       this.audio.unlock();
       this.exitDaily();
-      goto('menu', 'garage');
+      openModes(); // the lap chips live on the mode screen now
     });
     on('tour-back', () => goto('tour', 'menu', 'back'));
     on('btn-tour-done', () => goto('tour', 'garage'));
@@ -393,7 +392,7 @@ export class UI {
     });
     on('btn-garage-done', () => {
       const c = CARS[this.carIndex];
-      if (c.price > 0 && !owned().has(c.id)) return; // still locked
+      if (c.nim > 0 && !owned().has(c.id)) return; // still locked
       if (!carFits(MODES[this.modeIndex], c)) return; // wrong shelf for a class mode
       $('garage').classList.add('hidden');
       this.onPage('menu'); // release the turntable camera before the grid cut
@@ -419,15 +418,6 @@ export class UI {
       goto('menu', 'garage');
     });
 
-    on('btn-unlock', () => {
-      const c = CARS[this.carIndex];
-      if (unlock(c.id, c.price)) {
-        this.audio.play('buy');
-        this.renderCar();
-        this.refreshBank();
-        this.refreshModeLocks();
-      }
-    });
     on('btn-market-nim', () => void this.buyMarketCar());
 
     // workshop: coins buy stat tiers on the displayed (owned) car
@@ -654,7 +644,7 @@ export class UI {
       modeRow.appendChild(b);
       this.modeButtons[i] = b;
     });
-    on('mode-all', () => {
+    const openModes = (): void => {
       this.audio.play('open');
       this.deckIndex = this.modeIndex; // open on the mode you're already on
       this.refreshModeLocks();
@@ -663,7 +653,8 @@ export class UI {
       page.classList.remove('hidden', 'intro');
       void page.offsetWidth; // restart the intro animation on every open
       page.classList.add('intro');
-    });
+    };
+    on('mode-all', openModes);
 
     $('home-mode-count').textContent = String(MODES.length);
     this.setRacers(4);
@@ -740,6 +731,10 @@ export class UI {
       ? `🔒 NEEDS A ${KIND_LABEL[m.requiresClass]} CAR`
       : `RACE ${m.name}`;
     go.classList.toggle('locked', locked);
+    // the lap chips sit under the deck, so they follow the card being browsed:
+    // a mode that fixes its own lap count shows it, dimmed
+    $('lap-select').classList.toggle('locked', m.lapsLocked !== undefined);
+    this.selectLapChip(m.lapsLocked ?? this.pickedLaps, false);
   }
 
   /** Move deck focus one step; the ends hold rather than wrap. */
@@ -820,7 +815,7 @@ export class UI {
         : 'Fastest HARDCORE win tops the board'),
       textEl('small', 'ev-meta', `${m.flag} ${m.name} · ${best
         ? `your fastest win ${raceClock(best.time)}`
-        : 'fast cars · 7 pro drivers · no traffic'}`)
+        : 'free car · 7 pro drivers · no traffic'}`)
     );
   }
 
@@ -903,7 +898,7 @@ export class UI {
     this.exitWeekly();
     this.bountyUi = true;
     this.onBounty();
-    // fast cars only, no workshop builds: seat the player in one rather than in front of a locked START
+    // free cars only: seat the player in one rather than in front of a locked START
     const mode = MODES[BOUNTY_MODE];
     if (!carFits(mode, CARS[this.carIndex])) {
       const fit = eligibleCars(mode)[0];
@@ -1146,34 +1141,40 @@ export class UI {
     $('st-grp').style.width = pct(up.grip);
     $('st-nos').style.width = pct(up.nitro);
 
-    // locked cars preview fine but can't race — coins open the padlock
+    // Locked cars preview fine but can't race. Every locked car is bought with
+    // NIM, and the purchase sits in the footer so it is in view without
+    // scrolling the specs card.
     const ownedCars = owned();
-    const isOwned = c.price === 0 || ownedCars.has(c.id);
-    $('home-car-eyebrow').textContent = isOwned ? 'YOUR GARAGE / READY TO ROLL' : 'PREVIEW / UNLOCK IN GARAGE';
-    $('car-lock').classList.toggle('hidden', isOwned);
-    $('car-market').classList.toggle('hidden', isOwned || !isMarketCar(c.model));
+    const isOwned = c.nim === 0 || ownedCars.has(c.id);
+    $('home-car-eyebrow').textContent = isOwned ? 'YOUR GARAGE / READY TO ROLL' : 'PREVIEW / BUY WITH NIM';
     // a class mode (Hyper Cup) needs the right shelf as well as ownership
     const activeMode = MODES[this.modeIndex];
     const classOk = carFits(activeMode, c);
     const canRace = isOwned && classOk;
-    $('btn-garage-done').classList.toggle('locked', !canRace);
-    $<HTMLButtonElement>('btn-garage-done').disabled = !canRace;
-    $('btn-garage-done').setAttribute('aria-disabled', String(!canRace));
-    $('btn-garage-done').textContent = classOk
+    const start = $<HTMLButtonElement>('btn-garage-done');
+    const pay = $<HTMLButtonElement>('btn-market-nim');
+    start.classList.toggle('hidden', !isOwned);
+    pay.classList.toggle('hidden', isOwned);
+    start.classList.toggle('locked', !canRace);
+    start.disabled = !canRace;
+    start.setAttribute('aria-disabled', String(!canRace));
+    start.textContent = classOk
       ? 'START\u00a0RACE'
       : activeMode.requiresClass && c.class !== activeMode.requiresClass
         ? `${activeMode.name}\u00a0· ${KIND_LABEL[activeMode.requiresClass]}\u00a0ONLY`
-        : `${activeMode.name}\u00a0· NO\u00a0BUILDS`;
+        : activeMode.freeCarsOnly && c.nim > 0
+          ? `${activeMode.name}\u00a0· FREE\u00a0CARS\u00a0ONLY`
+          : `${activeMode.name}\u00a0· NO\u00a0BUILDS`;
     if (!isOwned) {
-      $('car-price').textContent = `🔒 ⬤ ${c.price}`;
-      $<HTMLButtonElement>('btn-unlock').disabled = bank() < c.price;
-      const pay = $<HTMLButtonElement>('btn-market-nim');
       pay.disabled = this.marketPending || !this.wallet.marketReady || !this.wallet.available;
-      pay.textContent = this.wallet.marketReady ? this.wallet.marketPriceLabel : 'NIM OFF';
+      pay.textContent = this.wallet.marketReady
+        ? `BUY\u00a0· ${nimPrice(c.nim)}` : 'NIM\u00a0PAYMENTS\u00a0OFF';
       $('market-status').textContent = this.marketPending ? 'Payment awaiting approval. Check Nimiq Pay.' : !this.wallet.available
-        ? 'Open in Nimiq Pay for NIM purchases. Coin unlocks work in this browser.' : this.wallet.marketReady
-        ? 'Unlock instantly with NIM, no coin grind.'
+        ? `Open MiniRush in Nimiq Pay to buy ${c.name} for ${nimPrice(c.nim)}.` : this.wallet.marketReady
+        ? `Unlocks instantly. One payment of ${nimPrice(c.nim)}.`
         : 'NIM payments are not configured yet.';
+    } else {
+      $('market-status').textContent = '';
     }
 
     for (const cls of CAR_TABS) {
@@ -1183,19 +1184,19 @@ export class UI {
       tab.textContent = `${cls === 'junk' ? 'JUNKYARD' : cls.toUpperCase()} ${count}`;
     }
     const shelfOwned = CARS.filter((car) => car.class === this.carTab
-      && (car.price === 0 || ownedCars.has(car.id))).length;
+      && (car.nim === 0 || ownedCars.has(car.id))).length;
     const shelfSize = CARS.filter((car) => car.class === this.carTab).length;
     $('car-roster-count').textContent = `${TAB_LABEL[this.carTab]} · ${shelfOwned}/${shelfSize} OWNED`;
 
     this.carButtons.forEach((button, index) => {
       const car = CARS[index];
-      const carOwned = car.price === 0 || ownedCars.has(car.id);
+      const carOwned = car.nim === 0 || ownedCars.has(car.id);
       button.hidden = car.class !== this.carTab;
       button.classList.toggle('selected', index === this.carIndex);
       button.classList.toggle('locked', !carOwned);
       button.setAttribute('aria-pressed', String(index === this.carIndex));
       const status = button.querySelector('small');
-      if (status) status.textContent = carOwned ? 'OWNED' : `⬤ ${car.price}`;
+      if (status) status.textContent = carOwned ? 'OWNED' : nimPrice(car.nim);
     });
     const selectedButton = this.carButtons[this.carIndex];
     if (selectedButton && !$('garage').classList.contains('hidden')) {
@@ -1227,7 +1228,7 @@ export class UI {
 
   private async buyMarketCar(): Promise<void> {
     const c = CARS[this.carIndex];
-    if (this.marketPending || !this.wallet.available || !isMarketCar(c.model) || c.price === 0 || owned().has(c.id)) return;
+    if (this.marketPending || !this.wallet.available || c.nim === 0 || owned().has(c.id)) return;
     const button = $<HTMLButtonElement>('btn-market-nim');
     const status = $('market-status');
     if (!this.wallet.marketReady) {
@@ -1239,7 +1240,7 @@ export class UI {
     status.textContent = 'Confirm the payment in Nimiq Pay.';
     let tx: string | null = null;
     try {
-      tx = await this.wallet.buyMarketCar();
+      tx = await this.wallet.buyMarketCar(c.nim);
     } catch {
       tx = null;
     } finally {
@@ -1537,7 +1538,7 @@ export class UI {
 
     $('p-best').textContent = String(this.best);
     $('p-coins').textContent = String(bank());
-    const cars = CARS.filter((c) => c.price === 0 || owned().has(c.id)).length;
+    const cars = CARS.filter((c) => c.nim === 0 || owned().has(c.id)).length;
     $('p-cars').textContent = `${cars}/${CARS.length}`;
     const got = stamps();
     $('p-stamps').textContent = `${got.size}/${MAPS.length}`;

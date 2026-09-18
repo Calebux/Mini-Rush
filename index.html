@@ -45,12 +45,24 @@
 
     .overlay {
       position: fixed; inset: 0; display: flex; flex-direction: column;
-      align-items: center; justify-content: center; gap: 14px;
+      align-items: center; gap: 14px;
       padding: max(20px, env(safe-area-inset-top)) 20px max(28px, var(--safe-bottom));
       background: linear-gradient(180deg, rgba(6,8,20,.72), rgba(6,8,20,.86));
       backdrop-filter: blur(4px); z-index: 10; text-align: center;
       transition: opacity .25s ease;
     }
+    /* A panel taller than the screen has to scroll, and reach its last button.
+       Centring with auto margins rather than justify-content is what makes that
+       work: the margins collapse once the content overflows, so nothing is cut
+       off the top the way a centred flex column would be. */
+    .overlay:not(.stage) {
+      justify-content: flex-start; overflow-y: auto; overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
+    }
+    .overlay:not(.stage) > :first-child { margin-top: auto; }
+    .overlay:not(.stage) > :last-child { margin-bottom: auto; }
+    .overlay:not(.stage) > * { flex: none; }
+    .overlay.stage { justify-content: center; }
     .overlay.hidden { opacity: 0; pointer-events: none; }
 
     .logo {
@@ -241,6 +253,14 @@
     .pstamp.got:nth-child(even) { transform: rotate(5deg); }
     .pstamp:not(.got) { filter: grayscale(1); opacity: .4; }
     #profile-chain-note { font-size: 10.5px; opacity: .55; text-align: left; min-height: 13px; }
+    @media (max-height: 800px) {
+      #profile .logo { font-size: 24px; }
+      #profile .profile-card { gap: 9px; padding: 13px 15px 15px; }
+      .pstamp { width: 38px; height: 38px; font-size: 17px; }
+      .profile-tag { width: 46px; height: 46px; font-size: 15px; }
+      .pstat { padding: 6px 4px; }
+      .pstat .v { font-size: 15px; }
+    }
 
     /* ---------- mode cards — the marquee of the menu ---------- */
     .mode-nav {
@@ -863,35 +883,11 @@
     .upg:disabled { opacity: .38; pointer-events: none; }
     .upg.maxed { border-color: rgba(252,255,82,.6); }
 
-    #car-lock {
-      display: flex; align-items: center; gap: 10px; margin-top: 6px;
-    }
-    #car-lock.hidden { display: none; }
-    #car-price { font-size: 15px; font-weight: 800; color: #fcff52; }
-    #btn-unlock { padding: 8px 18px; font-size: 13px; }
-    #btn-unlock:disabled { opacity: .35; pointer-events: none; cursor: not-allowed; }
-    #car-market {
-      width: 100%; display: flex; flex-direction: column; gap: 7px;
-      margin-top: 2px; padding: 9px 10px; border-radius: 8px;
-      background: rgba(255,255,255,.07); border: 1px solid rgba(252,255,82,.22);
-      text-align: left;
-    }
-    #car-market.hidden { display: none; }
-    .market-head {
-      display: flex; justify-content: space-between; gap: 10px; align-items: center;
-      font-size: 9px; font-weight: 900; letter-spacing: 1.5px; color: #fcff52;
-    }
-    .market-perks {
-      display: flex; flex-wrap: wrap; gap: 5px;
-    }
-    .market-perks span {
-      font-size: 8px; font-weight: 900; letter-spacing: .6px;
-      padding: 4px 6px; border-radius: 999px;
-      background: rgba(255,255,255,.08); color: rgba(255,255,255,.72);
-    }
-    .market-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
-    #market-status { font-size: 9.5px; line-height: 1.25; opacity: .65; }
-    #btn-market-nim { padding: 8px 12px; font-size: 12px; white-space: nowrap; }
+    /* Buying a car is a NIM payment, and it lives in the garage footer where
+       it is in view without scrolling the specs card. */
+    .garage-footer-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    #market-status { font-size: 9.5px; line-height: 1.25; opacity: .7; max-width: 30ch; }
+    #btn-market-nim.hidden, #btn-garage-done.hidden { display: none; }
     #btn-market-nim:disabled { opacity: .45; pointer-events: none; cursor: not-allowed; }
     #btn-mint.hidden { display: none; }
     #btn-mint:disabled { opacity: .45; pointer-events: none; cursor: not-allowed; }
@@ -1059,18 +1055,6 @@
       margin-top: 3px; text-shadow: 0 2px 6px rgba(0,0,0,.6);
     }
     #weather-label.hidden { display: none; }
-    #rain-overlay {
-      position: fixed; inset: 0; z-index: 4; pointer-events: none; opacity: 0;
-      background: repeating-linear-gradient(105deg,
-        transparent 0 7px, rgba(170,200,255,.16) 7px 8.5px, transparent 8.5px 14px);
-      animation: rain-shift .5s linear infinite;
-      transition: opacity .8s ease;
-    }
-    @keyframes rain-shift {
-      from { background-position: 0 0; }
-      to { background-position: -30px 120px; }
-    }
-
     /* ---------- drift chain indicator ---------- */
     #drift-ui {
       position: absolute; right: 18px;
@@ -1367,7 +1351,6 @@
     <div id="btn-mute-race" role="button" tabindex="0" aria-label="Toggle sound">🔊</div>
     <div id="drift-ui"><small>DRIFT</small><span id="drift-time">0.0s</span></div>
   </div>
-  <div id="rain-overlay"></div>
   <div id="speedlines"></div>
   <div id="combo" aria-live="polite"></div>
   <div id="countdown" aria-live="assertive"></div>
@@ -1401,7 +1384,7 @@
           <div class="coin-item"><strong>+20 / +14 / +8 / +2</strong><span>Placement reward for 1st through 4th.</span></div>
           <div class="coin-item"><strong>+5 EXTRA LAP</strong><span>Each lap after the first pays more. Track pickups add directly.</span></div>
         </div>
-        <div class="pause-note">Coins buy cars and upgrades in the garage. Score controls leaderboard rank; coins control progression.</div>
+        <div class="pause-note">Coins buy upgrades, paint and workshop parts. Cars are bought with NIM. Score controls leaderboard rank.</div>
       </div>
       <div class="pause-actions">
         <button class="btn" id="btn-resume" type="button">RESUME</button>
@@ -1532,33 +1515,14 @@
         <button class="upg" id="upg-grip" type="button"></button>
         <button class="upg" id="upg-nitro" type="button"></button>
       </div>
-      <div id="lap-select">
-        <span class="lap-label">LAPS</span>
-        <button class="lap-chip" type="button" data-laps="1">1</button>
-        <button class="lap-chip sel" type="button" data-laps="2">2</button>
-        <button class="lap-chip" type="button" data-laps="4">4</button>
-        <button class="lap-chip" type="button" data-laps="6">6</button>
-      </div>
-      <div id="car-lock" class="hidden">
-        <span id="car-price">🔒 ⬤ 500</span>
-        <button class="btn ghost" id="btn-unlock" type="button">UNLOCK</button>
-      </div>
-      <div id="car-market" class="hidden">
-        <div class="market-head"><span>CAR MARKET</span><strong>FAST PASS</strong></div>
-        <div class="market-perks">
-          <span>Instant unlock</span>
-          <span>No coin grind</span>
-          <span>Hyper class access</span>
-        </div>
-        <div class="market-row">
-          <div id="market-status">NIM payments are not configured yet.</div>
-          <button class="btn ghost" id="btn-market-nim" type="button">NIM OFF</button>
-        </div>
-      </div>
     </div>
     <div class="garage-footer">
-      <div class="hint" id="garage-bank">⬤ 0 coins</div>
+      <div class="garage-footer-info">
+        <div class="hint" id="garage-bank">⬤ 0 coins</div>
+        <div id="market-status"></div>
+      </div>
       <button class="btn stage-cta" id="btn-garage-done" type="button">START&nbsp;RACE</button>
+      <button class="btn stage-cta buy hidden" id="btn-market-nim" type="button">BUY&nbsp;·&nbsp;2,600&nbsp;NIM</button>
     </div>
   </div>
 
@@ -1608,7 +1572,7 @@
         <summary>How the bounty works</summary>
         <ol class="bounty-rules">
           <li><strong>Free to enter.</strong> Entering writes a 1&nbsp;Luna (0.00001&nbsp;NIM) receipt transaction. It timestamps your run; it is not a payment for a chance to win.</li>
-          <li>Race this week's <strong>HARDCORE</strong> bounty race: the same long circuit for everyone, seven pro drivers, no traffic, <strong>fast cars only</strong>: no hypercars and no workshop builds.</li>
+          <li>Race this week's <strong>HARDCORE</strong> bounty race: the same long circuit for everyone, seven pro drivers, no traffic, in the <strong>free VIPER GT</strong> — cars bought with NIM and workshop builds stay out, so the prize is won on driving alone.</li>
           <li><strong>Only a win counts.</strong> Finish 1st, then tap <strong>Enter the bounty</strong> on the results screen inside <strong>Nimiq Pay</strong>. Win faster and enter again: your fastest win counts.</li>
           <li>Entries close <strong>Sunday 23:59 UTC</strong>.</li>
           <li id="bounty-rule-prize"><strong>The fastest winning time takes the prize.</strong> Ties go to the earlier entry.</li>
@@ -1710,6 +1674,13 @@
       </header>
       <div class="mode-deck" id="mode-deck" aria-label="Race modes"></div>
       <footer class="mode-stage-foot">
+        <div id="lap-select">
+          <span class="lap-label">LAPS</span>
+          <button class="lap-chip" type="button" data-laps="1">1</button>
+          <button class="lap-chip sel" type="button" data-laps="2">2</button>
+          <button class="lap-chip" type="button" data-laps="4">4</button>
+          <button class="lap-chip" type="button" data-laps="6">6</button>
+        </div>
         <div class="mode-dots" id="mode-dots" aria-hidden="true"></div>
         <div class="mode-nav">
           <button class="deck-arrow" id="mode-prev" type="button" aria-label="Previous mode">‹</button>

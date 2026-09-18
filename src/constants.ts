@@ -45,6 +45,14 @@ export const PRO_NITRO_EVERY = 10;
 
 export const RIVAL_COUNT = 3;
 
+// Police Chase. Every cop touch is heat, and heat cools after a clean spell —
+// the chase should be a running battle you can recover from, not three taps and
+// out. PIT_SCRUB is the fraction of your speed a PIT tap leaves you.
+export const HEAT_LIMIT = 4;
+export const HEAT_COOL = 5;
+export const PIT_SCRUB = 0.9;
+export const HEAT_GRACE = 2.0; // seconds after a PIT before another can add heat
+
 // every map has three districts along the lap (see maps.ts)
 export const DISTRICTS_PER_MAP = 3;
 

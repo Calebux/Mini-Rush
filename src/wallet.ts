@@ -42,7 +42,8 @@ const isAddress = (a: string | undefined | null): a is string =>
 const MARKET_RECEIVER = (import.meta.env.VITE_MARKET_RECEIVER as string | undefined)?.trim();
 
 /** Garage car price in NIM. Overridable so testnet demos can run cheap. */
-const MARKET_PRICE_NIM = Number(import.meta.env.VITE_MARKET_PRICE_NIM ?? 5);
+// Each car carries its own NIM price (see src/cars.ts); the market only needs
+// somewhere to send the payment.
 
 /**
  * Where race receipts are sent. Defaults to the market receiver; a receipt is
@@ -138,8 +139,7 @@ export class Wallet {
 
   /** The garage market only lights up with a valid receiver configured. */
   get marketReady(): boolean {
-    const luna = Math.round(MARKET_PRICE_NIM * LUNA);
-    return isAddress(MARKET_RECEIVER) && Number.isSafeInteger(luna) && luna > 0;
+    return isAddress(MARKET_RECEIVER);
   }
 
   /** Receipt minting needs a valid anchor address. */
@@ -150,11 +150,6 @@ export class Wallet {
   /** A bounty entry can go out: the posted bounty names an address, or the build has one. */
   bountyEntriesReady(receiver: string | null): boolean {
     return isAddress(receiver) || this.receiptsReady;
-  }
-
-  /** Price label for the market button, e.g. "5 NIM". */
-  get marketPriceLabel(): string {
-    return `${MARKET_PRICE_NIM} NIM`;
   }
 
   /** ISO 639-1 code the player chose in Nimiq Pay, if we're running inside it. */
@@ -225,14 +220,15 @@ export class Wallet {
    * transaction on success, or null when the market is off or the player
    * declined the native confirmation.
    */
-  async buyMarketCar(): Promise<string | null> {
-    if (!this.marketReady) return null;
+  async buyMarketCar(nim: number): Promise<string | null> {
+    const luna = Math.round(nim * LUNA);
+    if (!this.marketReady || !Number.isSafeInteger(luna) || luna <= 0) return null;
     if (!this.address) await this.connect();
     if (!this.provider) return null;
     try {
       const tx = await this.provider.sendBasicTransaction({
         recipient: MARKET_RECEIVER!,
-        value: Math.round(MARKET_PRICE_NIM * LUNA)
+        value: luna
       });
       return isError(tx) ? null : tx;
     } catch {

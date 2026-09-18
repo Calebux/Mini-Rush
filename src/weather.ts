@@ -11,25 +11,28 @@ export interface WeatherSpec {
   gripMul: number;    // 1.0 = normal, <1 = slippery
   fogMul: number;     // multiplier on fog far distance (<1 = closer fog)
   tint: number;       // overlay tint applied to scene lighting
-  rainIntensity: number; // 0..1, CSS rain overlay opacity
 }
+
+// Wet and dusty weather used to draw streaks over the whole screen, HUD and
+// all. Bad weather now reads from the world instead: closer fog, its own light
+// tint, less grip, and the label on the HUD.
 
 const SPECS: Record<WeatherType, WeatherSpec> = {
   clear: {
     type: 'clear', label: 'CLEAR', icon: '☀️',
-    gripMul: 1.0, fogMul: 1.0, tint: 0xffffff, rainIntensity: 0
+    gripMul: 1.0, fogMul: 1.0, tint: 0xffffff
   },
   rain: {
     type: 'rain', label: 'RAIN', icon: '🌧️',
-    gripMul: 0.82, fogMul: 0.65, tint: 0xb0c0d0, rainIntensity: 0.7
+    gripMul: 0.82, fogMul: 0.65, tint: 0xb0c0d0
   },
   night: {
     type: 'night', label: 'NIGHT', icon: '🌙',
-    gripMul: 0.94, fogMul: 0.8, tint: 0x3040608, rainIntensity: 0
+    gripMul: 0.94, fogMul: 0.8, tint: 0x3040608
   },
   sandstorm: {
     type: 'sandstorm', label: 'SANDSTORM', icon: '🏜️',
-    gripMul: 0.78, fogMul: 0.5, tint: 0xd8b878, rainIntensity: 0.45
+    gripMul: 0.78, fogMul: 0.5, tint: 0xd8b878
   }
 };
 

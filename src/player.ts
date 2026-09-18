@@ -21,7 +21,10 @@ export class Player {
   finished = false;
   raceLength = 0; // laps × track length; set by the game each race
 
-  damage = 0;      // Burnout: recent hits taken; three inside a window = wreck
+  damage = 0;      // recent hits taken: three inside the window wreck you in
+                   // Burnout, HEAT_LIMIT of them bust you in Police Chase
+  damageCool = 3.5; // seconds of clean running that clears the tally
+  heatGrace = 0;    // Police Chase: counts down after a PIT; no heat until it's out
   lastHitAt = -10;
   tumbleT = 0;     // > 0 = wrecked and rolling, controls are dead
   wallHit = 0;     // per-frame: 1 = grazed the road edge, 2 = corner-slam crash
@@ -187,9 +190,10 @@ export class Player {
     driving: boolean, braking = false, gas = true
   ): void {
     this.bumpCooldown = Math.max(0, this.bumpCooldown - dt);
+    this.heatGrace = Math.max(0, this.heatGrace - dt);
     this.nitroTimer = Math.max(0, this.nitroTimer - dt);
     this.landed = false;
-    if (this.damage > 0 && elapsed - this.lastHitAt > 3.5) this.damage = 0;
+    if (this.damage > 0 && elapsed - this.lastHitAt > this.damageCool) this.damage = 0;
     if (this.tumbleT > 0) {
       this.tumbleT -= dt;
       this.rollA += dt * 9;

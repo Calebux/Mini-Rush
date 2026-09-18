@@ -45,7 +45,7 @@
 }
 #garage #car-roster { scrollbar-color: rgba(212,175,55,.45) transparent; }
 #garage .car-roster-item small, #garage .upg .pips, #garage .upg .cost,
-#garage #car-price { color: var(--gold, #d4af37); }
+#garage #market-status { color: var(--gold-hi, #e8c766); opacity: .75; }
 #garage .cstat .bar i { background: linear-gradient(90deg, var(--gold, #d4af37), var(--gold-hi, #e8c766)); }
 #garage .upg { border-color: var(--line, rgba(212,175,55,.22)); }
 #garage .upg.maxed { border-color: rgba(212,175,55,.7); }
@@ -61,7 +61,7 @@
 
 .garage-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 #garage #garage-bank { font-size: 11px; white-space: nowrap; color: var(--gold-hi, #e8c766); }
-#garage #btn-garage-done { margin: 0; min-height: 46px; flex: 1; max-width: 260px; padding: 12px; background: linear-gradient(135deg, var(--gold-hi, #e8c766), var(--gold, #d4af37)); color: var(--gold-ink, #17120a); border-radius: 10px; box-shadow: none; }
+#garage #btn-garage-done, #garage #btn-market-nim { margin: 0; min-height: 46px; flex: 1; max-width: 260px; padding: 12px; background: linear-gradient(135deg, var(--gold-hi, #e8c766), var(--gold, #d4af37)); color: var(--gold-ink, #17120a); border-radius: 10px; box-shadow: none; font-size: 15px; white-space: nowrap; }
 #finish-moment { position: fixed; z-index: 9; top: max(65px, 12vh); left: 50%; transform: translateX(-50%); width: min(90vw, 500px); text-align: center; pointer-events: none; color: #fff; text-shadow: 0 3px 18px #000000b0; }
 #finish-moment.hidden { display: none; }
 body.finish-view #hud, body.finish-view #combo, body.finish-view #countdown,
@@ -87,7 +87,7 @@ body.finish-view #speedlines, body.finish-view #key-hints, body.finish-view #tut
   #garage #btn-workshop-garage { grid-column: 1; grid-row: 4; }
   #garage .garage-specs { grid-column: 2; grid-row: 2; max-height: 100%; align-self: center; padding: 20px; gap: 16px; }
   .garage-footer { grid-column: 2; grid-row: 3 / span 2; flex-direction: column; justify-content: center; gap: 8px; }
-  #garage #btn-garage-done { flex: none; width: 100%; max-width: none; }
+  #garage #btn-garage-done, #garage #btn-market-nim { flex: none; width: 100%; max-width: none; }
   #garage #car-name { font-size: 48px; }
 }
 @media (min-width: 600px) and (max-height: 500px) {

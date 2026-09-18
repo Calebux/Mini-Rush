@@ -27,11 +27,21 @@ export interface ModeSpec {
   requiresClass?: CarClass;
   /** Workshop builds stay out of the grid, player and AI alike: garage cars only. */
   noBuilds?: boolean;
+  /**
+   * Only cars nobody can buy. The bounty race pays a cash prize, so a car
+   * bought with NIM must not be a faster way to it — the AI field still drives
+   * the whole shelf, this bars the *entrant's* car.
+   */
+  freeCarsOnly?: boolean;
 }
 
-/** Whether a car may take the grid in a mode: the right shelf, and no workshop build where barred. */
-export const carFits = (m: ModeSpec, c: CarSpec): boolean =>
+/** Cars the AI field is drawn from: the mode's shelf, less workshop builds where barred. */
+export const carInField = (m: ModeSpec, c: CarSpec): boolean =>
   (!m.requiresClass || c.class === m.requiresClass) && !(m.noBuilds && c.model === 300);
+
+/** Cars the player may enter a mode on: the field rule, plus any free-cars-only rule. */
+export const carFits = (m: ModeSpec, c: CarSpec): boolean =>
+  carInField(m, c) && !(m.freeCarsOnly && c.nim > 0);
 
 export const MODES: ModeSpec[] = [
   {
@@ -47,7 +57,7 @@ export const MODES: ModeSpec[] = [
   {
     id: 'copchase', name: 'POLICE CHASE', icon: '🚓',
     tagline: 'Units behind run you down, units ahead ram you. Escape for 3 laps or get BUSTED.',
-    rivals: 5, tumble: false, aggression: 1, lapsLocked: 3,
+    rivals: 4, tumble: false, aggression: 0.7, lapsLocked: 3,
     pursuit: true
   },
   {
@@ -89,9 +99,9 @@ export const MODES: ModeSpec[] = [
   // Appended, never inserted: MR1 receipts store a mode's index.
   {
     id: 'hardcore', name: 'HARDCORE', icon: '🏎️',
-    tagline: 'No traffic. Seven pro drivers on a long circuit, fast cars only, no workshop builds. Win the bounty race.',
+    tagline: 'No traffic. Seven pro drivers on a long circuit, in the free VIPER GT. Win the bounty race.',
     rivals: 7, tumble: false, aggression: 0, lapsLocked: 2,
-    requiresClass: 'fast', noBuilds: true, noTraffic: true, pro: true, trackLength: 3000, featured: true
+    requiresClass: 'fast', noBuilds: true, freeCarsOnly: true, noTraffic: true, pro: true, trackLength: 3000, featured: true
   }
 ];
 

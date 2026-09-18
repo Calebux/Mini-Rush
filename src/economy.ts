@@ -1,6 +1,6 @@
-// The coin bank. Coins collected in races accumulate here and buy cars in
-// the garage. All local — the wallet integration can hang premium cars off
-// the same owned() gate later.
+// The coin bank. Coins collected in races accumulate here and pay for
+// upgrades, paint and workshop parts — never for cars, which are bought with
+// NIM. All local; owned() gates the cars a NIM payment has unlocked.
 const BANK_KEY = 'minirush.bank';
 const OWNED_KEY = 'minirush.owned';
 
@@ -31,14 +31,7 @@ export function spend(amount: number): boolean {
   return true;
 }
 
-/** Spend from the bank to unlock a car. False = can't afford. */
-export function unlock(id: string, price: number): boolean {
-  if (!spend(price)) return false;
-  grantCar(id);
-  return true;
-}
-
-/** Unlock a car without spending coins, e.g. after a stablecoin market purchase. */
+/** Unlock a car after its NIM payment goes through. Coins never buy cars. */
 export function grantCar(id: string): void {
   const o = owned();
   o.add(id);

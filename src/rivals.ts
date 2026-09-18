@@ -172,7 +172,7 @@ export class RivalManager {
           : 0,
         pursuitPhase: 'tail',
         // staggered, so the squad takes turns rather than all lunging at once
-        pursuitT: 2.5 + i * 2.4,
+        pursuitT: 4 + i * 2.6,
         pursuitSide: i % 2 === 0 ? 1 : -1
       });
     }
@@ -221,7 +221,7 @@ export class RivalManager {
       // Police Chase: units gridded behind the player chase (first run
       // staggered per unit); units gridded ahead lie in wait and attack.
       r.pursuitPhase = grid[i].s > 0 ? 'block' : 'tail';
-      r.pursuitT = grid[i].s > 0 ? 6 : 2.5 + i * 2.4;
+      r.pursuitT = grid[i].s > 0 ? 6 : 4 + i * 2.6;
       this.sync(r, 0);
     });
   }
@@ -536,7 +536,7 @@ export class RivalManager {
         // across the nose; if it made it in front, stay there and attack
         if (r.pursuitT <= 0) {
           r.pursuitPhase = gap > 0 ? 'block' : 'drop';
-          r.pursuitT = gap > 0 ? 6 : 2.2;
+          r.pursuitT = gap > 0 ? 6 : 3.6;
         }
         break;
       case 'block':
@@ -547,7 +547,7 @@ export class RivalManager {
           // player got past (join the chase) or it has held the door long enough
           const passed = gap < -4;
           r.pursuitPhase = passed ? 'tail' : 'drop';
-          r.pursuitT = passed ? 1.5 + Math.random() * 2 : 2.2;
+          r.pursuitT = passed ? 2.5 + Math.random() * 2.5 : 3.6;
         }
         break;
       case 'drop':

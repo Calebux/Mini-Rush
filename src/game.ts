@@ -4,7 +4,9 @@ import { AssetLibrary, disposeCarInstance } from './assets';
 import { AudioManager } from './audio';
 import { BOUNTY_MODE, bountyMapIndex, bountySeed } from './bounty';
 import { CARS } from './cars';
-import { districtIndexAt, TRACK_LENGTH_DEFAULT } from './constants';
+import {
+  districtIndexAt, HEAT_COOL, HEAT_GRACE, HEAT_LIMIT, PIT_SCRUB, TRACK_LENGTH_DEFAULT
+} from './constants';
 import { dailyMapIndex, dailySeed } from './daily';
 import { driverName } from './driver';
 import { deposit, owned, racePayout } from './economy';
@@ -16,7 +18,7 @@ import {
 import { GunHud } from './gun';
 import { StyleMeter } from './style';
 import { MAPS } from './maps';
-import { carFits, CUP_MODES, MODES } from './modes';
+import { carFits, carInField, CUP_MODES, MODES } from './modes';
 import { mapUnlocked, stamp } from './passport';
 import { captureReferrer, creditReferral } from './referral';
 import { activeColor } from './skins';
@@ -172,7 +174,6 @@ export class Game {
   private driftChain = 0;           // seconds of continuous drift
   private driftBestThisRace = 0;    // longest single chain this race
   private weather: WeatherSpec | null = null;
-  private rainOverlay: HTMLElement | null = null;
   private weatherLabel: HTMLElement | null = null;
 
   constructor(container: HTMLElement) {
@@ -206,7 +207,7 @@ export class Game {
     if (!carFits(restored, CARS[this.carIndex])) {
       const have = owned();
       const fit = CARS.findIndex((c) => carFits(restored, c)
-        && (c.price === 0 || have.has(c.id)));
+        && (c.nim === 0 || have.has(c.id)));
       if (fit >= 0) this.carIndex = fit;
       else this.modeIndex = 0; // nothing on the shelf — back to Grand Prix
     }
@@ -551,14 +552,6 @@ export class Game {
     (this.scene.fog as THREE.Fog).near = fogNear;
     (this.scene.fog as THREE.Fog).far = fogFar;
 
-    // rain overlay — the CSS streaks only fall while racing; the menu-backdrop
-    // world keeps the weather's fog mood but stays clean of screen-wide lines
-    if (!this.rainOverlay) {
-      this.rainOverlay = document.getElementById('rain-overlay');
-    }
-    if (this.rainOverlay) {
-      this.rainOverlay.style.opacity = '0';
-    }
     // weather label
     if (!this.weatherLabel) {
       this.weatherLabel = document.getElementById('weather-label');
@@ -626,9 +619,10 @@ export class Game {
       CARS[this.carIndex].model, map.id
     );
     // A class mode fields the rest of that shelf (less workshop builds where
-    // it bars them); everything else races the civilian traffic shells.
+    // it bars them); everything else races the civilian traffic shells. The AI
+    // is not buying anything, so a free-cars-only mode still fields the shelf.
     const rivalPool = mode.requiresClass
-      ? CARS.filter((c) => carFits(mode, c) && c.id !== CARS[this.carIndex].id)
+      ? CARS.filter((c) => carInField(mode, c) && c.id !== CARS[this.carIndex].id)
       : [];
     this.rivals = new RivalManager(
       this.scene, this.assets, this.track, CARS[this.carIndex].model,
@@ -748,6 +742,7 @@ export class Game {
     this.disposeRace();
     this.buildRace();
     this.raceLaps = MODES[this.modeIndex].lapsLocked ?? this.laps;
+    this.player.damageCool = MODES[this.modeIndex].pursuit ? HEAT_COOL : 3.5;
     this.player.raceLength = this.raceLaps * this.track.length;
     this.rivals.raceLength = this.raceLaps * this.track.length;
     this.lapsDone = -1;
@@ -804,11 +799,6 @@ export class Game {
         this.ghostObj.rotation.y += Math.PI;
       }
       this.ui.popText(`GHOST: ${this.ghostData.time.toFixed(1)}s — BEAT IT`, '#9adfff');
-    }
-
-    // now that we're really racing, let the weather's rain streaks fall
-    if (this.rainOverlay && this.weather) {
-      this.rainOverlay.style.opacity = String(this.weather.rainIntensity);
     }
 
     this.ui.showRace();
@@ -1576,18 +1566,20 @@ export class Game {
         if (mode.pursuit) {
           const dir = Math.sign(p.x - r.x) || 1;
           p.bump(dir, 2.4); // PIT tap: scrubs speed but keeps you on the road
-          p.v *= 0.85;
+          p.v *= PIT_SCRUB;
           this.style.crash();
           this.lastBumpAt = elapsed;
+          if (p.heatGrace > 0) continue; // still shaking off the last tap
+          p.heatGrace = HEAT_GRACE;
           p.damage++;
           p.lastHitAt = elapsed;
-          if (p.damage >= 3) {
+          if (p.damage >= HEAT_LIMIT) {
             p.wreck();
             this.busted = true;
             this.cinematic(p.s, 'BUSTED');
             this.finishRace();
           } else {
-            this.ui.popText(`HEAT ${p.damage}/3 — SHAKE THEM!`, '#ff8a3d');
+            this.ui.popText(`HEAT ${p.damage}/${HEAT_LIMIT} — SHAKE THEM!`, '#ff8a3d');
             this.audio.play('bump');
             this.shake = 0.9;
             if (navigator.vibrate) navigator.vibrate(80);
