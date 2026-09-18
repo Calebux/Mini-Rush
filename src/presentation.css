@@ -3,7 +3,7 @@
   display: grid; grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(160px, 1fr) auto auto auto auto;
   align-items: stretch; justify-content: stretch; gap: 8px;
-  padding: max(14px, env(safe-area-inset-top)) 16px max(12px, var(--safe-bottom));
+  padding: max(14px, env(safe-area-inset-top)) 16px max(20px, var(--safe-bottom));
   background: linear-gradient(180deg, #06100c99, transparent 24%, transparent 50%, #06100cc4);
   overflow: hidden;
 }
