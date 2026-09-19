@@ -18,12 +18,10 @@ export interface RemoteEntry {
   place: number;
   laps: number;
   car: string;
-  ghost?: string | null; // Weekend GP: the packed lap line (src/ghostShare.ts)
 }
 
 interface Run {
   tag: string; score: number; time: number; place: number; laps: number; car: string;
-  ghost?: string; // only the Weekend GP carries one
 }
 
 interface Board {
@@ -42,9 +40,6 @@ const daily = (day: string): Board => ({
 });
 const bounty = (week: string): Board => ({
   key: `bounty-${week}`, order: 'time_s.asc,created_at.asc', better: (run, prev) => run.time < prev.time_s
-});
-const weekend = (week: string): Board => ({
-  key: `weekend-${week}`, order: 'time_s.asc,created_at.asc', better: (run, prev) => run.time < prev.time_s
 });
 
 export const remoteEnabled = (): boolean => Boolean(LB_URL && LB_KEY);
@@ -108,17 +103,10 @@ async function submit(board: Board, run: Run, wallet?: string | null): Promise<n
     );
     const existing = mine.ok ? ((await mine.json()) as { score: number; time_s: number }[]) : [];
     if (existing[0] && !board.better(run, existing[0])) return rankOf();
-    const row: Record<string, unknown> = {
+    const res = await post({
       day: board.key, player_id: id, tag: run.tag, score: run.score,
       time_s: run.time, place: run.place, laps: run.laps, car: run.car
-    };
-    if (run.ghost) row.ghost = run.ghost;
-    let res = await post(row);
-    // a board without the ghost column yet still takes the time
-    if (!res.ok && run.ghost) {
-      delete row.ghost;
-      res = await post(row);
-    }
+    });
     if (!res.ok) return 0;
     return rankOf();
   } catch {
@@ -139,10 +127,4 @@ export const topBounty = (week: string, limit = 10): Promise<RemoteEntry[]> => t
 export const submitBounty = (week: string, run: Run, wallet?: string | null): Promise<number> =>
   submit(bounty(week), run, wallet);
 
-/** This weekend's fastest runs, with the lap line each one drove. */
-export const topWeekend = (week: string, limit = 10): Promise<RemoteEntry[]> =>
-  top(weekend(week), limit);
 
-/** Post a Weekend GP run and its ghost; only a faster time replaces the row. */
-export const submitWeekend = (week: string, run: Run, wallet?: string | null): Promise<number> =>
-  submit(weekend(week), run, wallet);

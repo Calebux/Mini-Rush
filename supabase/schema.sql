@@ -38,12 +38,3 @@ create policy "insert scores" on public.daily_scores
   for insert with check (true);
 create policy "update scores" on public.daily_scores
   for update using (true) with check (true);
-
--- Weekend GP (added 2026-09): the rows keyed "weekend-<ISO week>" also carry
--- the packed lap line of the run, so other players race that ghost. Existing
--- projects can run just this statement; the game still posts times without it.
-alter table public.daily_scores
-  add column if not exists ghost text;
-
-create index if not exists daily_scores_day_time
-  on public.daily_scores (day, time_s asc);

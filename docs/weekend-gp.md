@@ -13,8 +13,8 @@ Midweek the card counts down to the next weekend and the race still runs as
 - The circuit — seed, city, 8 laps, 3.2 km lap — derives from the ISO week
   (`src/weekend.ts`), like the bounty race. Nothing decides it server-side.
 - Finishing an open-weekend run posts your time **and a packed copy of your lap
-  line** to the weekend board (`weekend-<ISO week>` in the same Supabase table
-  as the daily board).
+  line** to the weekend board — the `weekendRuns` table in Convex, alongside the
+  bounty weeks and the player counter.
 - Opening the event fetches the three fastest players' lines, decodes them and
   puts them on track with you, in amber. Your own best run is the blue ghost.
 - A top-3 finish pays the usual non-staked coin prize, once a week.
@@ -32,22 +32,22 @@ runs without that ghost.
 
 ## Setup
 
-The weekend board needs one extra column. In Supabase → SQL Editor:
+The board lives in Convex, alongside the bounty weeks and the player counter
+(`convex/weekend.ts`, table `weekendRuns`). Deploy it once:
 
-```sql
-alter table public.daily_scores
-  add column if not exists ghost text;
-
-create index if not exists daily_scores_day_time
-  on public.daily_scores (day, time_s asc);
+```bash
+npx convex deploy       # push the schema and functions to production
 ```
 
-Both statements are also at the bottom of `supabase/schema.sql`. Until the
-column exists the game still posts weekend **times** — it retries the write
-without the ghost — so the board works and only the ghosts are missing.
+Nothing else to configure: the game already has `VITE_CONVEX_URL`. Without it —
+a build with no Convex at all — the event still runs against the AI field and
+your own ghost, and nothing breaks.
 
-No `VITE_LB_URL` / `VITE_LB_KEY` at all? The event still runs with the AI field
-and your own ghost; nothing breaks.
+Unlike bounty weeks, this table has a **public write path**: the game posts a
+run straight from the phone. That is deliberate, and the reason prizes stay on
+the on-chain bounty entries. The mutation still refuses what it can check —
+the week format, the device id shape, a time under two minutes or over an hour,
+a ghost over 24 kB or one that isn't a packed lap line.
 
 ## Limits worth being honest about
 

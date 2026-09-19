@@ -34,6 +34,22 @@ export default defineSchema({
     .index('by_lastSeen', ['lastSeen'])
     .index('by_name', ['name']),
 
+  // Weekend GP: one run per device per ISO week, with the packed lap line other
+  // players race as a ghost. Written by the game (convex/weekend.ts).
+  weekendRuns: defineTable({
+    week: v.string(),                      // ISO week, "2026-W38"
+    pid: v.string(),                       // the same device id as `players`
+    tag: v.string(),                       // driver name shown on the grid
+    timeS: v.number(),                     // finish time, seconds
+    score: v.number(),
+    place: v.number(),
+    car: v.string(),
+    ghost: v.string(),                     // packed lap line (src/ghostShare.ts)
+    at: v.number()
+  })
+    .index('by_week_time', ['week', 'timeS'])
+    .index('by_week_pid', ['week', 'pid']),
+
   // Counts per UTC day for /stats; all-time totals are sums of these rows.
   usageDays: defineTable({
     day: v.string(),

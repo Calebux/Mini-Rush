@@ -18,6 +18,9 @@ type Platform = 'nimiq' | 'web';
 
 let platform: Promise<Platform> | null = null;
 
+/** The random per-device id /stats counts and the Weekend GP posts under. */
+export const deviceId = (): string | null => playerId();
+
 function playerId(): string | null {
   try {
     const saved = localStorage.getItem(ID_KEY);

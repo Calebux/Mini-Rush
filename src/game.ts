@@ -20,7 +20,7 @@ import { StyleMeter } from './style';
 import { MAPS } from './maps';
 import { carFits, carInField, MODES } from './modes';
 import { mapUnlocked, stamp } from './passport';
-import { playerId, remoteEnabled, submitWeekend, topWeekend } from './remoteBoard';
+import { postWeekendRun, topWeekendRuns, weekendBoardEnabled, weekendPlayerId } from './weekendBoard';
 import { captureReferrer, creditReferral } from './referral';
 import { activeColor } from './skins';
 import { applyUpgrades } from './upgrades';
@@ -490,13 +490,13 @@ export class Game {
     this.ui.setMode(this.modeIndex);
   }
 
-  /** This weekend's fastest runs, minus this player's own. Never throws. */
+  /** This weekend's fastest runs, minus this device's own. Never throws. */
   private async loadWeekendGhosts(): Promise<void> {
-    if (!remoteEnabled()) return;
-    const me = playerId(this.ui.walletAddress);
-    const rows = await topWeekend(weekendKey(), WEEKEND_GHOSTS + 3).catch(() => []);
+    if (!weekendBoardEnabled()) return;
+    const me = weekendPlayerId();
+    const rows = await topWeekendRuns(weekendKey(), WEEKEND_GHOSTS + 3);
     this.weekendGhosts = rows
-      .filter((r) => r.player_id !== me)
+      .filter((r) => r.pid !== me)
       .map((r) => ({ data: decodeGhost(r.ghost), tag: r.tag }))
       .filter((g): g is { data: GhostData; tag: string } => !!g.data)
       .slice(0, WEEKEND_GHOSTS);
@@ -1061,11 +1061,10 @@ export class Game {
       // the weekend board carries the lap line, so the next player races it.
       // Practice runs midweek stay local: only the open weekend counts.
       if (this.weekend && weekendOpen()) {
-        void submitWeekend(weekendKey(), {
-          tag: driverName(), score: this.score(), time: this.playerTime,
-          place: this.playerPlace, laps: this.raceLaps, car: CARS[this.carIndex].name,
-          ghost: encodeGhost(run)
-        }, this.ui.walletAddress).then((rank) => {
+        void postWeekendRun(weekendKey(), {
+          tag: driverName(), score: this.score(), timeS: this.playerTime,
+          place: this.playerPlace, car: CARS[this.carIndex].name, ghost: encodeGhost(run)
+        }).then((rank) => {
           if (rank > 0) this.ui.popText(`🌍 #${rank} IN THE WEEKEND GP`, '#ffc531');
         });
       }
