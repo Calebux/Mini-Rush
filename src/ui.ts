@@ -213,6 +213,7 @@ export class UI {
   private afterUsername: () => void = () => {};    // where the username prompt returns to
   private guideMode: 'paused' | 'first-run' | 'menu' = 'paused';
   private marketPending = false;
+  private purchaseNote: { id: string; text: string } | null = null; // receipt for the car just bought
 
   constructor(private wallet: Wallet, private audio: AudioManager) {
     // blur so Space/Enter (nitro key) can't re-trigger the focused button
@@ -1171,10 +1172,12 @@ export class UI {
         ? `BUY\u00a0· ${nimPrice(c.nim)}` : 'NIM\u00a0PAYMENTS\u00a0OFF';
       $('market-status').textContent = this.marketPending ? 'Payment awaiting approval. Check Nimiq Pay.' : !this.wallet.available
         ? `Open MiniRush in Nimiq Pay to buy ${c.name} for ${nimPrice(c.nim)}.` : this.wallet.marketReady
-        ? `Unlocks instantly. One payment of ${nimPrice(c.nim)}.`
+        // who the payment goes to, before it is confirmed — never just the price
+        ? `${nimPrice(c.nim)} to ${this.wallet.marketReceiverShort} · one payment, unlocks ${c.name} on this device.`
         : 'NIM payments are not configured yet.';
     } else {
-      $('market-status').textContent = '';
+      // an owned car shows the receipt for the payment that unlocked it
+      $('market-status').textContent = this.purchaseNote?.id === c.id ? this.purchaseNote.text : '';
     }
 
     for (const cls of CAR_TABS) {
@@ -1237,7 +1240,7 @@ export class UI {
     }
     button.disabled = true;
     this.marketPending = true;
-    status.textContent = 'Confirm the payment in Nimiq Pay.';
+    status.textContent = `Confirm ${nimPrice(c.nim)} to ${this.wallet.marketReceiverShort} in Nimiq Pay.`;
     let tx: string | null = null;
     try {
       tx = await this.wallet.buyMarketCar(c.nim);
@@ -1257,7 +1260,10 @@ export class UI {
       return;
     }
     this.audio.play('buy');
-    status.textContent = 'Unlocked. Market perks active.';
+    this.purchaseNote = {
+      id: c.id,
+      text: `${c.name} unlocked. Paid ${nimPrice(c.nim)} to ${this.wallet.marketReceiverShort} · reference ${tx.slice(0, 10)}…`
+    };
     this.refreshBank();
     this.renderCar();
     this.refreshModeLocks();
@@ -1912,10 +1918,12 @@ export class UI {
     mint.textContent = bountyRun ? '💰 ENTER THE BOUNTY' : 'MINT RECEIPT';
     mint.disabled = false;
     // entering publishes a time and a wallet address, so say so before the tap
-    $('mint-status').textContent = !bountyRun ? ''
+    const anchor = this.wallet.receiptReceiverShort(bountyRun ? bountyReceiver() : null);
+    $('mint-status').textContent = !bountyRun
+      ? canMint ? `Writes this run to Nimiq: 1 Luna (0.00001 NIM) to ${anchor}.` : ''
       : !this.wallet.available ? `You won the bounty race. Open MiniRush in Nimiq Pay to enter it for ${bountyPrize()}.`
       : !receiptsReady ? 'Bounty entries are not open yet.'
-      : 'Publishes your winning time and wallet address on the Nimiq blockchain. Your fastest win counts.';
+      : `Enters your win: 1 Luna (0.00001 NIM) to ${anchor}, publishing your time and wallet address on Nimiq. Your fastest win counts.`;
     $('btn-bounty-results').classList.toggle('hidden', !bounty);
 
     this.hud.classList.remove('visible');

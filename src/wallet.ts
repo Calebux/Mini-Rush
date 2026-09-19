@@ -41,6 +41,12 @@ const isAddress = (a: string | undefined | null): a is string =>
 /** Receiver for garage purchases. Unset ⇒ the market is simply off. */
 const MARKET_RECEIVER = (import.meta.env.VITE_MARKET_RECEIVER as string | undefined)?.trim();
 
+/** "NQ07 0000 1111 … 7777" — enough of an address to recognise, short enough to read. */
+const shorten = (address: string | null | undefined): string => {
+  const compact = (address ?? '').replace(/\s+/g, '');
+  return compact ? `${compact.slice(0, 8)}…${compact.slice(-4)}` : '';
+};
+
 /** Garage car price in NIM. Overridable so testnet demos can run cheap. */
 // Each car carries its own NIM price (see src/cars.ts); the market only needs
 // somewhere to send the payment.
@@ -176,9 +182,20 @@ export class Wallet {
   }
 
   shortAddress(): string {
-    if (!this.address) return '';
-    const compact = this.address.replace(/\s+/g, '');
-    return `${compact.slice(0, 8)}…${compact.slice(-4)}`;
+    return shorten(this.address);
+  }
+
+  /**
+   * Where a car payment goes, shortened for display. A player should never be
+   * asked to confirm a payment without seeing who receives it.
+   */
+  get marketReceiverShort(): string {
+    return shorten(MARKET_RECEIVER);
+  }
+
+  /** Where a receipt or bounty entry is written, shortened the same way. */
+  receiptReceiverShort(receiver: string | null = null): string {
+    return shorten(isAddress(receiver) ? receiver : RECEIPT_RECEIVER);
   }
 
   /**
