@@ -54,7 +54,7 @@ export class Leaderboard {
     return this.read(DAILY_PREFIX + day, byScore);
   }
 
-  /** Weekly Cup runs land on their own per-week board. */
+  /** Weekend GP runs land on their own per-week board. */
   submitWeekly(week: string, run: Run): number {
     this.prune(WEEKLY_PREFIX, week);
     return this.submitTo(WEEKLY_PREFIX + week, run, byScore);

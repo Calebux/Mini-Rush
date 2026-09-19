@@ -107,7 +107,7 @@ export function bountyActive(): boolean {
 /** The race the bounty is decided on. */
 export const BOUNTY_MODE = MODES.findIndex((m) => m.id === 'hardcore');
 
-/** This week's bounty circuit. Mixed away from the Weekly Cup's, so the two events differ. */
+/** This week's bounty circuit. Mixed away from the Weekend GP's, so the two events differ. */
 export function bountySeed(): number {
   return (Math.imul(weeklySeed(), 2654435761) >>> 0) % 1e9 || 17;
 }

@@ -1,7 +1,7 @@
-// Weekly Cup: a non-staked tournament. One shared circuit per ISO week — seed,
-// city and mode derive from the week number alone, so every player races the
-// same track with no backend. Placing on your own board pays a coin prize once
-// per week (top-3), so there are no funds at stake and nothing to exploit.
+// The ISO week itself, plus the non-staked coin prize the Weekend GP pays for
+// a top-3 finish, once a week. The circuit the Weekend GP runs on lives in
+// src/weekend.ts; what is left here is the week stamp every weekly event keys
+// off (the bounty too) and the prize claim.
 import { deposit } from './economy';
 
 /** ISO-week stamp, e.g. "2026-W29" — keys the weekly board and prize claim. */

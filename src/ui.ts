@@ -6,11 +6,14 @@ import {
 import { CarClass, CARS } from './cars';
 import { dailyMapIndex, dayKey } from './daily';
 import { driverName, hasUsername, keepDriverName, setUsername, USERNAME_MAX } from './driver';
-import { weekKey, weeklyMapIndex, weeklyModeIndex, WEEKLY_PRIZES } from './weekly';
+import { weekKey, WEEKLY_PRIZES } from './weekly';
+import {
+  countdown, msToClose, msToWeekend, WEEKEND_LAPS, weekendMapIndex, weekendOpen
+} from './weekend';
 import { bank, grantCar, owned, racePayout } from './economy';
 import { Leaderboard } from './leaderboard';
 import { MAPS } from './maps';
-import { carFits, CUP_MODES, MODES, ModeSpec } from './modes';
+import { carFits, MODES, ModeSpec } from './modes';
 import { mapUnlocked, stamps } from './passport';
 import {
   playerId, remoteEnabled, submitBounty, submitDaily, topBounty, topDaily
@@ -161,8 +164,8 @@ export class UI {
   onNitroPress: () => void = () => {}; // the pill itself — needed when tap = shoot
   onDaily: () => void = () => {};      // daily challenge picked from the menu
   onDailyExit: () => void = () => {};  // backed out of / done with the daily
-  onWeekly: () => void = () => {};     // Weekly Cup picked from the menu
-  onWeeklyExit: () => void = () => {}; // backed out of / done with the Weekly Cup
+  onWeekend: () => void = () => {};     // Weekend GP picked from the menu
+  onWeekendExit: () => void = () => {}; // backed out of / done with the Weekend GP
   onBounty: () => void = () => {};     // bounty race picked from the bounty board
   onBountyExit: () => void = () => {}; // backed out of / done with the bounty race
 
@@ -202,7 +205,7 @@ export class UI {
   private mapIndex = 0;
   private pickedLaps = 2; // the user's own choice, restored when a lock lifts
   private dailyUi = false; // garage reached via DAILY RUN, not the tour flow
-  private weeklyUi = false; // garage reached via WEEKLY CUP, not the tour flow
+  private weekendUi = false; // garage reached via WEEKEND GP, not the tour flow
   private bountyUi = false; // garage reached via the bounty board
   private tutTimers: number[] = [];
   private keyHintTimer = 0;
@@ -214,6 +217,9 @@ export class UI {
   private guideMode: 'paused' | 'first-run' | 'menu' = 'paused';
   private marketPending = false;
   private purchaseNote: { id: string; text: string } | null = null; // receipt for the car just bought
+
+  /** The signed-in address, for anything outside the UI that needs identity. */
+  get walletAddress(): string | null { return this.wallet.address; }
 
   constructor(private wallet: Wallet, private audio: AudioManager) {
     // blur so Space/Enter (nitro key) can't re-trigger the focused button
@@ -264,10 +270,10 @@ export class UI {
       this.results.classList.add('hidden');
       this.menu.classList.remove('hidden');
       this.exitDaily();
-      this.exitWeekly();
+      this.exitWeekend();
       this.exitBounty();
       this.refreshDaily();
-      this.refreshWeekly();
+      this.refreshWeekend();
       this.refreshBounty();
       this.refreshBank();
     });
@@ -369,7 +375,7 @@ export class UI {
       goto('menu', 'garage');
     });
     on('btn-market-home', () => {
-      this.exitDaily(); this.exitWeekly(); this.exitBounty();
+      this.exitDaily(); this.exitWeekend(); this.exitBounty();
       this.selectCar(CARS.findIndex(c => c.class === 'hyper'));
       goto('menu', 'garage');
     });
@@ -382,9 +388,9 @@ export class UI {
     on('btn-tour-done', () => goto('tour', 'garage'));
     on('garage-back', () => {
       // the daily / weekly / bounty skip the tour, so backing out returns to the menu
-      if (this.dailyUi || this.weeklyUi || this.bountyUi) {
+      if (this.dailyUi || this.weekendUi || this.bountyUi) {
         this.exitDaily();
-        this.exitWeekly();
+        this.exitWeekend();
         this.exitBounty();
         goto('garage', 'menu', 'back');
       } else {
@@ -410,13 +416,17 @@ export class UI {
       goto('menu', 'garage');
     });
 
-    // weekly cup: one shared circuit + mode all week, coin prizes — to the garage
-    on('btn-weekly', () => {
+    // weekend GP: one long circuit all weekend, raced against other players'
+    // ghosts. Open midweek too, as practice that stays off the board.
+    on('btn-weekend', () => {
       this.audio.unlock();
-      this.weeklyUi = true;
-      this.onWeekly();
+      this.weekendUi = true;
+      this.onWeekend();
       $('lap-select').classList.add('locked');
       goto('menu', 'garage');
+      if (!weekendOpen()) {
+        this.popText(`PRACTICE — THE WEEKEND GP OPENS IN ${countdown(msToWeekend())}`, '#ffc531');
+      }
     });
 
     on('btn-market-nim', () => void this.buyMarketCar());
@@ -662,7 +672,7 @@ export class UI {
     this.refreshBest();
     this.refreshBank();
     this.refreshDaily();
-    this.refreshWeekly();
+    this.refreshWeekend();
     this.refreshBounty();
     // a bounty posted in Convex lights the card up once it answers
     void loadBounty().then(() => this.refreshBounty());
@@ -759,13 +769,13 @@ export class UI {
     this.onDailyExit();
   }
 
-  /** Leaving the Weekly Cup flow: unlock the lap picker and tell the game. */
-  private exitWeekly(): void {
-    if (!this.weeklyUi) return;
-    this.weeklyUi = false;
+  /** Leaving the Weekend GP flow: unlock the lap picker and tell the game. */
+  private exitWeekend(): void {
+    if (!this.weekendUi) return;
+    this.weekendUi = false;
     $('lap-select').classList.remove('locked');
     this.selectLapChip(this.pickedLaps, false);
-    this.onWeeklyExit();
+    this.onWeekendExit();
   }
 
   private refreshBank(): void {
@@ -786,17 +796,24 @@ export class UI {
     this.refreshStreak();
   }
 
-  /** The Weekly Cup button shows this week's city + mode and top prize. */
-  private refreshWeekly(): void {
-    const m = MAPS[weeklyMapIndex(MAPS.length)];
-    const mode = MODES[CUP_MODES[weeklyModeIndex(CUP_MODES.length)]];
+  /**
+   * The Weekend GP card: this weekend's city, and whether the gates are open.
+   * Midweek it counts down and the race runs as practice.
+   */
+  private refreshWeekend(): void {
+    const m = MAPS[weekendMapIndex(MAPS.length)];
+    const live = weekendOpen();
     const best = this.board.weeklyEntries(weekKey())[0];
-    $('btn-weekly').innerHTML =
-      `<span class="ev-label">WEEKLY CUP</span>` +
-      `<strong class="ev-title">${m.flag} ${m.name} · ${mode.name}</strong>` +
+    const card = $('btn-weekend');
+    card.classList.toggle('live', live);
+    card.innerHTML =
+      `<span class="ev-label">${live
+        ? `🏁 WEEKEND GP · LIVE · ${countdown(msToClose())} LEFT`
+        : `WEEKEND GP · OPENS IN ${countdown(msToWeekend())}`}</span>` +
+      `<strong class="ev-title">${m.flag} ${m.name} · ${WEEKEND_LAPS} LAPS</strong>` +
       `<small class="ev-meta">${best
-        ? `Top ${best.score} · ${best.tag} · win ⬤ ${WEEKLY_PRIZES[1]}`
-        : `Top 3 wins up to ⬤ ${WEEKLY_PRIZES[1]}`}</small>`;
+        ? `Your best ${raceClock(best.time)} · race the fastest players' ghosts`
+        : `Race the ghosts of the weekend's fastest · win ⬤ ${WEEKLY_PRIZES[1]}`}</small>`;
   }
 
   /**
@@ -891,12 +908,12 @@ export class UI {
     mine.forEach((e, i) => list.appendChild(this.boardRow(i + 1, e.tag, e.car, raceClock(e.time))));
   }
 
-  /** Bounty board → this week's bounty race, straight to the garage like the Weekly Cup. */
+  /** Bounty board → this week's bounty race, straight to the garage like the Weekend GP. */
   private raceBounty(): void {
     this.audio.unlock();
     this.audio.play('click');
     this.exitDaily();
-    this.exitWeekly();
+    this.exitWeekend();
     this.bountyUi = true;
     this.onBounty();
     // free cars only: seat the player in one rather than in front of a locked START
@@ -1827,7 +1844,7 @@ export class UI {
 
   showResults(
     place: number, time: number, coins: number, score: number,
-    laps: number, car: string, busted = false, style = 0, daily = false, weekly = false,
+    laps: number, car: string, busted = false, style = 0, daily = false, weekend = false,
     takedowns = 0, bounty = false, standings: Standing[] = []
   ): void {
     this.hideFinishMoment();
@@ -1841,7 +1858,7 @@ export class UI {
     let rank: number;
     if (bounty) {
       rank = won ? this.board.submitBounty(weekKey(), { score, place, time, laps, car }) : 0;
-    } else if (weekly) {
+    } else if (weekend) {
       rank = this.board.submitWeekly(weekKey(), { score, place, time, laps, car });
     } else if (daily) {
       rank = this.board.submitDaily(dayKey(), { score, place, time, laps, car });
@@ -1855,7 +1872,7 @@ export class UI {
         ? rank > 0 ? `💰 BOUNTY BOARD · #${rank} FASTEST WIN ON THIS PHONE` : '💰 WIN POSTED'
         : '💰 ONLY A WIN MAKES THE BOUNTY BOARD'
       : rank > 0
-        ? weekly ? `PERSONAL BEST · #${rank} IN THE WEEKLY CUP`
+        ? weekend ? `PERSONAL BEST · #${rank} IN THE WEEKEND GP`
           : daily ? `PERSONAL BEST · #${rank} ON TODAY'S DAILY`
           : `PERSONAL BEST · #${rank} ON YOUR BOARD`
         : '';
@@ -1935,7 +1952,7 @@ export class UI {
     this.refreshBest();
     this.refreshBank();
     this.refreshDaily();
-    this.refreshWeekly();
+    this.refreshWeekend();
     this.refreshBounty();
   }
 

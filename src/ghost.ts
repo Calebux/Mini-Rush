@@ -93,9 +93,10 @@ export function ghostPos(g: GhostData, t: number): { s: number; x: number } | nu
 }
 
 /** Spectral copy of a car mesh: pale, see-through, contact-free. */
-export function ghostMesh(src: THREE.Group): THREE.Group {
+/** A see-through copy of a car. `tint` tells your own ghost from a rival's. */
+export function ghostMesh(src: THREE.Group, tintHex = 0x9adfff): THREE.Group {
   const g = src.clone(true);
-  const tint = new THREE.Color(0x9adfff);
+  const tint = new THREE.Color(tintHex);
   g.traverse((o) => {
     const mesh = o as THREE.Mesh;
     if (!mesh.isMesh) return;

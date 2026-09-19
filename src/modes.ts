@@ -102,11 +102,17 @@ export const MODES: ModeSpec[] = [
     tagline: 'No traffic. Seven pro drivers on a long circuit, in the free VIPER GT. Win the bounty race.',
     rivals: 7, tumble: false, aggression: 0, lapsLocked: 2,
     requiresClass: 'fast', noBuilds: true, freeCarsOnly: true, noTraffic: true, pro: true, trackLength: 3000, featured: true
+  },
+  {
+    id: 'weekend', name: 'WEEKEND GP', icon: '🏆',
+    tagline: 'Saturday and Sunday only: 8 laps of one long circuit, seven pro drivers, and the ghosts of the fastest players.',
+    rivals: 7, tumble: false, aggression: 0.45, lapsLocked: 8,
+    noTraffic: true, pro: true, trackLength: 3200, featured: true
   }
 ];
 
 /**
- * Modes the Weekly Cup rotates through, as MODES indices. HARDCORE is the
+ * Modes the cup rotation may pick, as MODES indices. HARDCORE is the
  * bounty race and runs on its own, and leaving it out keeps every earlier
  * week's cup on the mode it already had.
  */

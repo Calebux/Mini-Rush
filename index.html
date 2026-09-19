@@ -370,8 +370,8 @@
       color: #fff; opacity: .62; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
 
-    /* weekly cup — gold trophy event card, non-staked coin prizes */
-    #btn-weekly {
+    /* weekend GP — gold trophy event card, non-staked coin prizes */
+    #btn-weekend {
       appearance: none; cursor: pointer; font-family: inherit; margin-top: 0;
       width: 100%; min-width: 0; padding: 11px 13px; border-radius: 9px;
       display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
@@ -381,10 +381,16 @@
       box-shadow: 0 4px 22px rgba(252,211,77,.16);
       transition: all .15s ease;
     }
-    #btn-weekly:hover {
+    #btn-weekend:hover {
       border-color: #fcd34d; box-shadow: 0 6px 28px rgba(252,211,77,.32); transform: translateY(-1.5px);
     }
-    #btn-weekly:active { transform: scale(.97); }
+    #btn-weekend:active { transform: scale(.97); }
+    /* live all weekend: the card says so rather than looking like any other */
+    #btn-weekend.live {
+      color: #ffe9a3; border-color: #fcd34d;
+      background: linear-gradient(100deg, rgba(252,211,77,.3), rgba(255,138,61,.22));
+      box-shadow: 0 0 24px -6px rgba(252,211,77,.55);
+    }
 
 
     /* best + coins as one stat strip */
@@ -1451,7 +1457,7 @@
       <button id="btn-bounty" type="button" aria-label="Open the bounty board">💰 BOUNTY BOARD</button>
       <div class="menu-secondary">
         <button id="btn-daily" type="button">⚡ DAILY RUN</button>
-        <button id="btn-weekly" type="button">🏆 WEEKLY CUP</button>
+        <button id="btn-weekend" type="button">🏆 WEEKEND GP</button>
       </div>
       <div id="menu-stats">
         <div class="stat-stack">

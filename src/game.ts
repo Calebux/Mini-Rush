@@ -18,8 +18,9 @@ import {
 import { GunHud } from './gun';
 import { StyleMeter } from './style';
 import { MAPS } from './maps';
-import { carFits, carInField, CUP_MODES, MODES } from './modes';
+import { carFits, carInField, MODES } from './modes';
 import { mapUnlocked, stamp } from './passport';
+import { playerId, remoteEnabled, submitWeekend, topWeekend } from './remoteBoard';
 import { captureReferrer, creditReferral } from './referral';
 import { activeColor } from './skins';
 import { applyUpgrades } from './upgrades';
@@ -43,7 +44,11 @@ import { Wallet } from './wallet';
 import { Build, workshopSpec } from './workshop';
 import { Showroom } from './showroom';
 import { rollWeather, WeatherSpec } from './weather';
-import { claimWeeklyPrize, weeklyMapIndex, weeklyModeIndex, weeklySeed } from './weekly';
+import { claimWeeklyPrize } from './weekly';
+import {
+  WEEKEND_GHOSTS, WEEKEND_LAPS, weekendKey, weekendMapIndex, weekendOpen, weekendSeed
+} from './weekend';
+import { decodeGhost, encodeGhost } from './ghostShare';
 
 type State = 'boot' | 'menu' | 'countdown' | 'racing' | 'finished';
 
@@ -160,15 +165,18 @@ export class Game {
   private lastBumpAt = -10;       // trades paint ≠ a near miss
   private daily = false;
   private preDaily = { seed: 0, map: 0, mode: 0, laps: 2 }; // restored afterwards
-  private weekly = false;
-  private preWeekly = { seed: 0, map: 0, mode: 0, laps: 2, len: TRACK_LENGTH_DEFAULT }; // restored afterwards
+  private weekend = false;
+  private preWeekend = { seed: 0, map: 0, mode: 0, laps: 2, len: TRACK_LENGTH_DEFAULT }; // restored afterwards
+  // other players' runs this weekend, fetched when the event is opened
+  private weekendGhosts: { data: GhostData; tag: string }[] = [];
   private bounty = false;
   private preBounty = { seed: 0, map: 0, mode: 0, laps: 2 }; // restored afterwards
   private standings: Standing[] = []; // finishing order, snapshotted as the player crosses the line
   private raceSeed = 0;           // seed this race was actually built from
   private ghostRec: GhostRecorder | null = null;
   private ghostData: GhostData | null = null;
-  private ghostObj: THREE.Group | null = null;
+  private ghostObj: THREE.Group | null = null;          // your own best run
+  private rivalGhosts: { data: GhostData; obj: THREE.Group }[] = []; // other players'
 
   // --- new features ---
   private driftChain = 0;           // seconds of continuous drift
@@ -274,8 +282,8 @@ export class Game {
     };
     this.ui.onDaily = () => this.startDaily();
     this.ui.onDailyExit = () => this.exitDaily();
-    this.ui.onWeekly = () => this.startWeekly();
-    this.ui.onWeeklyExit = () => this.exitWeekly();
+    this.ui.onWeekend = () => this.startWeekend();
+    this.ui.onWeekendExit = () => this.exitWeekend();
     this.ui.onBounty = () => this.startBounty();
     this.ui.onBountyExit = () => this.exitBounty();
 
@@ -457,35 +465,53 @@ export class Game {
     }
   }
 
-  /** Weekly Cup: one shared circuit per ISO week — fixed seed/map/mode/laps. */
-  private startWeekly(): void {
-    if (this.weekly) return;
-    this.weekly = true;
-    this.preWeekly = {
+  /**
+   * Weekend GP: one long circuit for the whole weekend, and the lap lines of
+   * the fastest players who have already run it. The ghosts are fetched while
+   * the player is still in the garage, so they are on the grid by lights out.
+   */
+  private startWeekend(): void {
+    if (this.weekend) return;
+    this.weekend = true;
+    this.preWeekend = {
       seed: this.seedCounter, map: this.mapIndex, mode: this.modeIndex, laps: this.laps,
       len: this.trackLength
     };
-    this.seedCounter = weeklySeed();
-    // everyone races the same circuit: a ?len= link must not shorten the cup
-    this.trackLength = TRACK_LENGTH_DEFAULT;
-    this.mapIndex = weeklyMapIndex(MAPS.length);
-    this.modeIndex = CUP_MODES[weeklyModeIndex(CUP_MODES.length)];
-    this.laps = MODES[this.modeIndex].lapsLocked ?? 2;
+    this.seedCounter = weekendSeed();
+    // everyone races the same circuit: a ?len= link must not shorten it
+    this.modeIndex = MODES.findIndex((m) => m.id === 'weekend');
+    this.trackLength = MODES[this.modeIndex].trackLength ?? TRACK_LENGTH_DEFAULT;
+    this.mapIndex = weekendMapIndex(MAPS.length);
+    this.laps = WEEKEND_LAPS;
+    void this.loadWeekendGhosts();
     this.disposeRace();
     this.buildRace();
     this.ui.setMap(this.mapIndex);
     this.ui.setMode(this.modeIndex);
   }
 
-  /** Restore whatever the player had picked before the Weekly Cup detour. */
-  private exitWeekly(): void {
-    if (!this.weekly) return;
-    this.weekly = false;
-    this.seedCounter = this.preWeekly.seed;
-    this.mapIndex = this.preWeekly.map;
-    this.modeIndex = this.preWeekly.mode;
-    this.laps = this.preWeekly.laps;
-    this.trackLength = this.preWeekly.len;
+  /** This weekend's fastest runs, minus this player's own. Never throws. */
+  private async loadWeekendGhosts(): Promise<void> {
+    if (!remoteEnabled()) return;
+    const me = playerId(this.ui.walletAddress);
+    const rows = await topWeekend(weekendKey(), WEEKEND_GHOSTS + 3).catch(() => []);
+    this.weekendGhosts = rows
+      .filter((r) => r.player_id !== me)
+      .map((r) => ({ data: decodeGhost(r.ghost), tag: r.tag }))
+      .filter((g): g is { data: GhostData; tag: string } => !!g.data)
+      .slice(0, WEEKEND_GHOSTS);
+  }
+
+  /** Restore whatever the player had picked before the Weekend GP detour. */
+  private exitWeekend(): void {
+    if (!this.weekend) return;
+    this.weekend = false;
+    this.weekendGhosts = [];
+    this.seedCounter = this.preWeekend.seed;
+    this.mapIndex = this.preWeekend.map;
+    this.modeIndex = this.preWeekend.mode;
+    this.laps = this.preWeekend.laps;
+    this.trackLength = this.preWeekend.len;
     this.ui.setMap(this.mapIndex);
     this.ui.setMode(this.modeIndex);
     if (this.state === 'menu') {
@@ -708,6 +734,7 @@ export class Game {
       this.scene.remove(this.ghostObj);
       this.ghostObj = null;
     }
+    this.clearRivalGhosts();
   }
 
   private resetGrid(): void {
@@ -790,15 +817,24 @@ export class Game {
       this.scene.remove(this.ghostObj);
       this.ghostObj = null;
     }
-    if (this.ghostData) {
-      this.ghostObj = ghostMesh(this.assets.cloneCar(CARS[this.ghostData.car] ?? CARS[0]));
-      this.scene.add(this.ghostObj);
-      const p0 = ghostPos(this.ghostData, 0);
+    const placeGhost = (data: GhostData, tint?: number): THREE.Group => {
+      const obj = ghostMesh(this.assets.cloneCar(CARS[data.car] ?? CARS[0]), tint);
+      this.scene.add(obj);
+      const p0 = ghostPos(data, 0);
       if (p0) {
-        this.track.place(this.ghostObj, p0.s, p0.x); // on its grid slot for the countdown
-        this.ghostObj.rotation.y += Math.PI;
+        this.track.place(obj, p0.s, p0.x); // on its grid slot for the countdown
+        obj.rotation.y += Math.PI;
       }
+      return obj;
+    };
+    if (this.ghostData) {
+      this.ghostObj = placeGhost(this.ghostData);
       this.ui.popText(`GHOST: ${this.ghostData.time.toFixed(1)}s — BEAT IT`, '#9adfff');
+    }
+    // the Weekend GP puts the weekend's fastest players on track with you
+    if (this.weekend && this.weekendGhosts.length > 0) {
+      this.rivalGhosts = this.weekendGhosts.map((g) => ({ data: g.data, obj: placeGhost(g.data, 0xffc531) }));
+      this.ui.popText(`RACING: ${this.weekendGhosts.map((g) => g.tag).join(', ')}`, '#ffc531');
     }
 
     this.ui.showRace();
@@ -997,12 +1033,12 @@ export class Game {
       }
     }
 
-    // Weekly Cup prize (non-staked — coins, paid once per week for top-3)
-    if (this.weekly && !this.busted) {
+    // Weekend GP prize (non-staked — coins, paid once a week for top-3)
+    if (this.weekend && !this.busted) {
       const prize = claimWeeklyPrize(this.playerPlace);
       if (prize > 0) {
         setTimeout(() => {
-          this.ui.popText(`🏆 WEEKLY CUP PRIZE +${prize} COINS!`, '#fcff52');
+          this.ui.popText(`🏆 WEEKEND GP PRIZE +${prize} COINS!`, '#fcff52');
         }, 2200);
       }
     }
@@ -1019,15 +1055,24 @@ export class Game {
     // it stays opt-in behind the results screen's mint button — never automatic.
 
     if (!this.busted && this.ghostRec) {
-      const beat = saveGhost(
-        this.currentGhostKey(),
-        this.ghostRec.data(this.carIndex, this.playerTime, this.score())
-      );
+      const run = this.ghostRec.data(this.carIndex, this.playerTime, this.score());
+      const beat = saveGhost(this.currentGhostKey(), run);
       if (beat && this.ghostData) this.ui.popText('GHOST BEATEN!', '#9adfff');
+      // the weekend board carries the lap line, so the next player races it.
+      // Practice runs midweek stay local: only the open weekend counts.
+      if (this.weekend && weekendOpen()) {
+        void submitWeekend(weekendKey(), {
+          tag: driverName(), score: this.score(), time: this.playerTime,
+          place: this.playerPlace, laps: this.raceLaps, car: CARS[this.carIndex].name,
+          ghost: encodeGhost(run)
+        }, this.ui.walletAddress).then((rank) => {
+          if (rank > 0) this.ui.popText(`🌍 #${rank} IN THE WEEKEND GP`, '#ffc531');
+        });
+      }
     }
     // the shared circuits (daily, cup, bounty) stay put for "race again"; normal
     // play moves to a fresh one
-    if (!this.daily && !this.weekly && !this.bounty) this.seedCounter++;
+    if (!this.daily && !this.weekend && !this.bounty) this.seedCounter++;
   }
 
   /**
@@ -1320,7 +1365,7 @@ export class Game {
           this.ui.showResults(
             this.playerPlace, this.playerTime, this.coins,
             this.score(), this.raceLaps, CARS[this.carIndex].name, this.busted,
-            this.style.score, this.daily, this.weekly, this.takedowns,
+            this.style.score, this.daily, this.weekend, this.takedowns,
             this.bounty, this.standings
           );
           // rebuild behind the results overlay so the menu previews the next circuit
@@ -1516,18 +1561,30 @@ export class Game {
     });
   }
 
-  /** Record this run; replay the circuit's best as a see-through pace car. */
+  /** Record this run; replay your best, and this weekend's rivals, as ghosts. */
   private updateGhost(dt: number): void {
     this.ghostRec?.sample(dt, this.player.s, this.player.x);
-    if (!this.ghostObj || !this.ghostData) return;
-    const pos = ghostPos(this.ghostData, this.raceTime);
-    if (!pos) {
-      this.ghostObj.visible = false; // its race is over
-      return;
+    const replay = (data: GhostData, obj: THREE.Group): void => {
+      const pos = ghostPos(data, this.raceTime);
+      if (!pos) {
+        obj.visible = false; // its race is over
+        return;
+      }
+      obj.visible = true;
+      this.track.place(obj, pos.s, pos.x);
+      obj.rotation.y += Math.PI; // cars face +z; flip down-track
+    };
+    if (this.ghostObj && this.ghostData) replay(this.ghostData, this.ghostObj);
+    for (const g of this.rivalGhosts) replay(g.data, g.obj);
+  }
+
+  /** Ghost meshes clone their materials, so they are disposed with the race. */
+  private clearRivalGhosts(): void {
+    for (const g of this.rivalGhosts) {
+      this.scene.remove(g.obj);
+      disposeCarInstance(g.obj);
     }
-    this.ghostObj.visible = true;
-    this.track.place(this.ghostObj, pos.s, pos.x);
-    this.ghostObj.rotation.y += Math.PI; // cars face +z; flip down-track
+    this.rivalGhosts = [];
   }
 
   private simulateContacts(dt: number, elapsed: number): void {
