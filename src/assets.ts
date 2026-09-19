@@ -2,12 +2,23 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { CarSpec } from './cars';
 import { buildCar, CAR_COLORS, carGroundFx, polishCar } from './meshes';
-import { finishVehicle, toonify } from './toon';
+import { finishVehicle, repaintVehicle, toonify } from './toon';
 import { buildStockCar } from './stockCar';
 import { buildWorkshopCar } from './workshopCar';
 
 /** Release instance-owned resources, never the cached GLB or shared contact texture. */
 export function disposeCarInstance(root: THREE.Group): void {
+  // a repainted clone owns the paint materials made for it; the model's own
+  // geometry and materials stay put for the next clone
+  if (root.userData.ownMaterials) {
+    root.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+        if (m?.userData.instanceOwned) m.dispose();
+      }
+    });
+  }
   const ownedRoot = root.userData.procedural ? root : root.getObjectByName('car-ground-fx');
   if (!ownedRoot) return;
   const geometry = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>();
@@ -170,6 +181,9 @@ export class AssetLibrary {
           : this.trafficCars[model] ?? null;
     if (!src) return buildCar(0, spec.color);
     const g = src.clone(true);
+    // clones share the loaded model's materials, so the garage colour — and
+    // any skin bought for this car — has to be painted on per instance
+    g.userData.ownMaterials = repaintVehicle(g, spec.color, g.userData.loadPaint as number | undefined);
     g.add(carGroundFx(spec.color));
     polishCar(g);
     return g;
@@ -223,6 +237,7 @@ export class AssetLibrary {
     const center = box.getCenter(new THREE.Vector3());
     g.position.set(-center.x, -box.min.y, -center.z);
     const wrapper = new THREE.Group();
+    wrapper.userData.loadPaint = paint; // what a skin repaints away from
     wrapper.add(g);
     return wrapper;
   }

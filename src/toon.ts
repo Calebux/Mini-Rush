@@ -59,11 +59,15 @@ export function finishVehicle(root: THREE.Object3D, paint?: number): void {
       // brakes, badges and textured liveries instead of painting the whole car.
       if (!src.map && paint !== undefined && /paint.*(metallic|cool grey)|^body|^shell/i.test(name)) {
         out.color.setHex(paint);
+        out.userData.isPaint = true; // a skin repaints exactly these
       } else if (neutral) {
         const hit = NAME_COLORS.find(([re]) => re.test(name));
         if (hit) out.color.setHex(hit[1]);
         else if (/black|soft|cloth/i.test(name)) out.color.setHex(0x30343d);
-        else if (paint !== undefined && PAINT_RE.test(name)) out.color.setHex(paint);
+        else if (paint !== undefined && PAINT_RE.test(name)) {
+          out.color.setHex(paint);
+          out.userData.isPaint = true;
+        }
       }
       out.roughness = src.map ? 0.72 : /glass/i.test(name) ? 0.18 :
         /tire|tyre|rubber|cloth|carbon|interior/i.test(name) ? 0.85 : 0.32;
@@ -121,6 +125,7 @@ export function toonify(root: THREE.Object3D, paint?: number): void {
           out.emissiveIntensity = 0.8;
         } else if (paint !== undefined && PAINT_RE.test(name)) {
           out.color.setHex(paint);
+          out.userData.isPaint = true; // a skin repaints exactly these
         } else {
           const hit = NAME_COLORS.find(([re]) => re.test(name));
           if (hit) out.color.setHex(hit[1]);
@@ -132,4 +137,36 @@ export function toonify(root: THREE.Object3D, paint?: number): void {
       ? mesh.material.map(convert)
       : convert(mesh.material);
   });
+}
+
+/**
+ * Give one cloned car its own paint. Models are loaded once and their
+ * materials shared by every clone, so a skin (or a rival's garage colour) can
+ * only change the body by cloning the materials the load marked as paint.
+ * Returns true when something was repainted, which is also the signal that the
+ * instance now owns materials to dispose with it.
+ */
+export function repaintVehicle(root: THREE.Object3D, color: number, loadPaint?: number): boolean {
+  const swaps = new Map<THREE.Material, THREE.Material>();
+  const reskin = (m: THREE.Material): THREE.Material => {
+    // the load marks what it painted; a model that arrived already wearing that
+    // colour — baked rims, a second body material — is matched by colour
+    const wearsLoadPaint = loadPaint !== undefined
+      && (m as THREE.MeshStandardMaterial).color?.getHex() === loadPaint;
+    if (!m.userData.isPaint && !wearsLoadPaint) return m;
+    let out = swaps.get(m);
+    if (!out) {
+      out = m.clone();
+      out.userData = { ...m.userData, instanceOwned: true };
+      (out as THREE.MeshStandardMaterial).color.setHex(color);
+      swaps.set(m, out);
+    }
+    return out;
+  };
+  root.traverse((obj) => {
+    const mesh = obj as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    mesh.material = Array.isArray(mesh.material) ? mesh.material.map(reskin) : reskin(mesh.material);
+  });
+  return swaps.size > 0;
 }

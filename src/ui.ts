@@ -17,7 +17,7 @@ import {
 } from './remoteBoard';
 import { shareUrl } from './referral';
 import { RunCard, shareRun } from './share';
-import { activeSkinIndex, buySkin, CAR_SKINS, equipSkin, skinOwned } from './skins';
+import { activeColor, activeSkinIndex, buySkin, CAR_SKINS, equipSkin, skinOwned } from './skins';
 import { favoriteMode, getStats, winRate } from './stats';
 import { currentStreak, weekProgress } from './streak';
 import {
@@ -1108,7 +1108,7 @@ export class UI {
     for (const index of tabOrder()) {
       const car = CARS[index];
       const button = document.createElement('button');
-      const hex = `#${car.color.toString(16).padStart(6, '0')}`;
+      const hex = `#${activeColor(car.id, car.color).toString(16).padStart(6, '0')}`;
       button.type = 'button';
       button.className = `car-roster-item ${car.class}`;
       button.style.setProperty('--car-color', hex);
@@ -1130,7 +1130,8 @@ export class UI {
     $('car-name-t').textContent = c.name;
     $('menu-car').textContent = c.name;
     $('car-blurb').textContent = c.blurb;
-    const hex = `#${c.color.toString(16).padStart(6, '0')}`;
+    // the chip wears the skin the car is actually painted in
+    const hex = `#${activeColor(c.id, c.color).toString(16).padStart(6, '0')}`;
     const chip = $('car-chip');
     chip.style.background = hex;
     chip.style.color = hex; // drives the currentColor glow
@@ -1194,6 +1195,8 @@ export class UI {
     this.carButtons.forEach((button, index) => {
       const car = CARS[index];
       const carOwned = car.nim === 0 || ownedCars.has(car.id);
+      // the roster dot follows a skin bought since the shelf was built
+      button.style.setProperty('--car-color', `#${activeColor(car.id, car.color).toString(16).padStart(6, '0')}`);
       button.hidden = car.class !== this.carTab;
       button.classList.toggle('selected', index === this.carIndex);
       button.classList.toggle('locked', !carOwned);
