@@ -20,7 +20,7 @@ import { StyleMeter } from './style';
 import { MAPS } from './maps';
 import { carFits, carInField, MODES } from './modes';
 import { mapUnlocked, stamp } from './passport';
-import { postWeekendRun, topWeekendRuns, weekendBoardEnabled, weekendPlayerId } from './weekendBoard';
+import { boardPlayerId, boardsEnabled, postWeekendRun, topWeekendRuns } from './convexBoard';
 import { captureReferrer, creditReferral } from './referral';
 import { activeColor } from './skins';
 import { applyUpgrades } from './upgrades';
@@ -492,8 +492,8 @@ export class Game {
 
   /** This weekend's fastest runs, minus this device's own. Never throws. */
   private async loadWeekendGhosts(): Promise<void> {
-    if (!weekendBoardEnabled()) return;
-    const me = weekendPlayerId();
+    if (!boardsEnabled()) return;
+    const me = boardPlayerId();
     const rows = await topWeekendRuns(weekendKey(), WEEKEND_GHOSTS + 3);
     this.weekendGhosts = rows
       .filter((r) => r.pid !== me)

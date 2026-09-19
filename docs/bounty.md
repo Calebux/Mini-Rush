@@ -37,7 +37,7 @@ builds (RUSH ONE) are out too, so every entrant drives the same car.
    shared by the fastest few when the week sets a `split` — one prize per person.
 
 The board runs every week. Without a posted prize it still ranks wins — on the
-player's phone, and worldwide when the Supabase board is configured — and the
+player's phone, and worldwide when Convex is configured — and the
 entry button stays hidden.
 
 The app **cannot pay anyone**: every transaction the Mini App SDK makes is signed
@@ -122,6 +122,6 @@ production builds).
 - Times are computed on the player's phone. Receipts plus a manual check are
   proportionate for a small prize; they are not cheat-proof.
 - The live board on the bounty page is a view, not the ranking: anyone can
-  write the Supabase table. The list you pay from comes from the script.
+  post to that Convex table. The list you pay from comes from the script.
 - One person can hold several wallets. The rules say one prize per person;
   enforcement is the organizer's judgement call.

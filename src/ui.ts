@@ -16,8 +16,8 @@ import { MAPS } from './maps';
 import { carFits, MODES, ModeSpec } from './modes';
 import { mapUnlocked, stamps } from './passport';
 import {
-  playerId, remoteEnabled, submitBounty, submitDaily, topBounty, topDaily
-} from './remoteBoard';
+  boardPlayerId, boardsEnabled, postBounty, postDaily, topBounty, topDaily
+} from './convexBoard';
 import { shareUrl } from './referral';
 import { RunCard, shareRun } from './share';
 import { activeColor, activeSkinIndex, buySkin, CAR_SKINS, equipSkin, skinOwned } from './skins';
@@ -884,11 +884,11 @@ export class UI {
     const list = $('bounty-list');
     list.replaceChildren();
     const week = weekKey();
-    if (remoteEnabled()) {
+    if (boardsEnabled()) {
       const title = textEl('div', 'board-head', '🌍 FASTEST WINS · WORLDWIDE');
       const slot = textEl('div', 'board-empty', 'Loading…');
       list.append(title, slot);
-      const me = playerId(this.wallet.address);
+      const me = boardPlayerId();
       void topBounty(week).then((rows) => {
         if (!slot.isConnected) return; // board was rebuilt meanwhile
         if (rows.length === 0) {
@@ -897,7 +897,7 @@ export class UI {
         }
         slot.remove();
         title.after(...rows.map((e, i) =>
-          this.boardRow(i + 1, e.tag, e.car, raceClock(e.time_s), e.player_id === me)));
+          this.boardRow(i + 1, e.tag, e.car, raceClock(e.timeS), e.pid === me)));
       });
     }
     list.appendChild(textEl('div', 'board-head', '📱 YOUR WINS · THIS PHONE'));
@@ -1397,11 +1397,11 @@ export class UI {
     const allTime = this.board.entries();
 
     // global daily first — it's the board that matters
-    if (remoteEnabled()) {
+    if (boardsEnabled()) {
       const head = textEl('div', 'board-head', '🌍 GLOBAL DAILY');
       const slot = textEl('div', 'board-empty', 'Loading…');
       list.append(head, slot);
-      const me = playerId(this.wallet.address);
+      const me = boardPlayerId();
       void topDaily(dayKey()).then((rows) => {
         if (!slot.isConnected) return; // panel was rebuilt meanwhile
         if (rows.length === 0) {
@@ -1410,14 +1410,14 @@ export class UI {
         }
         slot.remove();
         head.after(...rows.map((e, i) => this.boardRow(
-          i + 1, e.tag, runMeta(e.place, e.time_s, e.laps, e.car), String(e.score), e.player_id === me)));
+          i + 1, e.tag, runMeta(e.place, e.timeS, e.laps, e.car), String(e.score), e.pid === me)));
       });
     }
 
     if (daily.length > 0) section("⚡ TODAY'S DAILY (THIS PHONE)", daily.slice(0, 5));
     if (weekly.length > 0) section("🏆 THIS WEEK'S CUP (THIS PHONE)", weekly.slice(0, 5));
     if (allTime.length > 0) section('ALL TIME', allTime);
-    if (daily.length === 0 && weekly.length === 0 && allTime.length === 0 && !remoteEnabled()) {
+    if (daily.length === 0 && weekly.length === 0 && allTime.length === 0 && !boardsEnabled()) {
       const empty = document.createElement('div');
       empty.className = 'board-empty';
       empty.textContent = 'No runs yet — go set a score!';
@@ -1877,14 +1877,14 @@ export class UI {
           : `PERSONAL BEST · #${rank} ON YOUR BOARD`
         : '';
     // …and race the world when the global board is configured
-    const remoteRun = { tag: driverName(), score, time, place, laps, car };
+    const remoteRun = { tag: driverName(), score, timeS: time, place, laps, car };
     if (daily && !busted) {
-      void submitDaily(dayKey(), remoteRun, this.wallet.address).then((globalRank) => {
+      void postDaily(dayKey(), remoteRun).then((globalRank) => {
         if (globalRank > 0) $('r-rank').textContent = `🌍 #${globalRank} WORLDWIDE TODAY`;
       });
     }
     if (bounty && won) {
-      void submitBounty(weekKey(), remoteRun, this.wallet.address).then((globalRank) => {
+      void postBounty(weekKey(), remoteRun).then((globalRank) => {
         if (globalRank > 0) $('r-rank').textContent = `🌍 #${globalRank} FASTEST WIN WORLDWIDE`;
       });
     }

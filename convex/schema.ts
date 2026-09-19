@@ -34,6 +34,24 @@ export default defineSchema({
     .index('by_lastSeen', ['lastSeen'])
     .index('by_name', ['name']),
 
+  // The worldwide boards: one row per device per board, best kept. `board` is
+  // "daily-2026-09-19" or "bounty-2026-W38"; the daily ranks on score, the
+  // bounty on time. Written by the game (convex/boards.ts).
+  boardRuns: defineTable({
+    board: v.string(),
+    pid: v.string(),                       // the same device id as `players`
+    tag: v.string(),
+    score: v.number(),
+    timeS: v.number(),
+    place: v.number(),
+    laps: v.number(),
+    car: v.string(),
+    at: v.number()
+  })
+    .index('by_board_score', ['board', 'score'])
+    .index('by_board_time', ['board', 'timeS'])
+    .index('by_board_pid', ['board', 'pid']),
+
   // Weekend GP: one run per device per ISO week, with the packed lap line other
   // players race as a ghost. Written by the game (convex/weekend.ts).
   weekendRuns: defineTable({
