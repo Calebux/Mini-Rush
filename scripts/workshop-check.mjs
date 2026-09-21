@@ -13,7 +13,10 @@ const openWorkshop = async () => {
   await page.click('#btn-workshop-garage');
 };
 try {
-  await page.addInitScript(() => { localStorage.setItem('minirush.controls-guide', '1'); });
+  await page.addInitScript(() => {
+    localStorage.setItem('minirush.controls-guide', '1');
+    localStorage.setItem('minirush.welcomed', '1'); // not a first-open run
+  });
   await page.goto(`${base}/?q=1&len=600&laps=1`, { waitUntil: 'networkidle' });
   await page.waitForFunction(() => window.__game?.state === 'menu');
   await page.waitForTimeout(800);

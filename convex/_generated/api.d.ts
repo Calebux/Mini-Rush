@@ -8,8 +8,10 @@
  * @module
  */
 
+import type * as boards from "../boards.js";
 import type * as bounty from "../bounty.js";
 import type * as usage from "../usage.js";
+import type * as weekend from "../weekend.js";
 
 import type {
   ApiFromModules,
@@ -18,8 +20,10 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  boards: typeof boards;
   bounty: typeof bounty;
   usage: typeof usage;
+  weekend: typeof weekend;
 }>;
 
 /**

@@ -273,6 +273,18 @@
       .pstat .v { font-size: 15px; }
     }
 
+    /* ---------- first open ---------- */
+    #welcome-card {
+      width: min(86vw, 360px); display: flex; flex-direction: column; gap: 12px;
+      padding: 20px 20px 18px; border-radius: 22px; text-align: center;
+      background: rgba(6,8,20,.62); backdrop-filter: blur(10px);
+      border: 1px solid rgba(252,255,82,.3);
+    }
+    #welcome-card strong { font-size: 17px; font-weight: 900; letter-spacing: .3px; }
+    #welcome-card p { font-size: 12.5px; line-height: 1.5; opacity: .78; }
+    #welcome-card .btn { margin: 0; width: 100%; }
+    #welcome-card .btn.ghost { font-size: 12px; padding: 9px; }
+
     /* ---------- mode cards — the marquee of the menu ---------- */
     .mode-nav {
       display: flex; align-items: center; gap: 6px;
@@ -1410,6 +1422,18 @@
     </div>
   </div>
 
+  <!-- First open only: one line about the game and one button into a race.
+       The full menu is a lot to meet cold; it is one tap away. -->
+  <div class="overlay hidden" id="welcome">
+    <div class="logo" style="font-size:44px">Mini<em>Rush</em></div>
+    <div id="welcome-card">
+      <strong>Arcade racing in 19 cities.</strong>
+      <p>Two laps, seven rivals, one tap to go. Win the weekly bounty race and the prize is paid in real NIM.</p>
+      <button class="btn" id="btn-welcome-race" type="button">RACE&nbsp;NOW&nbsp;▸</button>
+      <button class="btn ghost" id="btn-welcome-menu" type="button">Look around first</button>
+    </div>
+  </div>
+
   <div class="overlay" id="menu">
     <div class="menu-top">
       <div class="brand-block">
@@ -1569,10 +1593,12 @@
     <div class="result-actions">
       <button class="btn ghost" id="btn-retry-same" type="button" aria-label="Retry the same track">SAME TRACK</button>
       <button class="btn ghost" id="btn-share" type="button" aria-label="Share this run">SHARE</button>
+      <button class="btn ghost" id="btn-challenge" type="button" aria-label="Challenge a friend to beat this time">CHALLENGE</button>
       <button class="btn ghost" id="btn-menu" type="button">MENU</button>
     </div>
     <button class="btn ghost hidden" id="btn-mint" type="button" aria-label="Write this run on-chain">MINT RECEIPT</button>
     <div class="hint" id="mint-status"></div>
+    <div class="hint" id="challenge-status"></div>
     <button class="bounty-link hidden" id="btn-bounty-results" type="button">How the bounty works</button>
   </div>
 

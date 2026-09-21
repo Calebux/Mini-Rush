@@ -34,7 +34,10 @@ export interface WeekendRun {
 
 export const boardsEnabled = (): boolean => !!CONVEX_URL;
 
-async function call(kind: 'query' | 'mutation', path: string, args: unknown): Promise<unknown> {
+/** One Convex call, JSON in and out. Resolves to null on any failure. */
+export async function convexCall(
+  kind: 'query' | 'mutation', path: string, args: unknown
+): Promise<unknown> {
   if (!CONVEX_URL) return null;
   const abort = new AbortController();
   const timer = window.setTimeout(() => abort.abort(), TIMEOUT_MS);
@@ -57,7 +60,7 @@ async function call(kind: 'query' | 'mutation', path: string, args: unknown): Pr
 
 /** This weekend's fastest runs, best first. [] on any failure. */
 export async function topWeekendRuns(week: string, limit = 5): Promise<WeekendRun[]> {
-  const value = await call('query', 'weekend:top', { week, limit });
+  const value = await convexCall('query', 'weekend:top', { week, limit });
   if (!Array.isArray(value)) return [];
   return value.filter((r): r is WeekendRun =>
     !!r && typeof r === 'object'
@@ -72,7 +75,7 @@ export async function postWeekendRun(
 ): Promise<number> {
   const pid = deviceId();
   if (!pid || !run.ghost) return 0;
-  const rank = await call('mutation', 'weekend:post', { week, pid, ...run });
+  const rank = await convexCall('mutation', 'weekend:post', { week, pid, ...run });
   return typeof rank === 'number' && rank > 0 ? rank : 0;
 }
 
@@ -89,18 +92,18 @@ const boardRows = (value: unknown): BoardRun[] => Array.isArray(value)
 
 /** Today's best runs worldwide, highest score first. */
 export const topDaily = async (day: string, limit = 10): Promise<BoardRun[]> =>
-  boardRows(await call('query', 'boards:topDaily', { day, limit }));
+  boardRows(await convexCall('query', 'boards:topDaily', { day, limit }));
 
 /** This week's fastest bounty wins worldwide. */
 export const topBounty = async (week: string, limit = 10): Promise<BoardRun[]> =>
-  boardRows(await call('query', 'boards:topBounty', { week, limit }));
+  boardRows(await convexCall('query', 'boards:topBounty', { week, limit }));
 
 type Posted = { tag: string; score: number; timeS: number; place: number; laps: number; car: string };
 
 async function postRun(path: string, key: Record<string, string>, run: Posted): Promise<number> {
   const pid = deviceId();
   if (!pid) return 0;
-  const rank = await call('mutation', path, { ...key, pid, ...run });
+  const rank = await convexCall('mutation', path, { ...key, pid, ...run });
   return typeof rank === 'number' && rank > 0 ? rank : 0;
 }
 

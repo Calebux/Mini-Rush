@@ -34,6 +34,23 @@ export default defineSchema({
     .index('by_lastSeen', ['lastSeen'])
     .index('by_name', ['name']),
 
+  // "Beat my time" links: one row per shared run, looked up by its code and
+  // dropped after a month. Written by the game (convex/challenges.ts).
+  challenges: defineTable({
+    code: v.string(),                      // 8 chars, the ?c= in the link
+    tag: v.string(),                       // who set it
+    mapId: v.string(),
+    modeId: v.string(),
+    seed: v.number(),
+    laps: v.number(),
+    len: v.number(),                       // lap length in metres
+    timeS: v.number(),
+    score: v.number(),
+    car: v.string(),
+    ghost: v.string(),                     // packed lap line (src/ghostShare.ts)
+    at: v.number()
+  }).index('by_code', ['code']),
+
   // The worldwide boards: one row per device per board, best kept. `board` is
   // "daily-2026-09-19" or "bounty-2026-W38"; the daily ranks on score, the
   // bounty on time. Written by the game (convex/boards.ts).

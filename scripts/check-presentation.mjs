@@ -10,7 +10,10 @@ const page = await browser.newPage({ viewport: { width: 390, height: 844 }, hasT
 const errors = [];
 page.on('pageerror', e => errors.push(e.message));
 try {
-  await page.addInitScript(() => localStorage.setItem('minirush.controls-guide', '1'));
+  await page.addInitScript(() => {
+    localStorage.setItem('minirush.controls-guide', '1');
+    localStorage.setItem('minirush.welcomed', '1'); // not a first-open run
+  });
   await page.goto(`${base}/?map=lagos&seed=7&len=600&laps=1&q=1`, { waitUntil: 'networkidle' });
   await page.waitForFunction(() => window.__game?.state === 'menu');
   await page.click('#btn-garage-menu');

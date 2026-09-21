@@ -48,6 +48,7 @@ const hudWidth = (el: HTMLElement, percent: number): void => {
 };
 
 const BEST_KEY = 'minirush.best';
+const WELCOME_KEY = 'minirush.welcomed';
 const PLACE_SUFFIX = ['st', 'nd', 'rd', 'th'];
 const suffix = (place: number) => PLACE_SUFFIX[Math.min(place, 4) - 1];
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -166,6 +167,7 @@ export class UI {
   onDailyExit: () => void = () => {};  // backed out of / done with the daily
   onWeekend: () => void = () => {};     // Weekend GP picked from the menu
   onWeekendExit: () => void = () => {}; // backed out of / done with the Weekend GP
+  onChallenge: () => void = () => {};  // "challenge a friend" on the results screen
   onBounty: () => void = () => {};     // bounty race picked from the bounty board
   onBountyExit: () => void = () => {}; // backed out of / done with the bounty race
 
@@ -255,6 +257,11 @@ export class UI {
     });
     on('btn-share', () => {
       if (this.lastRun) void shareRun(this.lastRun, shareUrl(this.wallet.address));
+    });
+    on('btn-challenge', () => {
+      this.audio.play('click');
+      $<HTMLButtonElement>('btn-challenge').disabled = true;
+      this.onChallenge();
     });
     on('btn-mint', () => void this.mintReceipt());
     on('btn-bounty', () => this.openBounty(this.menu));
@@ -354,6 +361,19 @@ export class UI {
       this.setMode(i);
       this.onMode(i);
     };
+    // first open: straight into a race, with the menu one tap away
+    on('btn-welcome-race', () => {
+      this.audio.unlock();
+      this.dismissWelcome();
+      this.onPage('menu');
+      this.onPlay();
+    });
+    on('btn-welcome-menu', () => {
+      this.audio.unlock();
+      this.audio.play('back');
+      this.dismissWelcome();
+    });
+
     on('btn-play', () => {
       this.audio.unlock();
       this.exitDaily();
@@ -677,6 +697,7 @@ export class UI {
     // a bounty posted in Convex lights the card up once it answers
     void loadBounty().then(() => this.refreshBounty());
     this.refreshModeLocks();
+    this.maybeWelcome();
   }
 
   /**
@@ -1001,6 +1022,15 @@ export class UI {
   setLaps(n: number): void {
     this.pickedLaps = n;
     this.selectLapChip(n, false);
+  }
+
+  /**
+   * A challenge is raced over the distance it was set on, so the lap chips
+   * show that count and stop taking taps until the player leaves it.
+   */
+  lockLaps(n: number): void {
+    this.selectLapChip(n, false);
+    $('lap-select').classList.add('locked');
   }
 
   /** Reflect an externally-set car (saved pick / ?car= query param). */
@@ -1665,6 +1695,62 @@ export class UI {
     $('pause').classList.remove('hidden');
   }
 
+  /**
+   * The welcome card, shown once: a player who has never finished a race meets
+   * one line and one button instead of the whole menu. Dismissing it either way
+   * is remembered, so it never interrupts twice.
+   */
+  private maybeWelcome(): void {
+    try {
+      if (localStorage.getItem(WELCOME_KEY) || getStats().totalRaces > 0) return;
+    } catch {
+      return; // no storage: never risk showing it on every open
+    }
+    this.menu.classList.add('hidden');
+    $('welcome').classList.remove('hidden');
+  }
+
+  private dismissWelcome(): void {
+    try { localStorage.setItem(WELCOME_KEY, '1'); } catch { /* it just shows once more */ }
+    $('welcome').classList.add('hidden');
+    this.menu.classList.remove('hidden');
+  }
+
+  /** A line under the results while a challenge link is being made. */
+  challengeStatus(text: string): void {
+    $('challenge-status').textContent = text;
+  }
+
+  /** Say why there is no link, and let them try again. */
+  challengeFailed(text: string): void {
+    this.challengeStatus(text);
+    $<HTMLButtonElement>('btn-challenge').disabled = false;
+  }
+
+  /**
+   * Hand the player their challenge link. The clipboard first and the link on
+   * screen either way, because a share sheet that never returns — which is
+   * exactly what some in-app browsers do — must not leave the link stuck
+   * behind "making your link…". The sheet is offered after, as a convenience.
+   */
+  async shareChallengeLink(link: string, time: number): Promise<void> {
+    let copied = false;
+    try {
+      await navigator.clipboard.writeText(link);
+      copied = true;
+    } catch { /* no clipboard, or no permission: the link goes on screen */ }
+    this.challengeStatus(copied ? 'Link copied — send it to a friend.' : link);
+    $<HTMLButtonElement>('btn-challenge').disabled = false;
+    if (!navigator.share) return;
+    try {
+      await navigator.share({
+        title: 'MiniRush challenge',
+        text: `I set ${time.toFixed(1)}s in MiniRush. Beat it 🏁`,
+        url: link
+      });
+    } catch { /* dismissed, or unsupported: they already have the link */ }
+  }
+
   /** Keyboard players get the controls flashed for the first 5s of each race. */
   private showKeyHints(): void {
     if (!hasKeyboard()) return;
@@ -1945,6 +2031,10 @@ export class UI {
       : !receiptsReady ? 'Bounty entries are not open yet.'
       : `Enters your win: 1 Luna (0.00001 NIM) to ${anchor}, publishing your time and wallet address on Nimiq. Your fastest win counts.`;
     $('btn-bounty-results').classList.toggle('hidden', !bounty);
+    // a fresh run is a fresh challenge; busted runs have no time to beat
+    $('btn-challenge').classList.toggle('hidden', busted);
+    $<HTMLButtonElement>('btn-challenge').disabled = false;
+    this.challengeStatus('');
 
     this.hud.classList.remove('visible');
     this.speedlines.classList.remove('on');

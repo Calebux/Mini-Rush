@@ -15,6 +15,7 @@ try {
     localStorage.setItem('minirush.workshop.v1', JSON.stringify({ owned: ['bogus'], active: -3, builds: [{ name: 'test', parts: { body: 'gt', paint: 'lagoon' } }] }));
     check(w.equippedBuild().parts.body === 'street' && w.equippedBuild().parts.paint === 'sun', 'wrong slot and unowned parts rejected');
     localStorage.setItem('minirush.bank', '500');
+    localStorage.setItem('minirush.welcomed', '1'); // not a first-open run
     check(!!w.purchasePart('unknown'), 'invalid purchase rejected');
     check(localStorage.getItem('minirush.bank') === '500', 'invalid purchase no charge');
     check(!!w.saveBuild(7, w.freshBuild()), 'bad preset rejected');

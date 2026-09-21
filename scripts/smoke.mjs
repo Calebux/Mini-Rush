@@ -13,6 +13,7 @@ page.on('pageerror', (e) => errors.push(String(e)));
 await page.addInitScript(() => {
   localStorage.setItem('minirush.owned', JSON.stringify(['sunburst', 'gecko']));
   localStorage.setItem('minirush.controls-guide', '1');
+  localStorage.setItem('minirush.welcomed', '1'); // the first-open card is covered by its own check
 });
 // short seeded 1-lap circuit so the race finishes fast, on the phone render tier
 await page.goto(`${base}/?len=600&seed=7&laps=1&q=1`, { waitUntil: 'networkidle' });

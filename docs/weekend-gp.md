@@ -49,6 +49,11 @@ the on-chain bounty entries. The mutation still refuses what it can check —
 the week format, the device id shape, a time under two minutes or over an hour,
 a ghost over 24 kB or one that isn't a packed lap line.
 
+## Related
+
+Shared lap lines also power [challenge links](challenges.md) — the same packing,
+the same ghost on track, but sent to one person instead of posted to a board.
+
 ## Limits worth being honest about
 
 - A ghost is a replay, not a live opponent: it cannot react to you, and you

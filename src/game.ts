@@ -49,6 +49,7 @@ import {
   WEEKEND_GHOSTS, WEEKEND_LAPS, weekendKey, weekendMapIndex, weekendOpen, weekendSeed
 } from './weekend';
 import { decodeGhost, encodeGhost } from './ghostShare';
+import { Challenge, challengeCode, createChallenge, loadChallenge } from './challenge';
 
 type State = 'boot' | 'menu' | 'countdown' | 'racing' | 'finished';
 
@@ -169,6 +170,12 @@ export class Game {
   private preWeekend = { seed: 0, map: 0, mode: 0, laps: 2, len: TRACK_LENGTH_DEFAULT }; // restored afterwards
   // other players' runs this weekend, fetched when the event is opened
   private weekendGhosts: { data: GhostData; tag: string }[] = [];
+  // "beat my time": the link being raced, and the run to share back
+  private booted: Promise<void> = Promise.resolve();
+  private challenge: Challenge | null = null;
+  // the finished run, captured before play moves on to a fresh circuit
+  private lastGhost: GhostData | null = null;
+  private lastRace: Omit<Challenge, 'code' | 'tag' | 'ghost'> | null = null;
   private bounty = false;
   private preBounty = { seed: 0, map: 0, mode: 0, laps: 2 }; // restored afterwards
   private standings: Standing[] = []; // finishing order, snapshotted as the player crosses the line
@@ -280,6 +287,7 @@ export class Game {
       // the turntable is a one-car show — clear the grid while it spins
       for (const r of this.rivals.rivals) r.mesh.visible = p !== 'garage';
     };
+    this.ui.onChallenge = () => this.shareChallenge();
     this.ui.onDaily = () => this.startDaily();
     this.ui.onDailyExit = () => this.exitDaily();
     this.ui.onWeekend = () => this.startWeekend();
@@ -324,11 +332,15 @@ export class Game {
     window.addEventListener('keydown', unlockAudio, { once: true });
 
     const circuits = MAPS.map((m) => m.circuit?.path).filter((p): p is string => !!p);
-    void Promise.all([this.assets.load(), loadTrackPaths(circuits)]).then(() => {
+    // anything that rebuilds the race — a challenge link, say — waits on this
+    this.booted = Promise.all([this.assets.load(), loadTrackPaths(circuits)]).then(() => {
       this.buildRace();
       this.state = 'menu';
       this.renderer.setAnimationLoop(() => this.tick());
     });
+    // a "beat my time" link takes over the circuit once the world is standing
+    const code = challengeCode();
+    if (code) void this.enterChallenge(code);
   }
 
   /** Gradient sky dome + retro sun disc; follows the camera on x/z. */
@@ -488,6 +500,45 @@ export class Game {
     this.buildRace();
     this.ui.setMap(this.mapIndex);
     this.ui.setMode(this.modeIndex);
+  }
+
+  /**
+   * Open a "beat my time" link: the same circuit, with the setter's lap line
+   * alongside you. A dead or expired link leaves an ordinary race standing.
+   */
+  private async enterChallenge(code: string): Promise<void> {
+    const [c] = await Promise.all([loadChallenge(code), this.booted]);
+    const data = c && decodeGhost(c.ghost);
+    if (!c || !data) return;
+    const map = MAPS.findIndex((m) => m.id === c.mapId);
+    const mode = MODES.findIndex((m) => m.id === c.modeId);
+    if (map < 0 || mode < 0 || MODES[mode].pursuit) return; // cop chase has no ghosts
+    this.challenge = c;
+    this.seedCounter = c.seed;
+    this.mapIndex = map;
+    this.modeIndex = mode;
+    this.laps = c.laps;
+    this.trackLength = c.len;
+    this.weekendGhosts = [{ data, tag: c.tag }];
+    this.disposeRace();
+    this.buildRace();
+    this.ui.setMap(map);
+    this.ui.setMode(mode);
+    this.ui.lockLaps(c.laps); // their distance, or the times mean nothing
+    this.ui.popText(`${c.tag} CHALLENGES YOU · ${c.timeS.toFixed(1)}s`, '#ffc531');
+  }
+
+  /** Publish the last run as a challenge and hand the player the link. */
+  private async shareChallenge(): Promise<void> {
+    const ghost = this.lastGhost, race = this.lastRace;
+    if (!ghost || !race) return;
+    this.ui.challengeStatus('Making your challenge link…');
+    const link = await createChallenge({ ...race, tag: driverName(), ghost: encodeGhost(ghost) });
+    if (!link) {
+      this.ui.challengeFailed('Could not make a link. Try again.');
+      return;
+    }
+    await this.ui.shareChallengeLink(link, race.timeS);
   }
 
   /** This weekend's fastest runs, minus this device's own. Never throws. */
@@ -832,7 +883,7 @@ export class Game {
       this.ui.popText(`GHOST: ${this.ghostData.time.toFixed(1)}s — BEAT IT`, '#9adfff');
     }
     // the Weekend GP puts the weekend's fastest players on track with you
-    if (this.weekend && this.weekendGhosts.length > 0) {
+    if ((this.weekend || this.challenge) && this.weekendGhosts.length > 0) {
       this.rivalGhosts = this.weekendGhosts.map((g) => ({ data: g.data, obj: placeGhost(g.data, 0xffc531) }));
       this.ui.popText(`RACING: ${this.weekendGhosts.map((g) => g.tag).join(', ')}`, '#ffc531');
     }
@@ -1056,7 +1107,21 @@ export class Game {
 
     if (!this.busted && this.ghostRec) {
       const run = this.ghostRec.data(this.carIndex, this.playerTime, this.score());
+      this.lastGhost = run; // what a challenge link would carry
+      this.lastRace = {
+        mapId: MAPS[this.mapIndex].id, modeId: MODES[this.modeIndex].id, seed: this.raceSeed,
+        laps: this.raceLaps, len: this.lapLength(), timeS: this.playerTime,
+        score: this.score(), car: CARS[this.carIndex].name
+      };
       const beat = saveGhost(this.currentGhostKey(), run);
+      if (this.challenge) {
+        const gap = this.playerTime - this.challenge.timeS;
+        setTimeout(() => this.ui.popText(
+          gap < 0 ? `YOU BEAT ${this.challenge!.tag} BY ${Math.abs(gap).toFixed(1)}s`
+            : `${this.challenge!.tag} IS ${gap.toFixed(1)}s FASTER`,
+          gap < 0 ? '#7CFFB2' : '#ffc531'
+        ), 1200);
+      }
       if (beat && this.ghostData) this.ui.popText('GHOST BEATEN!', '#9adfff');
       // the weekend board carries the lap line, so the next player races it.
       // Practice runs midweek stay local: only the open weekend counts.
