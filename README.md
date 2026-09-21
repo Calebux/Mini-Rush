@@ -103,10 +103,13 @@ Screenshots (menu, countdown, mid-race, results) land in `shotsDir`.
 `src/wallet.ts` talks to the provider Nimiq Pay injects into the Mini App's
 WebView, via [`@nimiq/mini-app-sdk`](https://www.npmjs.com/package/@nimiq/mini-app-sdk).
 
-- **Auto-connect** — the provider is injected before the page script runs, so
-  the menu chip quietly fills in with the player's address (and NIM balance,
-  if `VITE_NIMIQ_RPC_URL` is set). Outside Nimiq Pay nothing shows and the
-  game plays exactly the same.
+- **Auto-connect** — the account is read on load, so nobody taps "connect":
+  the menu chip fills in with the driver name and, if `VITE_NIMIQ_RPC_URL` is
+  set, the NIM balance. The provider can land a moment after the page script,
+  so the read waits up to 5s for it rather than checking `window.nimiq` once.
+  If the read is refused the chip goes back to offering an explicit connect;
+  outside Nimiq Pay it just wears the generated driver name and opens the
+  driver card, and the game plays exactly the same.
 - **Garage market** — hyper-class cars can be bought outright for NIM via
   `sendBasicTransaction`, instead of grinding coins. Off unless
   `VITE_MARKET_RECEIVER` is configured.

@@ -49,6 +49,11 @@ const hudWidth = (el: HTMLElement, percent: number): void => {
 
 const BEST_KEY = 'minirush.best';
 const WELCOME_KEY = 'minirush.welcomed';
+/**
+ * How long to wait at boot for Nimiq Pay to inject its provider before giving
+ * up on signing in by itself. Matches the platform probe in src/usage.ts.
+ */
+const AUTO_CONNECT_MS = 5000;
 const PLACE_SUFFIX = ['st', 'nd', 'rd', 'th'];
 const suffix = (place: number) => PLACE_SUFFIX[Math.min(place, 4) - 1];
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -284,7 +289,7 @@ export class UI {
       this.refreshBounty();
       this.refreshBank();
     });
-    this.prepareWalletChip(); // Account permission is requested only after an explicit tap.
+    void this.autoConnect(); // Nimiq Pay hands us the account; no tap needed.
 
     // wallet chip → driver card (connecting first if needed)
     on('wallet-chip', () => void this.onWalletChip());
@@ -1469,6 +1474,33 @@ export class UI {
   }
 
   /**
+   * Read the account without asking for a tap. Nimiq Pay injects its provider
+   * around page load — sometimes a moment after this script runs — so this
+   * waits for it instead of trusting a synchronous read of `window.nimiq`.
+   * Outside Nimiq Pay the wait times out and the chip simply stays the
+   * generated driver name; if the account read is refused, the chip goes back
+   * to offering an explicit connect. Either way the game is already playable.
+   */
+  private async autoConnect(): Promise<void> {
+    // The generated name, styled like the chip's eventual resting state, so a
+    // provider that never shows up leaves nothing to pop in later and one that
+    // does never flashes a "connect" prompt the player didn't have to answer.
+    const chip = $('wallet-chip');
+    chip.classList.add('connectable');
+    chip.textContent = driverName();
+    try {
+      await this.wallet.connect(AUTO_CONNECT_MS);
+    } catch {
+      this.prepareWalletChip();
+      return;
+    }
+    await this.refreshChip();
+    // the player may have opened a panel while the provider was still coming up
+    if (!$('profile').classList.contains('hidden')) this.renderProfile();
+    if (!$('board').classList.contains('hidden')) this.renderNameRow();
+  }
+
+  /**
    * Offer explicit account permission in Nimiq Pay. Outside it there is no
    * sign-in, so the chip wears the generated driver name and opens the card.
    */
@@ -1488,7 +1520,7 @@ export class UI {
     if (nim) chip.textContent = `${driverName()} · ${nim} NIM`;
   }
 
-  /** Chip tap: connect first if needed, then open the driver card. */
+  /** Chip tap: connect if the boot read didn't land, then open the driver card. */
   private async onWalletChip(): Promise<void> {
     if (!this.wallet.address && this.wallet.available) {
       try {
@@ -1497,12 +1529,13 @@ export class UI {
         return; // dialog dismissed — stay on the menu, chip keeps offering
       }
       void this.refreshChip();
-      // a fresh Nimiq sign-in picks the username the boards will show
-      if (!hasUsername()) {
-        this.audio.play('open');
-        this.askUsername(this.menu, () => this.openProfile());
-        return;
-      }
+    }
+    // signed in and still racing under a generated name: offer to pick one.
+    // "KEEP IT" settles on the generated name, so this asks at most once.
+    if (this.wallet.address && !hasUsername()) {
+      this.audio.play('open');
+      this.askUsername(this.menu, () => this.openProfile());
+      return;
     }
     this.audio.play('open');
     this.openProfile();
