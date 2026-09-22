@@ -13,6 +13,12 @@ export const ACCEL = 10;
 export const BRAKE = 16;
 export const COAST_DECEL = 5;     // engine-brake rate when off the gas
 
+// How far off centre a car can be carried. The player runs wide onto the
+// offroad strip before the outer wall stops them; the AI steers inside the
+// road, and contact may shove one to the edge but never off it.
+export const PLAYER_X_LIMIT = ROAD_HALF_WIDTH + 2.6;
+export const RIVAL_X_LIMIT = ROAD_HALF_WIDTH;
+
 export const CENTRIFUGAL = 0.55; // how hard corners throw the car outward
 
 // wall crashes: reaching the road edge while the corner force (not steering)

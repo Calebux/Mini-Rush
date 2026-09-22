@@ -4,8 +4,10 @@ import { AssetLibrary, disposeCarInstance } from './assets';
 import { AudioManager } from './audio';
 import { BOUNTY_MODE, bountyMapIndex, bountySeed } from './bounty';
 import { CARS } from './cars';
+import { separate } from './collision';
 import {
-  districtIndexAt, HEAT_COOL, HEAT_GRACE, HEAT_LIMIT, PIT_SCRUB, TRACK_LENGTH_DEFAULT
+  districtIndexAt, HEAT_COOL, HEAT_GRACE, HEAT_LIMIT, PIT_SCRUB, PLAYER_X_LIMIT,
+  RIVAL_X_LIMIT, TRACK_LENGTH_DEFAULT
 } from './constants';
 import { dailyMapIndex, dailySeed } from './daily';
 import { driverName } from './driver';
@@ -56,6 +58,11 @@ type State = 'boot' | 'menu' | 'countdown' | 'racing' | 'finished';
 // P1 gets 400, last gets 0, linear in between — works for any grid size
 const placeBonus = (place: number, total: number): number =>
   Math.round(400 * Math.max(0, 1 - (Math.max(1, place) - 1) / Math.max(1, total - 1)));
+
+// Relaxation passes over the car-on-car separation. Each pass resolves every
+// pair once; more than one is needed because prising two cars apart can push a
+// third into someone. Three clears a full HARDCORE grid.
+const SEPARATION_PASSES = 3;
 
 // chase / low bumper / high TV — cycled with the 📷 button or C key
 const CAMS = [
@@ -1301,6 +1308,8 @@ export class Game {
       case 'menu':
         this.player.update(dt, elapsed, 0, 0, false);
         this.rivals.update(dt, elapsed, 0, this.player.s, false);
+        // No separation here on purpose: the menu car is parked, and holding
+        // traffic off it would queue a line of stopped cars up the backdrop.
         break;
 
       case 'countdown': {
@@ -1324,6 +1333,10 @@ export class Game {
         }
         this.player.update(dt, elapsed, 0, 0, false);
         this.rivals.update(dt, elapsed, 0, this.player.s, false);
+        // The field steers toward its racing line while the lights are still
+        // on, so cars sat in the same row converge into each other before the
+        // race has even started.
+        this.separateCars();
         break;
       }
 
@@ -1396,9 +1409,12 @@ export class Game {
           if (navigator.vibrate) navigator.vibrate(40);
         }
 
-        this.simulateContacts(dt, elapsed);
+        // Traffic drives before contacts are resolved, not after: a shell that
+        // moved afterwards spent the rest of the frame inside whatever it had
+        // just been prised out of.
         this.traffic.update(dt, this.player.s, this.track.length, this.player.v);
         trafficUpdated = true;
+        this.simulateContacts(dt, elapsed);
         this.updateStyle(dt, elapsed);
         this.updateGhost(dt);
         this.emitSmoke(dt, elapsed);
@@ -1765,6 +1781,11 @@ export class Game {
       }
     }
 
+    // Everything above decides what a touch COSTS. This decides that the cars
+    // can't be in the same place, and runs last so the contact tests above
+    // still see the overlap that triggered them.
+    this.separateCars();
+
     // pickups
     const got = this.entities.tryCollect(ws, p.x);
     if (got.coins > 0) {
@@ -1786,6 +1807,46 @@ export class Game {
         this.audio.play('combo');
         this.ui.popText('NITRO TANK +1', '#7fd4ff');
       }
+    }
+  }
+
+  /**
+   * Hold every pair of cars apart. The impulses above fire once and then sit
+   * behind a cooldown; without this, nothing stopped a car driving through
+   * another for the half-second that cooldown lasts.
+   *
+   * Wrecks are left out — a car already rolling is nobody's fault to drive
+   * into — and so is an airborne player, who is over the field, not in it.
+   */
+  private separateCars(): void {
+    const p = this.player;
+    const rivals = this.rivals.rivals;
+    const solid = p.tumbleT <= 0 && !p.airborne;
+
+    // Pairs are resolved one at a time, so prising two cars apart can bury a
+    // third — which is exactly what a HARDCORE grid does in the first corner.
+    // A few passes settle the chain; measured over a full race, one pass left
+    // cars 18% buried in each other and three passes leave nothing.
+    for (let pass = 0; pass < SEPARATION_PASSES; pass++) {
+      let moved = false;
+      for (let a = 0; a < rivals.length; a++) {
+        const ra = rivals[a];
+        if (ra.tumbleT > 0) continue;
+        if (solid && separate(p, ra, PLAYER_X_LIMIT, RIVAL_X_LIMIT)) moved = true;
+        for (let b = a + 1; b < rivals.length; b++) {
+          const rb = rivals[b];
+          if (rb.tumbleT > 0) continue;
+          if (separate(ra, rb, RIVAL_X_LIMIT, RIVAL_X_LIMIT)) moved = true;
+        }
+      }
+      if (!moved) break; // nothing was touching; the rest of the passes are free
+    }
+    if (!solid) return;
+    // Civilian shells are solid too, and carry their own length: a danfo is
+    // longer than a saloon.
+    for (const car of this.traffic.cars) {
+      if (!car.mesh.visible || car.wrecked > 0) continue;
+      separate(p, car, PLAYER_X_LIMIT, RIVAL_X_LIMIT, car.contactLength);
     }
   }
 

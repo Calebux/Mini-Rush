@@ -4,8 +4,8 @@ import { CarSpec } from './cars';
 import { buildShooterArm, syncCarGroundFx } from './meshes';
 import {
   ACCEL, BASE_SPEED, BRAKE, BRAKE_SPEED, CENTRIFUGAL, COAST_DECEL, COAST_SPEED,
-  END_SPEED_BONUS, NITRO_SPEED, NITRO_TIME, OFFROAD_SPEED, ROAD_HALF_WIDTH,
-  WALL_CRASH_DRIFT, WALL_CRASH_MIN_V
+  END_SPEED_BONUS, NITRO_SPEED, NITRO_TIME, OFFROAD_SPEED, PLAYER_X_LIMIT,
+  ROAD_HALF_WIDTH, WALL_CRASH_DRIFT, WALL_CRASH_MIN_V
 } from './constants';
 import { Track } from './track';
 
@@ -271,10 +271,9 @@ export class Player {
         this.wallHit = 2;
       }
     }
-    const edge = ROAD_HALF_WIDTH + 2.6;
-    if (Math.abs(this.x) > edge) {
+    if (Math.abs(this.x) > PLAYER_X_LIMIT) {
       const outward = Math.sign(this.x);
-      this.x = outward * edge;
+      this.x = outward * PLAYER_X_LIMIT;
       if (this.tumbleT <= 0) {
         if (this.wallHit === 0) this.wallHit = 1; // scraping the outer wall
         this.xVel = Math.min(this.xVel * outward, 0) * outward; // kill outward velocity
