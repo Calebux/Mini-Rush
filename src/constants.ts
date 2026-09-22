@@ -29,7 +29,20 @@ export const WALL_CRASH_MIN_V = 26;
 // up ahead of these corners and rival AI brakes for them
 export const SHARP_CORNER_K = 0.0165;
 export const RIVAL_LAT_GRIP = 60; // v²·k ceiling the AI brakes down to — a committed player carries up to ~100
-export const PURSUIT_LAT_GRIP = 17; // Police Chase keeps the corner pace it was balanced at
+// Police Chase difficulty. The units corner well short of what a racing AI
+// commits to (RIVAL_LAT_GRIP), because a squad that took bends like a race
+// field would never be shaken at all — but at 17 they fell away through
+// anything twisty and the chase came apart on its own.
+export const PURSUIT_LAT_GRIP = 24;
+// m/s over the player's speed a unit finds when it commits to a run. Under
+// about 10 a surge from behind never arrives before the phase times out.
+export const PURSUIT_SURGE_OVER = 12;
+// Base seconds a unit waits between runs at the player. Units are staggered
+// around this so the squad takes turns instead of all lunging at once.
+export const PURSUIT_ATTACK_EVERY = 2.0;
+// The first run of the race comes later than the rest: the mode gives a head
+// start, and a squad already swinging at the lights leaves nothing to lose.
+export const PURSUIT_FIRST_RUN = 4.0;
 export const RIVAL_BRAKE = 40;    // m/s² the AI can scrub on the approach to a bend
 // Under WALL_CRASH_MIN_V, so like the player a rival can scrape through any
 // hairpin at this speed without being thrown off.

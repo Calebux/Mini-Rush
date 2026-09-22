@@ -3,7 +3,8 @@ import { AssetLibrary } from './assets';
 import type { CarSpec } from './cars';
 import {
   BASE_SPEED, END_SPEED_BONUS, NITRO_SPEED, NITRO_TIME, PRO_NITRO_EVERY, PRO_PACE_BONUS,
-  PRO_PACE_SHARE, PRO_SKILL, PURSUIT_LAT_GRIP, RIVAL_BRAKE, RIVAL_CATCHUP, RIVAL_LAT_GRIP,
+  PRO_PACE_SHARE, PRO_SKILL, PURSUIT_ATTACK_EVERY, PURSUIT_FIRST_RUN, PURSUIT_LAT_GRIP,
+  PURSUIT_SURGE_OVER, RIVAL_BRAKE, RIVAL_CATCHUP, RIVAL_LAT_GRIP,
   RIVAL_MIN_CORNER_SPEED, RIVAL_NITRO_EVERY, RIVAL_PACE_SHARE, ROAD_HALF_WIDTH, SAMPLE_STEP,
   WALL_CRASH_MIN_V
 } from './constants';
@@ -172,7 +173,7 @@ export class RivalManager {
           : 0,
         pursuitPhase: 'tail',
         // staggered, so the squad takes turns rather than all lunging at once
-        pursuitT: 4 + i * 2.6,
+        pursuitT: PURSUIT_FIRST_RUN + i * 2.0,
         pursuitSide: i % 2 === 0 ? 1 : -1
       });
     }
@@ -180,7 +181,10 @@ export class RivalManager {
 
   /** Straight-line pace for grid slot i, before progression and racecraft. */
   private basePace(i: number, tune: PersonalityTune): number {
-    // Police Chase is balanced around its own fixed pace
+    // Police Chase is balanced around its own fixed pace. Scaling it to the
+    // player's car was tried and measured no different: a unit's speed target
+    // comes from `pursue`, which is playerV-relative in every phase but the
+    // tail, where baseSpeed is only a ceiling.
     if (this.pursuit) return BASE_SPEED - 1.5 + (i % 4) * 1.2 + tune.speedBias;
     const anchor = 1 + (this.paceMul - 1) * this.paceShare;
     return BASE_SPEED * anchor + tune.speedBias + ((i % 3) - 1) * 0.7
@@ -221,7 +225,7 @@ export class RivalManager {
       // Police Chase: units gridded behind the player chase (first run
       // staggered per unit); units gridded ahead lie in wait and attack.
       r.pursuitPhase = grid[i].s > 0 ? 'block' : 'tail';
-      r.pursuitT = grid[i].s > 0 ? 6 : 4 + i * 2.6;
+      r.pursuitT = grid[i].s > 0 ? 6 : PURSUIT_FIRST_RUN + i * 2.0;
       this.sync(r, 0);
     });
   }
@@ -536,7 +540,7 @@ export class RivalManager {
         // across the nose; if it made it in front, stay there and attack
         if (r.pursuitT <= 0) {
           r.pursuitPhase = gap > 0 ? 'block' : 'drop';
-          r.pursuitT = gap > 0 ? 6 : 3.6;
+          r.pursuitT = gap > 0 ? 6 : 2.8;
         }
         break;
       case 'block':
@@ -547,19 +551,19 @@ export class RivalManager {
           // player got past (join the chase) or it has held the door long enough
           const passed = gap < -4;
           r.pursuitPhase = passed ? 'tail' : 'drop';
-          r.pursuitT = passed ? 2.5 + Math.random() * 2.5 : 3.6;
+          r.pursuitT = passed ? PURSUIT_ATTACK_EVERY + Math.random() * 2 : 2.8;
         }
         break;
       case 'drop':
         if (r.pursuitT <= 0) {
           r.pursuitPhase = 'tail';
-          r.pursuitT = 2 + Math.random() * 3;
+          r.pursuitT = PURSUIT_ATTACK_EVERY + Math.random() * 2;
         }
         break;
     }
 
     switch (r.pursuitPhase) {
-      case 'surge': return playerV + 9;    // run them down
+      case 'surge': return playerV + PURSUIT_SURGE_OVER; // run them down
       case 'cut':   return playerV - 3.5;  // across the nose, on the brakes
       case 'block':
         // far down the road it crawls so the player arrives; in range it
