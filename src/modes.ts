@@ -33,15 +33,32 @@ export interface ModeSpec {
    * the whole shelf, this bars the *entrant's* car.
    */
   freeCarsOnly?: boolean;
+  /**
+   * Classes the AI field is drawn from, when that should be wider than what
+   * the player may enter on. Without it the field races the entry class, which
+   * on a one-car shelf puts seven identical cars on the grid.
+   *
+   * A rival's car is cosmetic — its pace comes from `basePace` in rivals.ts and
+   * never reads the spec — so this changes the look of a grid, not its speed.
+   */
+  fieldClasses?: CarClass[];
 }
 
 /** Cars the AI field is drawn from: the mode's shelf, less workshop builds where barred. */
-export const carInField = (m: ModeSpec, c: CarSpec): boolean =>
-  (!m.requiresClass || c.class === m.requiresClass) && !(m.noBuilds && c.model === 300);
+export const carInField = (m: ModeSpec, c: CarSpec): boolean => {
+  const shelf = m.fieldClasses ?? (m.requiresClass ? [m.requiresClass] : null);
+  return (!shelf || shelf.includes(c.class)) && !(m.noBuilds && c.model === 300);
+};
 
-/** Cars the player may enter a mode on: the field rule, plus any free-cars-only rule. */
+/**
+ * Cars the player may enter a mode on. Deliberately not built on `carInField`:
+ * widening what the AI drives must never widen what an entrant may bring, or
+ * the bounty's free-cars-only rule leaks the moment a field is opened up.
+ */
 export const carFits = (m: ModeSpec, c: CarSpec): boolean =>
-  carInField(m, c) && !(m.freeCarsOnly && c.nim > 0);
+  (!m.requiresClass || c.class === m.requiresClass)
+  && !(m.noBuilds && c.model === 300)
+  && !(m.freeCarsOnly && c.nim > 0);
 
 export const MODES: ModeSpec[] = [
   {
@@ -101,7 +118,8 @@ export const MODES: ModeSpec[] = [
     id: 'hardcore', name: 'HARDCORE', icon: '🏎️',
     tagline: 'No traffic. Seven pro drivers on a long circuit, in the free VIPER GT. Win the bounty race.',
     rivals: 7, tumble: false, aggression: 0, lapsLocked: 2,
-    requiresClass: 'fast', noBuilds: true, freeCarsOnly: true, noTraffic: true, pro: true, trackLength: 3000, featured: true
+    requiresClass: 'fast', fieldClasses: ['fast', 'hyper'],
+    noBuilds: true, freeCarsOnly: true, noTraffic: true, pro: true, trackLength: 3000, featured: true
   },
   {
     id: 'weekend', name: 'WEEKEND GP', icon: '🏆',
