@@ -1069,13 +1069,24 @@
        set-once thing, so its toggle lives on the menu, not out here. */
     #btn-cam {
       position: absolute; top: max(96px, calc(env(safe-area-inset-top) + 88px));
-      width: 34px; height: 34px; border-radius: 50%;
-      display: flex; align-items: center; justify-content: center; font-size: 15px;
-      background: rgba(6,8,20,.5); border: 1px solid rgba(255,255,255,.18);
-      opacity: .65;
+      width: 38px; height: 38px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(6,8,20,.55); border: 1px solid rgba(255,255,255,.22);
+      color: rgba(255,255,255,.92); opacity: .7;
+      transition: opacity .15s ease, transform .12s ease, border-color .15s ease;
       pointer-events: auto; user-select: none; -webkit-user-select: none;
-      left: 18px;
+      /* Right side, under the coin chip: the left column already stacks
+         position, lap and time, and switching view is a rare deliberate tap
+         that belongs at an edge rather than under a steering thumb. */
+      right: 18px;
     }
+    #btn-cam svg {
+      width: 20px; height: 20px;
+      fill: none; stroke: currentColor; stroke-width: 1.7;
+      stroke-linecap: round; stroke-linejoin: round;
+    }
+    #btn-cam:active { transform: scale(.92); opacity: 1; border-color: rgba(252,255,82,.6); }
+    #btn-cam:focus-visible { opacity: 1; outline: 2px solid #fcff52; outline-offset: 2px; }
     button#btn-mute { font: inherit; cursor: pointer; }
 
     /* ---------- driver mode dashboard ---------- */
@@ -1086,7 +1097,7 @@
     #hud.driver #hud-speed { display: none; }
     #hud.driver #dash {
       display: block; position: absolute; left: 0; right: 0;
-      bottom: 0; height: min(30vh, 210px); z-index: 1; pointer-events: none;
+      bottom: 0; height: min(38vh, 280px); z-index: 1; pointer-events: none;
     }
     /* the cowl: a dark swell across the bottom of the glass */
     #dash-cowl {
@@ -1095,8 +1106,12 @@
       border-top-left-radius: 52% 62%; border-top-right-radius: 52% 62%;
       box-shadow: inset 0 2px 0 rgba(255,255,255,.07);
     }
+    /* The dials clear the control band rather than sharing its line: the gas
+       pedal is 84px tall off the same edge, so anything lower than this reads
+       as one tangle of circles instead of a dash above a set of pedals. */
     #dash-dials {
-      position: absolute; left: 0; right: 0; bottom: max(16px, var(--safe-bottom));
+      position: absolute; left: 0; right: 0;
+      bottom: calc(max(20px, var(--safe-bottom)) + 96px);
       display: flex; align-items: center; justify-content: center;
       gap: clamp(4px, 2.5vw, 16px);
     }
@@ -1129,7 +1144,15 @@
       text-shadow: 0 0 18px rgba(252,255,82,.5);
     }
     /* the pedals and nitro sit above the dash, as if mounted on it */
-    #btn-gas, #btn-brake, #btn-nitro { z-index: 2; }
+    #btn-gas, #btn-brake, #btn-nitro, #nitro-ui { z-index: 2; }
+    /* The nitro pill is translucent and was designed to sit over road. On the
+       cowl it lost all its contrast, so it firms up in this mode only. */
+    #hud.driver #nitro-ui {
+      background: rgba(55,182,255,.26);
+      border-color: rgba(127,212,255,.75);
+      color: #cdeeff;
+    }
+    #hud.driver #nitro-ui.none { opacity: .45; }
     @media (prefers-reduced-motion: reduce) {
       .dial-fill, .dial-needle { transition: none; }
     }
@@ -1432,7 +1455,16 @@
         <path d="M11 18.6l-1.6 2.8" />
       </svg>
     </div>
-    <div id="btn-cam" role="button" tabindex="0" aria-label="Change camera">📷</div>
+    <div id="btn-cam" role="button" tabindex="0" aria-label="Change camera view">
+      <!-- A camcorder, not a stills camera: this switches the angle you watch
+           the race from, and the arc under it says the views cycle. -->
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="2.4" y="6.6" width="12.2" height="8.6" rx="2.2" />
+        <path d="M14.6 10.2 20.3 7.1v8.6l-5.7-3.1z" />
+        <path d="M5.2 18.4a7 7 0 0 0 11.6-1" />
+        <path d="M4.4 16.1l.8 2.5 2.5-.8" />
+      </svg>
+    </div>
     <!-- Driver mode only. Sits behind the pedals, so the controls read as
          though they are mounted on the dash rather than fighting it. -->
     <div id="dash" aria-hidden="true">
