@@ -187,6 +187,15 @@ export class UI {
   private speedlines = $('speedlines');
   private hudSpeed = $('hud-speed-v');
   private hudLap = $('hud-lap');
+  // driver-mode dashboard — only read while that camera is up
+  private dashOn = false;
+  private dashKmh = $('dash-kmh');
+  private dashGearN = $('dash-gear-n');
+  private dashBoost = $('dash-boost');
+  private dashSpeedArc = $('dash-speed-arc');
+  private dashSpeedNeedle = $('dash-speed-needle');
+  private dashRevArc = $('dash-rev-arc');
+  private dashRevNeedle = $('dash-rev-needle');
   private styleUi = $('style-ui');
   private styleMult = $('style-mult');
   private styleFill = $('style-fill');
@@ -533,17 +542,17 @@ export class UI {
     cam.addEventListener('pointerdown', (e) => e.stopPropagation());
     activateOnEnter(cam, () => this.onCamera());
 
-    // mute lives in two places (menu chip + race HUD) but is one setting
+    // Mute is a set-once setting, so it lives on the menu only — the race
+    // screen kept a second copy of it next to the thumb that steers.
     const MUTE_KEY = 'minirush.muted';
     let muted = localStorage.getItem(MUTE_KEY) === '1';
     const applyMute = () => {
       this.audio.setMuted(muted);
       $('btn-mute').textContent = muted ? '🔇' : '🔊';
-      $('btn-mute-race').textContent = muted ? '🔇' : '🔊';
     };
     applyMute();
-    for (const id of ['btn-mute', 'btn-mute-race']) {
-      const el = $(id);
+    {
+      const el = $('btn-mute');
       el.addEventListener('pointerdown', (e) => e.stopPropagation());
       activateOnEnter(el, () => {
         muted = !muted;
@@ -1831,6 +1840,46 @@ export class UI {
     this.countdownEl.classList.remove('show');
   }
 
+  /**
+   * Driver mode: the car body comes off and the dashboard comes up. Called by
+   * the game when the camera enters or leaves the driver's seat.
+   */
+  setDriverDash(on: boolean): void {
+    this.dashOn = on;
+    hudClass(this.hud, 'driver', on);
+    $('dash').setAttribute('aria-hidden', String(!on));
+  }
+
+  /**
+   * Point a dial. `t` is 0..1 across the face, which is the 270° arc drawn in
+   * index.html: the needle sweeps −135° to +135°, and the arc is a 179-unit
+   * dash wound back by however much of it is unfilled.
+   */
+  private setDial(arc: HTMLElement, needle: HTMLElement, t: number): void {
+    const k = Math.max(0, Math.min(1, t));
+    const offset = (179 * (1 - k)).toFixed(1);
+    if (arc.style.strokeDashoffset !== offset) arc.style.strokeDashoffset = offset;
+    const turn = `rotate(${(-135 + k * 270).toFixed(1)}deg)`;
+    if (needle.style.transform !== turn) needle.style.transform = turn;
+  }
+
+  /**
+   * The car has no gearbox, so the dash infers one: six bands of 40 km/h, with
+   * the revs riding up each band and dropping on the change. It is invented,
+   * but it moves the way a real one does, which is the whole point of the view.
+   */
+  private updateDash(kmh: number, nitroTanks: number, nitroActive: boolean): void {
+    if (!this.dashOn) return; // the dials are not on screen; don't touch them
+    const gear = Math.max(1, Math.min(6, 1 + Math.floor(kmh / 40)));
+    const rev = nitroActive ? 0.93 : Math.min(1, (kmh % 40) / 40 * 0.82 + 0.12);
+    hudText(this.dashKmh, String(kmh));
+    hudText(this.dashGearN, String(gear));
+    hudText(this.dashBoost, nitroActive ? 'ON' : String(nitroTanks));
+    this.setDial(this.dashSpeedArc, this.dashSpeedNeedle, kmh / 260);
+    this.setDial(this.dashRevArc, this.dashRevNeedle, rev);
+    hudClass(this.hud, 'redline-dash', rev > 0.85);
+  }
+
   updateHud(
     place: number, racers: number, time: number, coins: number,
     nitroTanks: number, nitroActive: boolean, speed: number,
@@ -1856,6 +1905,7 @@ export class UI {
     hudWidth(this.speedFill, strain * 100);
     hudClass(this.speedUi, 'redline', strain > 0.82);
     hudText(this.hudCoins, `⬤ ${coins}`);
+    this.updateDash(kmh, nitroTanks, nitroActive);
 
     hudClass(this.nitroUi, 'none', nitroTanks === 0 && !nitroActive);
     hudClass(this.nitroUi, 'burning', nitroActive);

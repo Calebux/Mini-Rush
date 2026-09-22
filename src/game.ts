@@ -64,12 +64,23 @@ const placeBonus = (place: number, total: number): number =>
 // third into someone. Three clears a full HARDCORE grid.
 const SEPARATION_PASSES = 3;
 
-// chase / low bumper / high TV — cycled with the 📷 button or C key
+// chase / low bumper / high TV / driver — cycled with the 📷 button or C key.
+// `lat` is how much of the car's lateral position the camera takes: a trailing
+// camera hangs back toward the centre of the road, the driver's eye is exactly
+// where the car is. `driver` hides the car body — there is no modelled
+// interior to sit inside, so the view is from the screen rail forward.
 const CAMS = [
-  { back: 8.5, h: 6.1, ahead: 13, fov: 66 },
-  { back: 5.2, h: 2.9, ahead: 11, fov: 75 },
-  { back: 14.0, h: 11.0, ahead: 19, fov: 57 }
+  { back: 8.5, h: 6.1, ahead: 13, fov: 66, lat: 0.55, driver: false },
+  { back: 5.2, h: 2.9, ahead: 11, fov: 75, lat: 0.55, driver: false },
+  { back: 14.0, h: 11.0, ahead: 19, fov: 57, lat: 0.55, driver: false },
+  // Seated at the car's middle rather than out on the nose: a driver sits
+  // there anyway, and the extra clearance keeps the eye out of the back of
+  // whatever it is following. A long vehicle is still the tightest case.
+  { back: 0.25, h: 1.3, ahead: 17, fov: 78, lat: 1, driver: true }
 ];
+
+/** Which camera is the driver's seat, for the dashboard and the hidden body. */
+const DRIVER_CAM = CAMS.findIndex((c) => c.driver);
 
 const numberParam = (qp: URLSearchParams, key: string, fallback: number): number => {
   // an absent param is null, and Number(null) is 0 — which silently made every
@@ -165,6 +176,8 @@ export class Game {
   private lastWallGrindAt = -10;
   private camMode = 0;
   private cam = { ...CAMS[0] };
+  /** Driver mode hides the car body; tracked so it is only toggled on change. */
+  private bodyHidden = false;
   private paused = false;
 
   private style = new StyleMeter();
@@ -1888,11 +1901,16 @@ export class Game {
 
   private updateCamera(dt: number): void {
     if (this.state === 'menu') {
+      // Whatever camera the last race ended on, the menu always shows the car.
+      this.setDriverView(false);
       this.menuCamera(dt);
       return;
     }
     this.setViewLift(0); // racing frames the road centred, never lens-shifted
     const p = this.player;
+    // Sitting in the driver's seat puts the eye inside a body with no modelled
+    // interior, so the body comes off and the dashboard goes up in its place.
+    this.setDriverView(this.camMode === DRIVER_CAM);
 
     if (this.state === 'finished' && !this.busted) {
       // A trackside camera follows the real car just after the final crossing.
@@ -1929,16 +1947,19 @@ export class Game {
 
     // glide between camera modes rather than snapping
     const m = MAPS[this.mapIndex].id === 'lagos' && this.camMode === 0
-      ? { back: 7.2, h: 3.7, ahead: 15, fov: 63 }
+      ? { ...CAMS[0], back: 7.2, h: 3.7, ahead: 15, fov: 63 }
       : CAMS[this.camMode];
     this.cam.back = THREE.MathUtils.damp(this.cam.back, m.back, 4, dt);
     this.cam.h = THREE.MathUtils.damp(this.cam.h, m.h, 4, dt);
     this.cam.ahead = THREE.MathUtils.damp(this.cam.ahead, m.ahead, 4, dt);
     this.cam.fov = THREE.MathUtils.damp(this.cam.fov, m.fov, 4, dt);
+    // damped too, so dropping into the driver's seat slides across rather than
+    // snapping the view sideways
+    this.cam.lat = THREE.MathUtils.damp(this.cam.lat, m.lat, 4, dt);
 
     const back = this.track.frame(p.s - this.cam.back);
     const ahead = this.track.frame(p.s + this.cam.ahead);
-    const lat = p.x * 0.55;
+    const lat = p.x * this.cam.lat;
     const speedZoom = this.player.nitroActive ? 0.9 : 0;
 
     let cx = back.x + back.nx * lat;
@@ -1950,7 +1971,10 @@ export class Game {
       cy += (Math.random() - 0.5) * this.shake * 0.5;
     }
     this.camera.position.set(cx, cy, cz);
-    this.camera.lookAt(ahead.x + ahead.nx * p.x * 0.3, 1.1, ahead.z + ahead.nz * p.x * 0.3);
+    // From the driver's seat the eye tracks the car's own line down the road;
+    // a trailing camera aims closer to the centre so the car stays framed.
+    const aimLat = p.x * (m.driver ? 0.9 : 0.3);
+    this.camera.lookAt(ahead.x + ahead.nx * aimLat, m.driver ? 1.25 : 1.1, ahead.z + ahead.nz * aimLat);
 
     // keep the ground carpet and sky dome under/around the action
     this.ground.position.x = back.x;
@@ -1963,6 +1987,23 @@ export class Game {
       this.camera.fov = THREE.MathUtils.damp(this.camera.fov, targetFov, 6, dt);
       this.camera.updateProjectionMatrix();
     }
+  }
+
+  /**
+   * Enter or leave the driver's seat: hide the car body, raise the dashboard.
+   *
+   * The visibility is written every frame rather than only on a change. The
+   * race is torn down and rebuilt behind the results screen, so by the next
+   * race `this.player` is a different car with a different mesh — a cached
+   * "already hidden" would leave that new body on screen, seen from inside it.
+   * The dash toggle is still only touched on a real change, since that one
+   * reaches into the DOM.
+   */
+  private setDriverView(on: boolean): void {
+    this.player.mesh.visible = !on;
+    if (on === this.bodyHidden) return;
+    this.bodyHidden = on;
+    this.ui.setDriverDash(on);
   }
 
   /** Off-axis projection shift, in screen pixels; 0 restores a centred view. */
