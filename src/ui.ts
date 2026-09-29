@@ -11,6 +11,7 @@ import {
   countdown, msToClose, msToWeekend, WEEKEND_LAPS, weekendMapIndex, weekendOpen
 } from './weekend';
 import { bank, grantCar, owned, racePayout } from './economy';
+import { saveProfileCar, saveProfileName, syncProfile } from './profile';
 import { Leaderboard } from './leaderboard';
 import { MAPS } from './maps';
 import { carFits, MODES, ModeSpec } from './modes';
@@ -1319,6 +1320,7 @@ export class UI {
       return;
     }
     track('purchase');
+    if (this.wallet.address) saveProfileCar(this.wallet.address, c.id, tx);
     try { grantCar(c.id); } catch {
       status.textContent = `Payment returned reference ${tx}, but this device could not save the unlock. Keep the reference; do not pay again.`;
       return;
@@ -1503,6 +1505,7 @@ export class UI {
       this.prepareWalletChip();
       return;
     }
+    await this.loadWalletProfile();
     await this.refreshChip();
     // the player may have opened a panel while the provider was still coming up
     if (!$('profile').classList.contains('hidden')) this.renderProfile();
@@ -1517,6 +1520,21 @@ export class UI {
     const chip = $('wallet-chip');
     chip.classList.add('connectable');
     chip.textContent = this.wallet.available ? 'CONNECT NIMIQ' : driverName();
+  }
+
+  /**
+   * Bring the wallet's saved name and cars onto this phone, and back up the
+   * phone's to the wallet. Nimiq Pay can wipe the Mini App's storage; this is
+   * what gets a player their garage back afterwards.
+   */
+  private async loadWalletProfile(): Promise<void> {
+    const address = this.wallet.address;
+    if (!address) return;
+    if (!(await syncProfile(address))) return;
+    this.renderCar();
+    this.refreshModeLocks();
+    if (!$('profile').classList.contains('hidden')) this.renderProfile();
+    if (!$('board').classList.contains('hidden')) this.renderNameRow();
   }
 
   private async refreshChip(): Promise<void> {
@@ -1537,6 +1555,8 @@ export class UI {
       } catch {
         return; // dialog dismissed — stay on the menu, chip keeps offering
       }
+      // before the username check: a returning wallet already has its name
+      await this.loadWalletProfile();
       void this.refreshChip();
     }
     // signed in and still racing under a generated name: offer to pick one.
@@ -1582,6 +1602,7 @@ export class UI {
     }
     this.audio.play('select');
     track('name');
+    if (this.wallet.address) saveProfileName(this.wallet.address, driverName());
     this.closeUsername();
   }
 
@@ -1612,6 +1633,7 @@ export class UI {
       } catch {
         return;
       }
+      await this.loadWalletProfile();
       void this.refreshChip();
     }
     this.askUsername($('board'), () => {

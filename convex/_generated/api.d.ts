@@ -10,6 +10,8 @@
 
 import type * as boards from "../boards.js";
 import type * as bounty from "../bounty.js";
+import type * as challenges from "../challenges.js";
+import type * as profiles from "../profiles.js";
 import type * as usage from "../usage.js";
 import type * as weekend from "../weekend.js";
 
@@ -22,6 +24,8 @@ import type {
 declare const fullApi: ApiFromModules<{
   boards: typeof boards;
   bounty: typeof bounty;
+  challenges: typeof challenges;
+  profiles: typeof profiles;
   usage: typeof usage;
   weekend: typeof weekend;
 }>;

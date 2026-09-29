@@ -14,13 +14,15 @@ export default defineSchema({
     receiver: v.optional(v.string())       // NQ address entries go to; the build's receipt address otherwise
   }).index('by_week', ['week']),
 
-  // One row per device that has played. `pid` is a random id the game makes
-  // (src/usage.ts) and `name` the driver name it races under; no wallet
-  // addresses or Nimiq device ids.
+  // One row per device that has opened the game. `pid` is a random id the game
+  // makes (src/usage.ts) and `name` the driver name it races under. Wallet
+  // addresses live in `profiles`, never here. A web visitor only counts as a
+  // player once it finishes a race (convex/usage.ts).
   players: defineTable({
     pid: v.string(),
     name: v.optional(v.string()),          // cleaned like src/driver.ts; absent until the first named ping
     hidden: v.optional(v.boolean()),       // true keeps the name off /stats (usage:hide)
+    uncounted: v.optional(v.boolean()),    // taken back out of the day counts (usage:dropVisitors)
     platform: v.union(v.literal('nimiq'), v.literal('web')), // where it was last seen
     firstSeen: v.number(),
     lastSeen: v.number(),
@@ -33,6 +35,21 @@ export default defineSchema({
     .index('by_pid', ['pid'])
     .index('by_lastSeen', ['lastSeen'])
     .index('by_name', ['name']),
+
+  // A Nimiq wallet's profile: the name it races under and the cars it has
+  // bought, so both survive Nimiq Pay clearing the phone's storage. Written by
+  // the game on sign-in, username change and purchase (convex/profiles.ts).
+  profiles: defineTable({
+    address: v.string(),                   // compact, uppercase: "NQ2376FK…78CC"
+    name: v.optional(v.string()),          // cleaned like src/driver.ts
+    cars: v.array(v.string()),             // car ids; only ever added to
+    purchases: v.array(v.object({          // NIM payments reported by the game
+      car: v.string(),
+      tx: v.string(),                      // what Nimiq Pay returned for the payment
+      at: v.number()
+    })),
+    updatedAt: v.number()
+  }).index('by_address', ['address']),
 
   // "Beat my time" links: one row per shared run, looked up by its code and
   // dropped after a month. Written by the game (convex/challenges.ts).

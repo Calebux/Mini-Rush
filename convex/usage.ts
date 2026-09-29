@@ -28,6 +28,15 @@ const NAME_MAX = 16;
 // how many drivers /stats lists, most recently seen first
 const DRIVER_LIST = 100;
 
+/**
+ * Who /stats counts as a player. Link previews and crawlers load the page on
+ * the web, get a generated name and never race — Sep 24 had 11 of them in
+ * bursts seconds apart. Inside Nimiq Pay it is a person; on the web it is once
+ * they finish a race.
+ */
+const isPlayer = (p: { platform: 'nimiq' | 'web'; races: number }): boolean =>
+  p.platform === 'nimiq' || p.races > 0;
+
 /** A driver name as the game would store it, or undefined when it isn't one. */
 function cleanName(raw: string | undefined): string | undefined {
   if (raw === undefined) return undefined;
@@ -65,21 +74,9 @@ export const ping = mutation({
     let races = player?.races ?? 0;
     let lastRaceAt = player?.lastRaceAt ?? 0;
     let wallet = player?.wallet ?? false;
-
-    // a player's first event of the UTC day, whatever it is, makes them active today
-    if (!player) {
-      bump('players');
-      bump('newPlayers');
-      if (platform === 'nimiq') {
-        bump('nimiq');
-        bump('newNimiq');
-      }
-    } else if (player.lastDay !== today) {
-      bump('players');
-      if (platform === 'nimiq') bump('nimiq');
-      days += 1;
-      if (days === 2) bump('returned');
-    }
+    const wasPlayer = !!player && isPlayer(player);
+    const newDay = !!player && player.lastDay !== today;
+    if (newDay) days += 1;
 
     switch (event) {
       case 'open':
@@ -107,6 +104,25 @@ export const ping = mutation({
         break;
       case 'name':
         break; // a new username: only the name below changes
+    }
+
+    // Nothing a visitor does is counted until it becomes a player. Its first
+    // counted event makes it new and active today; after that, its first event
+    // of each UTC day makes it active that day.
+    const nowPlayer = isPlayer({ platform, races });
+    if (!nowPlayer) {
+      for (const key of Object.keys(add) as (keyof DayCounts)[]) delete add[key];
+    } else if (!wasPlayer) {
+      bump('players');
+      bump('newPlayers');
+      if (platform === 'nimiq') {
+        bump('nimiq');
+        bump('newNimiq');
+      }
+    } else if (newDay) {
+      bump('players');
+      if (platform === 'nimiq') bump('nimiq');
+      if (days === 2) bump('returned');
     }
 
     const row = {
@@ -154,6 +170,36 @@ export const hide = internalMutation({
   }
 });
 
+/**
+ * One-off: take the web visitors that never raced back out of the day counts
+ * they were added to before isPlayer existed. Only single-day visitors — for
+ * them the day they were counted new and active is known exactly; the handful
+ * that came back on another day stay in. Their opens stay too: the count per
+ * visitor isn't kept. Safe to re-run: it marks each row it has taken out.
+ *   npx convex run --prod usage:dropVisitors
+ */
+export const dropVisitors = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const rows = await ctx.db.query('players').collect();
+    const byDay = new Map<string, number>();
+    for (const p of rows) {
+      if (isPlayer(p) || p.days !== 1 || p.uncounted) continue;
+      byDay.set(p.lastDay, (byDay.get(p.lastDay) ?? 0) + 1);
+      await ctx.db.patch(p._id, { uncounted: true });
+    }
+    for (const [day, n] of byDay) {
+      const row = await ctx.db.query('usageDays').withIndex('by_day', (q) => q.eq('day', day)).first();
+      if (!row) continue;
+      await ctx.db.patch(row._id, {
+        players: Math.max(0, row.players - n),
+        newPlayers: Math.max(0, row.newPlayers - n)
+      });
+    }
+    return Object.fromEntries(byDay);
+  }
+});
+
 /** Daily counts, all-time totals and the latest drivers. Public: nothing beyond /stats. */
 export const stats = query({
   args: {},
@@ -175,7 +221,7 @@ export const stats = query({
         purchases: sum('purchases')
       },
       days: rows.slice(0, 30).map((row) => ({ day: row.day, ...counts(row) })),
-      drivers: recent.filter((p) => !p.hidden).map((p) => ({
+      drivers: recent.filter((p) => !p.hidden && isPlayer(p)).map((p) => ({
         name: p.name ?? null,
         platform: p.platform,
         races: p.races,

@@ -3,7 +3,8 @@
  * random id in localStorage, and the game tells Convex (convex/usage.ts) when
  * it opens, finishes a race, connects a wallet, sends something on-chain or
  * picks a username. The driver name goes along so /stats can list drivers;
- * wallet addresses and Nimiq device ids never leave the device. It all fails
+ * no wallet address or Nimiq device id is sent with these pings (the wallet
+ * profile in src/profile.ts is keyed by address, separately). It all fails
  * silently: gameplay never waits on it.
  */
 import { driverName } from './driver';
