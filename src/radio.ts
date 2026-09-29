@@ -232,7 +232,12 @@ export class RadioPanel {
       b.classList.toggle('on', b.dataset.band === this.radio.bandId));
     for (const tag of this.tags) {
       tag.classList.toggle('on', s === 'playing' || s === 'tuning');
-      tag.textContent = s === 'playing' && now ? `📻 ${now.station.slice(0, 22)}` : s === 'tuning' ? '📻 TUNING…' : '📻 RADIO';
+      // Compact tags (the menu's volume row) only say whether it is on; the
+      // station's name is in the panel and in the tag's tooltip.
+      const compact = tag.dataset.compact === '1';
+      tag.textContent = compact ? (s === 'playing' ? '📻 LIVE' : s === 'tuning' ? '📻 …' : '📻')
+        : s === 'playing' && now ? `📻 ${now.station.slice(0, 22)}` : s === 'tuning' ? '📻 TUNING…' : '📻 RADIO';
+      tag.title = now?.station ? `NEON FM · ${now.station}` : 'NEON FM radio';
     }
   }
 }

@@ -339,3 +339,9 @@ html, body { background: var(--nn-bg); }
 .radio-actions { display: grid; grid-template-columns: 1fr auto; gap: 6px; margin-top: 10px; }
 .radio-actions .radio-next { background: linear-gradient(100deg, var(--nn-magenta), var(--nn-violet)); border: 0; color: #fff; }
 .radio-note { margin: 10px 0 0; font-family: -apple-system, sans-serif; font-size: 9.5px; line-height: 1.35; color: var(--nn-muted); }
+
+/* the menu's radio button sits in the volume row: it never grows */
+#btn-radio { flex: none; max-width: 76px; padding: 7px 10px; }
+#menu #vol-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+#menu #vol-slider { min-width: 0; flex: 1 1 auto; }
+#menu .stat-stack { min-width: 0; }
