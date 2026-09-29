@@ -1,0 +1,93 @@
+/* Free roam. The race HUD keeps its pedals and speedometer; everything that
+   only means something in a race is hidden while body.city-mode is set. */
+body.city-mode #hud-top,
+body.city-mode #progress,
+body.city-mode #style-ui,
+body.city-mode #nitro-ui,
+body.city-mode #btn-pause,
+body.city-mode #btn-cam,
+body.city-mode #dash,
+body.city-mode #drift-ui,
+body.city-mode #key-hints { display: none !important; }
+
+#city-hud {
+  position: fixed; inset: 0; z-index: 6; pointer-events: none;
+  font-family: "Orbitron", "Eurostile", "Arial Black", -apple-system, sans-serif;
+  color: #e9f1ff; letter-spacing: .08em;
+}
+#city-hud button, #city-hud canvas, #city-bigmap { pointer-events: auto; }
+
+.city-top {
+  position: absolute; top: max(12px, env(safe-area-inset-top)); left: 12px; right: 12px;
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;
+}
+.city-panel, .city-btn, .city-bigmap-card {
+  background: linear-gradient(180deg, rgba(14,18,34,.78), rgba(8,10,22,.72));
+  border: 1px solid rgba(34,230,255,.35);
+  box-shadow: 0 0 0 1px rgba(255,46,154,.12) inset, 0 8px 24px rgba(0,0,0,.35);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  border-radius: 4px;
+}
+.city-where { padding: 8px 12px 9px; min-width: 150px; }
+.city-where small { display: block; font-size: 9px; opacity: .7; color: #22e6ff; }
+.city-where strong { display: block; font-size: 16px; font-weight: 800; margin-top: 2px; }
+#city-district.flash { animation: city-flash .9s ease-out; }
+@keyframes city-flash {
+  0% { color: #ff2e9a; text-shadow: 0 0 14px #ff2e9a; }
+  100% { color: #e9f1ff; text-shadow: none; }
+}
+.city-actions { display: flex; gap: 8px; }
+.city-btn {
+  font: inherit; font-size: 11px; font-weight: 800; color: #e9f1ff; letter-spacing: .12em;
+  padding: 10px 14px; cursor: pointer;
+}
+.city-btn:active { transform: scale(.96); }
+
+#city-mini {
+  position: absolute; left: 14px;
+  bottom: calc(max(24px, var(--safe-bottom, 0px)) + 118px);
+  width: 118px; height: 118px; border-radius: 50%;
+  border: 1px solid rgba(34,230,255,.45);
+  box-shadow: 0 0 18px rgba(34,230,255,.18), 0 8px 24px rgba(0,0,0,.4);
+  background: #070912; cursor: pointer;
+}
+
+#city-nitro {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  bottom: calc(max(22px, var(--safe-bottom, 0px)) + 6px);
+  --fill: 100%;
+  font: inherit; font-size: 11px; font-weight: 800; letter-spacing: .2em; color: #b9f6ff;
+  padding: 11px 26px; border-radius: 999px; cursor: pointer;
+  border: 1px solid rgba(34,230,255,.5);
+  background:
+    linear-gradient(90deg, rgba(34,230,255,.34) var(--fill), rgba(10,14,28,.8) var(--fill));
+}
+#city-nitro.ready { box-shadow: 0 0 18px rgba(34,230,255,.55); color: #fff; }
+#city-nitro.on { background: linear-gradient(90deg, #ff2e9a, #22e6ff); color: #fff; }
+
+#city-bigmap {
+  position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+  background: rgba(3,4,10,.7);
+}
+#city-bigmap.open { display: flex; }
+.city-bigmap-card { padding: 12px; width: min(92vw, 92vh, 640px); }
+.city-bigmap-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 13px; font-weight: 800; margin-bottom: 8px; color: #ff2e9a;
+}
+.city-bigmap-head small { font-size: 9px; color: #22e6ff; opacity: .8; }
+.city-bigmap-card canvas { display: block; width: 100%; height: auto; border-radius: 2px; }
+
+/* the city button on the menu */
+#btn-city {
+  width: 100%; margin-top: 8px; padding: 12px 14px; border-radius: 12px; cursor: pointer;
+  font-weight: 900; letter-spacing: .08em; font-size: 14px; color: #fff; text-align: left;
+  border: 1px solid rgba(255,46,154,.55);
+  background:
+    radial-gradient(120% 140% at 0% 0%, rgba(255,46,154,.35), transparent 60%),
+    radial-gradient(120% 140% at 100% 100%, rgba(34,230,255,.3), transparent 60%),
+    #0d0f1e;
+  box-shadow: 0 0 22px rgba(255,46,154,.2);
+}
+#btn-city small { display: block; font-size: 10px; font-weight: 700; opacity: .75; letter-spacing: .06em; margin-top: 2px; }
+#btn-city:active { transform: scale(.98); }

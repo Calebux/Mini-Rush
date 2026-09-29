@@ -1722,6 +1722,21 @@ export class UI {
     this.showKeyHints();
   }
 
+  /** Free roam: the race HUD's pedals and speedometer, none of the race's standings. */
+  showCity(): void {
+    this.hideFinishMoment();
+    this.menu.classList.add('hidden');
+    this.results.classList.add('hidden');
+    this.hud.classList.add('visible');
+    document.body.classList.add('city-mode');
+  }
+
+  leaveCity(): void {
+    this.hud.classList.remove('visible');
+    document.body.classList.remove('city-mode');
+    this.menu.classList.remove('hidden');
+  }
+
   showFinishMoment(place: number, time: number): void {
     document.body.classList.add('finish-view');
     this.hideCountdown();

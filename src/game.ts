@@ -32,6 +32,7 @@ import { setUnderglow } from './meshes';
 import { Player } from './player';
 import { createPostFX, LookId, PostFX, savedLook } from './postfx';
 import { Rain } from './rain';
+import { CityMode } from './city/cityMode';
 import { detectTier, QUALITY, QualityTier } from './quality';
 import { RivalManager } from './rivals';
 import { Scenery } from './scenery';
@@ -215,6 +216,7 @@ export class Game {
   private wet = false;                // rain, or a neon city's slick streets: tyres throw spray
   private sprayFlip = false;
   private look: LookId = savedLook();
+  private city: CityMode | null = null;   // free roam, while it is running
 
   constructor(container: HTMLElement) {
     // debug/test handle (crashcheck.mjs pokes at physics through this)
@@ -323,10 +325,20 @@ export class Game {
     this.gun = new GunHud(document.getElementById('hud')!);
 
     this.input = new InputManager(document.body);
-    this.input.onTap = () => this.onTap();
-    this.input.onCamera = () => this.cycleCamera();
-    this.input.onNitroKey = () => this.boostNitro();
-    this.input.onPause = () => this.togglePause();
+    // In the city a tap is a steering touch, Space/N fire nitro, Esc/P leave.
+    this.input.onTap = () => { if (!this.city) this.onTap(); };
+    this.input.onCamera = () => { if (!this.city) this.cycleCamera(); };
+    this.input.onNitroKey = () => (this.city ? this.city.nitro() : this.boostNitro());
+    this.input.onPause = () => (this.city ? this.exitCity() : this.togglePause());
+    window.addEventListener('keydown', (e) => {
+      if (!this.city || e.repeat) return;
+      if (e.key === ' ') this.city.nitro();
+      else if (e.key === 'Tab' || e.key.toLowerCase() === 'm') {
+        e.preventDefault();
+        this.city.toggleMap();
+      }
+    });
+    document.getElementById('btn-city')?.addEventListener('click', () => this.startCity());
     this.ui.onBrake = (down) => (this.input.uiBrake = down);
     this.ui.onGas = (down) => (this.input.uiGas = down);
     this.ui.onCamera = () => this.cycleCamera();
@@ -441,6 +453,30 @@ export class Game {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.postfx?.setSize(window.innerWidth, window.innerHeight, this.curDpr);
     this.garageLiftAt = 0; // re-measure the garage's clear band at the new size
+    this.city?.resize();
+  }
+
+  /** Free roam in Neon City. The race world stays built behind the menu. */
+  private startCity(): void {
+    if (this.city || this.state !== 'menu') return;
+    this.audio.play('start');
+    this.ui.showCity();
+    this.city = new CityMode({
+      renderer: this.renderer, camera: this.camera, assets: this.assets, audio: this.audio,
+      input: this.input, spec: this.carSpec(this.carIndex), tier: this.quality,
+      onExit: () => this.exitCity()
+    });
+    void this.audio.playMusic('race');
+  }
+
+  private exitCity(): void {
+    if (!this.city) return;
+    this.city.dispose();
+    this.city = null;
+    this.audio.play('back');
+    this.ui.leaveCity();
+    this.onResize(); // the camera's projection belongs to the menu again
+    void this.audio.playMusic('menu');
   }
 
   /**
@@ -1322,6 +1358,10 @@ export class Game {
     const real = Math.min(frameTime, 0.05);
     const elapsed = this.clock.elapsedTime;
     const dragPx = this.input.consumeDrag();
+    if (this.city) {
+      this.city.frame(real, elapsed);
+      return;
+    }
     if (this.paused) {
       this.renderFrame();
       return;

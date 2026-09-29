@@ -34,6 +34,18 @@ export class InputManager {
   private downTime = 0;
   private leftHeld = false;
   private rightHeld = false;
+  // Free-roam steering is a virtual stick: how far the steering finger is
+  // from where it landed. A finger that lands on a pedal or button is not it.
+  private steerId: number | null = null;
+  private steerFrom = 0;
+  private steerAt = 0;
+
+  /** -1..1: the steering finger's offset from where it landed; 0 with no finger down. */
+  get touchSteer(): number {
+    if (this.steerId === null) return 0;
+    const reach = Math.max(60, window.innerWidth * 0.16);
+    return Math.max(-1, Math.min(1, (this.steerAt - this.steerFrom) / reach));
+  }
 
   constructor(target: HTMLElement) {
     target.addEventListener('pointerdown', (e) => {
@@ -41,21 +53,31 @@ export class InputManager {
       this.lastX = e.clientX;
       this.moved = 0;
       this.downTime = performance.now();
+      const onControl = (e.target as HTMLElement | null)?.closest('button, [role="button"], #btn-gas, #btn-brake');
+      if (!onControl && this.steerId === null) {
+        this.steerId = e.pointerId;
+        this.steerFrom = this.steerAt = e.clientX;
+      }
     });
     target.addEventListener('pointermove', (e) => {
+      if (e.pointerId === this.steerId) this.steerAt = e.clientX;
       if (!this.down) return;
       const dx = e.clientX - this.lastX;
       this.lastX = e.clientX;
       this.dragDx += dx;
       this.moved += Math.abs(dx) + Math.abs(e.movementY ?? 0);
     });
-    const up = () => {
+    const up = (e: PointerEvent) => {
+      if (e.pointerId === this.steerId) this.steerId = null;
       if (!this.down) return;
       this.down = false;
       if (this.moved < 14 && performance.now() - this.downTime < 300) this.onTap();
     };
     target.addEventListener('pointerup', up);
-    target.addEventListener('pointercancel', () => (this.down = false));
+    target.addEventListener('pointercancel', (e) => {
+      if (e.pointerId === this.steerId) this.steerId = null;
+      this.down = false;
+    });
 
     window.addEventListener('keydown', (e) => {
       if (this.isEditableTarget(e.target)) return;
@@ -97,6 +119,7 @@ export class InputManager {
 
   private releaseHeldInputs(): void {
     this.down = false;
+    this.steerId = null;
     this.dragDx = 0;
     this.leftHeld = false;
     this.rightHeld = false;

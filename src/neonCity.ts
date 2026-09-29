@@ -82,7 +82,7 @@ function drawSign(ctx: CanvasRenderingContext2D, x: number, y: number, w: number
   ctx.restore();
 }
 
-function signAtlas(): NonNullable<typeof atlas> {
+export function signAtlas(): NonNullable<typeof atlas> {
   if (atlas) return atlas;
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = ATLAS;
@@ -113,7 +113,7 @@ function signAtlas(): NonNullable<typeof atlas> {
 }
 
 /** Soft round falloff; stretched by its quad it is a halo, a streak or a pool. */
-function glow(): THREE.CanvasTexture {
+export function glow(): THREE.CanvasTexture {
   if (glowTexture) return glowTexture;
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = 64;
@@ -131,7 +131,7 @@ function glow(): THREE.CanvasTexture {
 }
 
 /** Quad soup for one layer of one sector. */
-class Quads {
+export class Quads {
   readonly pos: number[] = [];
   readonly uv: number[] = [];
   readonly col: number[] = [];
@@ -351,15 +351,17 @@ export function puddleRoughness(): THREE.CanvasTexture {
     seed = Math.imul(seed ^ (seed >>> 13), 3266489909) >>> 0;
     return ((seed ^= seed >>> 16) >>> 0) / 4294967296;
   };
-  for (let i = 0; i < 70; i++) {
-    const x = rand() * 256, y = rand() * 256, r = 8 + rand() * 30;
-    const wet = rand() < 0.65;
+  // Many small soft patches that overlap into irregular shapes. A few big
+  // round ones read as painted ovals once perspective stretches them.
+  for (let i = 0; i < 260; i++) {
+    const x = rand() * 256, y = rand() * 256, r = 3 + rand() * rand() * 16;
+    const wet = rand() < 0.6;
     const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-    g.addColorStop(0, wet ? 'rgba(0,25,0,0.9)' : 'rgba(0,200,0,0.5)');
-    g.addColorStop(1, wet ? 'rgba(0,25,0,0)' : 'rgba(0,200,0,0)');
+    g.addColorStop(0, wet ? 'rgba(0,30,0,0.55)' : 'rgba(0,190,0,0.35)');
+    g.addColorStop(1, wet ? 'rgba(0,30,0,0)' : 'rgba(0,190,0,0)');
     ctx.fillStyle = g;
     ctx.beginPath();
-    ctx.ellipse(x, y, r * 0.6, r, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, y, r * (0.5 + rand() * 0.8), r, rand() * Math.PI, 0, Math.PI * 2);
     ctx.fill();
   }
   puddles = new THREE.CanvasTexture(canvas);
