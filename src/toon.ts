@@ -69,17 +69,44 @@ export function finishVehicle(root: THREE.Object3D, paint?: number): void {
           out.userData.isPaint = true;
         }
       }
-      out.roughness = src.map ? 0.72 : /glass/i.test(name) ? 0.18 :
-        /tire|tyre|rubber|cloth|carbon|interior/i.test(name) ? 0.85 : 0.32;
-      out.metalness = src.map ? 0.05 : /steel|alumin|chrome|rim/i.test(name) ? 0.65 :
-        /paint|body/i.test(name) ? 0.25 : 0.08;
+      // Physically based finish by what the part is. `carSurface` is how
+      // strongly it reflects the map's environment (src/lighting.ts).
+      const role = src.map ? 'textured'
+        : /glass|wind(ow|shield)/i.test(name) ? 'glass'
+        : /tire|tyre|rubber/i.test(name) ? 'tyre'
+        : /cloth|carbon|interior|leather|seat|dash|black|soft/i.test(name) ? 'trim'
+        : /steel|alumin|chrome|rim|exhaust|grill|silver/i.test(name) ? 'chrome'
+        : out.userData.isPaint || /paint|body|shell/i.test(name) ? 'paint' : 'other';
+      const finish: Record<typeof role, [number, number, number]> = {
+        // roughness, metalness, reflection strength
+        textured: [0.6, 0.05, 0.8], glass: [0.04, 0.2, 1.6], tyre: [0.9, 0, 0.35],
+        trim: [0.68, 0.1, 0.6], chrome: [0.16, 1, 1.2], paint: [0.42, 0.3, 1], other: [0.4, 0.3, 1]
+      };
+      const [roughness, metalness, reflect] = finish[role];
+      let result: THREE.MeshStandardMaterial = out;
+      if (role === 'paint') {
+        // Metallic base under a mirror clear coat: the base's flake gives the
+        // colour depth, the coat gives the sharp reflection a real car has.
+        result = new THREE.MeshPhysicalMaterial({
+          name: out.name, color: out.color, map: out.map, normalMap: out.normalMap, side: out.side,
+          transparent: out.transparent, opacity: out.opacity, alphaTest: out.alphaTest,
+          clearcoat: 1, clearcoatRoughness: 0.05
+        });
+        result.userData = { ...out.userData };
+        out.dispose();
+      }
+      result.roughness = roughness;
+      result.metalness = metalness;
+      result.userData.carSurface = reflect;
+      if (role === 'glass') result.color.multiplyScalar(0.6);
       if (/emissive|headlight|taillight/i.test(name) && neutral) {
         const light = /warm|tail/i.test(name) ? 0xff3b25 : 0xc4edff;
-        out.color.setHex(light); out.emissive.setHex(light); out.emissiveIntensity = 0.6;
+        // bright enough to bloom where there is bloom, and read as a lamp where there is not
+        result.color.setHex(light); result.emissive.setHex(light); result.emissiveIntensity = 2;
       }
       if (src.map) src.map.magFilter = THREE.NearestFilter;
-      cache.set(material, out);
-      return out;
+      cache.set(material, result);
+      return result;
     };
     mesh.material = Array.isArray(mesh.material) ? mesh.material.map(convert) : convert(mesh.material);
   });

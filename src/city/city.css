@@ -157,3 +157,13 @@ body.city-mode #race-mini { display: none !important; }
 #city-nav[data-turn="arrive"] i { --nav-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z'/%3E%3C/svg%3E"); }
 #city-nav b { display: block; font-size: 13px; font-weight: 900; color: #fff; letter-spacing: .1em; }
 #city-nav small { display: block; font-size: 9px; color: #fcff52; opacity: .85; margin-top: 1px; }
+
+/* hold-to-drift, just above the nitro pill */
+#city-drift {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  bottom: calc(max(22px, var(--safe-bottom, 0px)) + 60px);
+  font: inherit; font-size: 10px; font-weight: 800; letter-spacing: .2em; color: #ffd2e8;
+  padding: 9px 22px; border-radius: 999px; cursor: pointer; touch-action: none;
+  border: 1px solid rgba(255,46,154,.55); background: rgba(10,14,28,.78);
+}
+#city-drift.on { background: linear-gradient(90deg, #ff2e9a, #a36bff); color: #fff; box-shadow: 0 0 18px rgba(255,46,154,.55); }

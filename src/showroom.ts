@@ -2,6 +2,7 @@ import * as T from 'three';
 import { AssetLibrary, disposeCarInstance } from './assets';
 import type { CarSpec } from './cars';
 import { buildReflectionSky, environmentTheme } from './environment';
+import { lightCars, studioEnvironment } from './lighting';
 import { MAPS } from './maps';
 
 /** One renderer, a separate warmly lit scene: menu lighting never changes a race. */
@@ -14,6 +15,7 @@ export class Showroom {
   private dragX: number | null = null;
   private stage: HTMLElement | null = null;
   private bounds = new T.Box3();
+  private lit = '';
   constructor(private assets: AssetLibrary) {
     // Racing green & gold: a dark, warm showroom, so the car is the brightest
     // thing on screen instead of competing with pale walls.
@@ -104,6 +106,11 @@ export class Showroom {
           }
       this.camera.position.copy(center).addScaledVector(direction, distance);
       this.camera.lookAt(center);
+    }
+    // the car on the turntable reflects studio softboxes: the photo-shoot look
+    if (this.car && this.lit !== this.key) {
+      lightCars(this.car, studioEnvironment(renderer));
+      this.lit = this.key;
     }
     renderer.render(this.scene, this.camera);
   }

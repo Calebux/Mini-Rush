@@ -33,6 +33,8 @@ import { Player } from './player';
 import { createPostFX, LookId, PostFX, savedLook } from './postfx';
 import { Rain } from './rain';
 import { RaceMinimap } from './raceMap';
+import { PadMenu } from './padMenu';
+import { carReflection, lightCars, mapEnvironment } from './lighting';
 import { CityMode } from './city/cityMode';
 import { detectTier, QUALITY, QualityTier } from './quality';
 import { RivalManager } from './rivals';
@@ -219,6 +221,7 @@ export class Game {
   private look: LookId = savedLook();
   private city: CityMode | null = null;   // free roam, while it is running
   private raceMap: RaceMinimap | null = null;
+  private padMenu = new PadMenu();
 
   constructor(container: HTMLElement) {
     // debug/test handle (crashcheck.mjs pokes at physics through this)
@@ -329,7 +332,7 @@ export class Game {
     this.input = new InputManager(document.body);
     // In the city a tap is a steering touch, Space/N fire nitro, Esc/P leave.
     this.input.onTap = () => { if (!this.city) this.onTap(); };
-    this.input.onCamera = () => { if (!this.city) this.cycleCamera(); };
+    this.input.onCamera = () => (this.city ? this.city.cycleCamera() : this.cycleCamera());
     this.input.onNitroKey = () => (this.city ? this.city.nitro() : this.boostNitro());
     this.input.onPause = () => (this.city ? this.exitCity() : this.togglePause());
     window.addEventListener('keydown', (e) => {
@@ -340,11 +343,29 @@ export class Game {
         this.city.toggleMap();
       }
     });
+    // A controller: ✕ is the main action (nitro, or fire in armed modes; it
+    // also resumes from pause), △ the city map, ○ closes it.
+    // On a menu, pause or results screen the pad moves a highlight instead.
+    this.input.onPadAccept = () => {
+      if (this.padInMenu()) this.padMenu.accept();
+      else if (this.city) this.city.nitro();
+      else this.onTap();
+    };
+    this.input.onPadNav = (dx, dy) => { if (this.padInMenu()) this.padMenu.move(dx, dy); };
+    // △: the map in the city, nitro in a race (R1/L1 are the handbrake now)
+    this.input.onPadMap = () => (this.city ? this.city.toggleMap() : this.boostNitro());
+    this.input.onPadBack = () => {
+      if (this.padInMenu()) this.padMenu.back();
+      else if (this.city?.mapOpen) this.city.toggleMap();
+    };
+    this.input.onPadChange = (name) => {
+      this.ui.popText(name ? 'CONTROLLER CONNECTED' : 'CONTROLLER DISCONNECTED', '#22e6ff');
+    };
     document.getElementById('btn-city')?.addEventListener('click', () => this.startCity('free'));
     document.getElementById('btn-taxi')?.addEventListener('click', () => this.startCity('taxi'));
     this.ui.onBrake = (down) => (this.input.uiBrake = down);
     this.ui.onGas = (down) => (this.input.uiGas = down);
-    this.ui.onCamera = () => this.cycleCamera();
+    this.ui.onCamera = () => (this.city ? this.city.cycleCamera() : this.cycleCamera());
     this.ui.onNitroPress = () => this.boostNitro();
     this.ui.onPause = () => this.togglePause();
     this.ui.onResume = () => this.togglePause();
@@ -457,6 +478,12 @@ export class Game {
     this.postfx?.setSize(window.innerWidth, window.innerHeight, this.curDpr);
     this.garageLiftAt = 0; // re-measure the garage's clear band at the new size
     this.city?.resize();
+  }
+
+  /** A screen of buttons rather than a car to drive: the pad navigates it. */
+  private padInMenu(): boolean {
+    if (this.city) return false; // the city has its own buttons: △ map, ○ close, Options exit
+    return this.paused || this.state === 'menu' || this.state === 'finished';
   }
 
   /** Free roam in Neon City. The race world stays built behind the menu. */
@@ -809,6 +836,9 @@ export class Game {
       this.raceMap ??= new RaceMinimap(mini);
       this.raceMap.setTrack(this.track, map.districts[0].accent);
     }
+    // every car in the race reflects this city's sky, lamps and signs
+    const carSky = environmentTheme(map);
+    lightCars(this.scene, mapEnvironment(this.renderer, carSky), carReflection(carSky));
     if (this.state === 'boot') {
       // seat the menu camera immediately so boot doesn't swoop in from origin
       const b = this.track.frame(-6 - CAMS[0].back);
@@ -834,6 +864,8 @@ export class Game {
       disposeCarInstance(this.player.mesh);
       this.player = new Player(this.scene, this.assets, this.track, this.carSpec(i));
       this.player.reset({ s: -6, x: -2 });
+      const carSky = environmentTheme(MAPS[this.mapIndex]);
+      lightCars(this.player.mesh, mapEnvironment(this.renderer, carSky), carReflection(carSky));
     }
   }
 
@@ -1359,6 +1391,7 @@ export class Game {
     this.ui.popText(label, '#ff8a3d');
     this.audio.play('crash');
     if (navigator.vibrate) navigator.vibrate([50, 40, 110]);
+    this.input.rumble(1, 320);
   }
 
   private tick(): void {
@@ -1366,6 +1399,8 @@ export class Game {
     const real = Math.min(frameTime, 0.05);
     const elapsed = this.clock.elapsedTime;
     const dragPx = this.input.consumeDrag();
+    this.input.poll();
+    this.padMenu.status(this.input.padName, this.padInMenu());
     if (this.city) {
       this.city.frame(real, elapsed);
       return;

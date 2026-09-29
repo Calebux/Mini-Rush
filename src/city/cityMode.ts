@@ -6,6 +6,7 @@ import type { CarSpec } from '../cars';
 import { buildHorizon, buildReflectionSky, disposeHorizon, environmentTheme } from '../environment';
 import type { InputManager } from '../input';
 import { MAPS } from '../maps';
+import { carReflection, lightCars, mapEnvironment } from '../lighting';
 import { glow } from '../neonCity';
 import { createPostFX, PostFX, savedLook } from '../postfx';
 import type { QualityTier } from '../quality';
@@ -38,6 +39,20 @@ export interface CityDeps {
   onExit: () => void;
 }
 
+/**
+ * Camera angles, cycled with □ / C / the CAM button. `back` is metres behind
+ * the car (negative: in front of its centre), `h` the height; the attached
+ * ones ride on the car with no lag.
+ */
+const CITY_CAMS = [
+  { name: 'CHASE', back: 8.2, h: 3.9, ahead: 6, lookH: 1.3, fov: 66, lag: 6, attached: false },
+  { name: 'FAR CHASE', back: 13.5, h: 6.4, ahead: 8, lookH: 1.2, fov: 60, lag: 5, attached: false },
+  { name: 'LOW', back: 5.4, h: 1.6, ahead: 10, lookH: 1.1, fov: 72, lag: 8, attached: false },
+  { name: 'HOOD', back: -1.1, h: 1.45, ahead: 20, lookH: 1.05, fov: 72, lag: 0, attached: true },
+  { name: 'BUMPER', back: -2.3, h: 0.62, ahead: 20, lookH: 0.6, fov: 76, lag: 0, attached: true },
+  { name: 'TOP DOWN', back: 3, h: 34, ahead: 4, lookH: 0, fov: 55, lag: 4, attached: false }
+] as const;
+
 const MAP_RANGE = CITY_EXTENT + 34; // metres from the centre the map image covers
 const MAP_PX = 640;
 
@@ -67,6 +82,10 @@ export class CityMode {
   private camPos = new THREE.Vector3();
   private camLook = new THREE.Vector3();
   private shake = 0;
+  private camMode = 0;
+  private brakeLamp: THREE.Mesh | null = null;
+  private reverseLamp: THREE.Mesh | null = null;
+  private tailPool: THREE.Mesh | null = null;
   private sprayFlip = false;
   private lastSkid = -10;
   private hud: HTMLElement;
@@ -103,6 +122,8 @@ export class CityMode {
     this.scene.add(this.car);
     this.passenger = new PassengerSequence(this.scene, this.car, deps.spec.color, deps.assets.clonePassenger());
     this.addCarLights();
+    // the player's car and the traffic reflect the city's neon, not a gradient
+    lightCars(this.scene, mapEnvironment(deps.renderer, theme), carReflection(theme));
 
     this.rain = new Rain(deps.tier === 0 ? 1200 : 2600);
     this.scene.add(this.rain.object);
@@ -128,6 +149,12 @@ export class CityMode {
     const toggleMap = () => this.toggleMap();
     this.hud.querySelector('#city-mini')!.addEventListener('click', toggleMap);
     this.hud.querySelector('#city-map-btn')!.addEventListener('click', toggleMap);
+    this.hud.querySelector('#city-cam-btn')!.addEventListener('click', () => this.cycleCamera());
+    // the drift button is held, like a handbrake lever
+    const drift = this.hud.querySelector('#city-drift') as HTMLElement;
+    const hold = (on: boolean) => (e: Event) => { e.preventDefault(); deps.input.uiHandbrake = on; drift.classList.toggle('on', on); };
+    drift.addEventListener('pointerdown', hold(true));
+    for (const end of ['pointerup', 'pointercancel', 'pointerleave']) drift.addEventListener(end, hold(false));
     this.bigMap.addEventListener('click', toggleMap);
 
     const f = this.drive.forward;
@@ -144,6 +171,17 @@ export class CityMode {
       this.deps.audio.play('nitro');
       this.shake = Math.max(this.shake, 0.5);
     }
+  }
+
+  /** Next camera angle; says its name. */
+  cycleCamera(): void {
+    this.camMode = (this.camMode + 1) % CITY_CAMS.length;
+    this.deps.audio.play('click');
+    this.showToast(`CAMERA · ${CITY_CAMS[this.camMode].name}`, '#22e6ff');
+  }
+
+  get mapOpen(): boolean {
+    return this.bigMap.classList.contains('open');
   }
 
   toggleMap(): void {
@@ -163,11 +201,39 @@ export class CityMode {
         blending: THREE.AdditiveBlending, fog: false, color: new THREE.Color(0xff2a3a).multiplyScalar(0.28) }));
     tail.rotation.x = -Math.PI / 2;
     tail.position.set(0, 0.07, -2.6);
-    for (const mesh of [beam, tail]) {
+    this.tailPool = tail;
+    // Brake and reversing lamps: a glow on the car's own tail, measured from
+    // the model so it sits on whichever car this is.
+    const box = localBounds(this.car);
+    const size = box.getSize(new THREE.Vector3());
+    const lamp = (color: number, w: number) => {
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, size.y * 0.34),
+        new THREE.MeshBasicMaterial({ map: glow(), transparent: true, depthWrite: false,
+          blending: THREE.AdditiveBlending, fog: false, color }));
+      mesh.position.set(0, box.min.y + size.y * 0.55, box.min.z - 0.04);
+      mesh.rotation.y = Math.PI; // facing back, the way the lamps shine
+      return mesh;
+    };
+    this.brakeLamp = lamp(0xff1f2e, size.x * 1.25);
+    this.reverseLamp = lamp(0xdfe8ff, size.x * 0.7);
+    this.reverseLamp.position.z -= 0.02;
+    for (const mesh of [beam, tail, this.brakeLamp, this.reverseLamp]) {
       mesh.renderOrder = 2;
       this.car.add(mesh);
       this.carFx.push(mesh);
     }
+    this.updateLamps();
+  }
+
+  /** Brake lights flare when slowing, white lamps when backing up. */
+  private updateLamps(): void {
+    const d = this.drive;
+    const brake = d.braking ? 1 : 0;
+    (this.brakeLamp!.material as THREE.MeshBasicMaterial).color.setHex(0xff1f2e).multiplyScalar(0.28 + brake * 1.6);
+    (this.reverseLamp!.material as THREE.MeshBasicMaterial).color.setHex(0xdfe8ff).multiplyScalar(d.reversing ? 1.1 : 0);
+    this.reverseLamp!.visible = d.reversing;
+    (this.tailPool!.material as THREE.MeshBasicMaterial).color.setHex(0xff2a3a).multiplyScalar(0.28 + brake * 0.55);
+    this.tailPool!.scale.setScalar(1 + brake * 0.5);
   }
 
   resize(): void {
@@ -181,7 +247,10 @@ export class CityMode {
     const input = this.deps.input;
     const steer = THREE.MathUtils.clamp(input.keySteer + input.touchSteer, -1, 1);
     const passengerSequenceActive = this.passenger.isPlaying();
-    if (!passengerSequenceActive) this.drive.update(dt, { steer, gas: input.gas, brake: input.braking });
+    if (!passengerSequenceActive) {
+      this.drive.update(dt, { steer, gas: input.gas, brake: input.braking, handbrake: input.handbrake });
+    }
+    this.updateLamps();
     const d = this.drive;
     this.traffic.update(dt, d);
     if (this.activities) {
@@ -215,6 +284,7 @@ export class CityMode {
       this.deps.audio.play(d.impact > 11 ? 'crash' : 'bump', Math.min(1, d.impact / 14));
       this.shake = Math.max(this.shake, Math.min(1.4, d.impact / 10));
       if (d.impact > 11 && navigator.vibrate) navigator.vibrate(60);
+      this.deps.input.rumble(Math.min(1, d.impact / 14), d.impact > 11 ? 260 : 120);
     }
     const drifting = Math.abs(d.slip) > 4 && Math.abs(speed) > 10;
     if (drifting && elapsed - this.lastSkid > 0.9) {
@@ -373,20 +443,24 @@ export class CityMode {
     const d = this.drive;
     // Hang behind the direction of travel rather than the nose, so a drift
     // swings the car across the frame instead of dragging the camera round.
-    const travel = d.vel.lengthSq() > 16 ? d.vel.clone().normalize() : d.forward;
-    const dir = d.forward.clone().lerp(travel, 0.45).normalize();
-    const back = 8.2 + Math.max(0, speed) * 0.05;
-    let want = new THREE.Vector3(d.x - dir.x * back, 3.9 + Math.max(0, speed) * 0.018, d.z - dir.y * back);
-    let look = new THREE.Vector3(d.x + dir.x * 6, 1.3, d.z + dir.y * 6);
+    const mode = CITY_CAMS[this.camMode];
+    // reversing, travel points backwards: keep the camera behind the nose
+    const travel = d.vel.lengthSq() > 16 && d.speed > 0 ? d.vel.clone().normalize() : d.forward;
+    // on the car the view is the nose's; behind it, a blend toward travel
+    const dir = mode.attached ? d.forward : d.forward.clone().lerp(travel, 0.45).normalize();
+    const back = mode.back + (mode.attached ? 0 : Math.max(0, speed) * 0.05);
+    let want = new THREE.Vector3(d.x - dir.x * back, mode.h + (mode.attached ? 0 : Math.max(0, speed) * 0.018), d.z - dir.y * back);
+    let look = new THREE.Vector3(d.x + dir.x * mode.ahead, mode.lookH, d.z + dir.y * mode.ahead);
     // a passenger getting in or out: swing round to watch the door
     const shot = this.passenger.cameraShot();
     if (shot) {
       want = shot.position;
       look = shot.look;
     }
-    const k = 1 - Math.exp(-dt * (shot ? 2.2 : 6));
+    const rigid = mode.attached && !shot;
+    const k = rigid ? 1 : 1 - Math.exp(-dt * (shot ? 2.2 : mode.lag));
     this.camPos.lerp(want, k);
-    this.camLook.lerp(look, 1 - Math.exp(-dt * (shot ? 3 : 10)));
+    this.camLook.lerp(look, rigid ? 1 : 1 - Math.exp(-dt * (shot ? 3 : 10)));
     cam.position.copy(this.camPos);
     if (this.shake > 0) {
       cam.position.x += (Math.random() - 0.5) * this.shake * 0.3;
@@ -394,7 +468,7 @@ export class CityMode {
       this.shake = Math.max(0, this.shake - dt * 3);
     }
     cam.lookAt(this.camLook);
-    const fov = 66 + Math.max(0, speed) * 0.22 + (d.boosting ? 9 : 0);
+    const fov = mode.fov + Math.max(0, speed) * 0.22 + (d.boosting ? 9 : 0);
     if (Math.abs(cam.fov - fov) > 0.1) {
       cam.fov = THREE.MathUtils.damp(cam.fov, fov, 4, dt);
       cam.updateProjectionMatrix();
@@ -567,6 +641,7 @@ export class CityMode {
 
   dispose(): void {
     this.deps.audio.stopEngine();
+    this.deps.input.uiHandbrake = false;
     this.hud.remove();
     this.scene.remove(this.car);
     for (const mesh of this.carFx) {
@@ -592,6 +667,23 @@ export class CityMode {
     this.deps.camera.far = 300;
     this.deps.camera.updateProjectionMatrix();
   }
+}
+
+/** A car's extent in its own frame, leaving out glows and the ground shadow. */
+function localBounds(car: THREE.Group): THREE.Box3 {
+  const box = new THREE.Box3();
+  car.updateMatrixWorld(true);
+  const inverse = car.matrixWorld.clone().invert();
+  car.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh || o.name === 'car-ground-fx' || o.parent?.name === 'car-ground-fx') return;
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    if (materials.some((m) => m.transparent)) return;
+    mesh.geometry.computeBoundingBox();
+    box.union(mesh.geometry.boundingBox!.clone().applyMatrix4(inverse.clone().multiply(mesh.matrixWorld)));
+  });
+  if (box.isEmpty()) box.set(new THREE.Vector3(-0.9, 0, -2.2), new THREE.Vector3(0.9, 1.2, 2.2));
+  return box;
 }
 
 /** Night sky: near-black overhead, the city's magenta glow at the horizon. */
@@ -676,6 +768,7 @@ function buildHud(mode: 'free' | 'taxi'): HTMLElement {
         <strong id="city-district">DOWNTOWN</strong>
       </div>
       <div class="city-actions">
+        <button class="city-btn" id="city-cam-btn" type="button" aria-label="Change camera">CAM</button>
         <button class="city-btn" id="city-map-btn" type="button">MAP</button>
         <button class="city-btn" id="city-exit" type="button">EXIT</button>
       </div>
@@ -692,6 +785,7 @@ function buildHud(mode: 'free' | 'taxi'): HTMLElement {
     </div>
     <canvas id="city-mini" width="150" height="150" aria-label="Minimap. Tap for the full map."></canvas>
     <button id="city-nitro" type="button" aria-label="Nitro"><span>NITRO</span></button>
+    <button id="city-drift" type="button" aria-label="Handbrake: hold to drift">DRIFT</button>
     <div id="city-toast" role="status" aria-live="polite"></div>
     <div id="city-bigmap" role="dialog" aria-label="City map">
       <div class="city-bigmap-card">

@@ -14,6 +14,12 @@ falls back to a procedural stand-in for any file that isn't on disk.
 |---|---|---|---|
 | `car_traffic_1..6.glb`, `car_wheel.glb` | [PSX Style Cars](https://ggbot.itch.io/psx-style-cars) | GGBotNet | CC0 1.0 |
 | `city_building_1..3.glb` | [Downtown City MegaKit](https://quaternius.itch.io/downtown-city-megakit) (Standard/free) | Quaternius | CC0 1.0 |
+| `passenger.glb` — character | Boy 01 | [abubakaraulakh096 on CGTrader](https://www.cgtrader.com/designers/abubakaraulakh096) | CGTrader free model, credited as the author asks |
+| `passenger.glb` — animation (Walking, Entering Car, Exiting Car, Sitting Idle, Standing Idle) | [Mixamo](https://www.mixamo.com) | Adobe | Mixamo terms: royalty-free in games |
+
+`passenger.glb` is the Boy 01 character rigged through Mixamo with the five
+clips above baked in, decimated to about 18k triangles and a 1024 px WebP
+texture for phones.
 
 `car_player.glb` and `car_super_1..5.glb` are **empty drop-in slots**. The hero
 car and the five premium garage cars render procedurally (`buildCar`, each in

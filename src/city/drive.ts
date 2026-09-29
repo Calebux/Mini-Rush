@@ -16,14 +16,19 @@ export interface DriveInput {
   steer: number;   // -1 left .. 1 right
   gas: boolean;
   brake: boolean;
+  /** Locks the rear: the tail lets go and the car drifts. */
+  handbrake?: boolean;
 }
 
 const RADIUS = 1.15;           // the car as a circle, for kerbs and walls
 const ACCEL = 17;              // m/s² at a standstill, tapering to top speed
-const BRAKE = 34;
-const REVERSE_TOP = 11;
+const BRAKE = 28;              // foot brake, m/s²: hard, straight, no slide
+const HANDBRAKE = 7;           // the handbrake scrubs less speed: it is for turning
+const REVERSE_TOP = 6.5;            // ~23 km/h backwards
+const REVERSE_DELAY = 0.3;     // seconds stopped with the brake held before it reverses
 const GRIP = 9;                // how fast sideways slip dies, per second
-const DRIFT_GRIP = 1.9;        // brake + steer at speed: the tail lets go
+const BRAKING_GRIP = 11;       // braking loads the front: a touch more bite
+const DRIFT_GRIP = 1.9;        // handbrake at speed: the tail lets go
 const NITRO_TIME = 2.6;
 const NITRO_RECHARGE = 9;      // seconds for an empty tank to refill
 
@@ -38,6 +43,11 @@ export class CityDrive {
   nitroT = 0;                  // seconds of boost left
   /** Per-frame: how hard the car hit something this frame, 0 when it did not. */
   impact = 0;
+  /** The brake lights are on: slowing under the brake, or the handbrake. */
+  braking = false;
+  /** Going backwards under the brake pedal: the white reversing lights. */
+  reversing = false;
+  private stoppedFor = 0;
 
   constructor(private topSpeed: number, private accelMul: number) {}
 
@@ -73,13 +83,20 @@ export class CityDrive {
 
     let fwd = this.speed;
     const top = this.topSpeed * (this.boosting ? 1.45 : 1);
+    const handbrake = !!input.handbrake;
+    // The brake pedal stops the car; only once it has sat still for a moment
+    // does holding it back the car up. Gas while rolling backwards brakes too.
+    this.stoppedFor = input.brake && Math.abs(fwd) < 0.6 ? this.stoppedFor + dt : 0;
     if (this.boosting) {
       fwd += ACCEL * 1.6 * dt;
     } else if (input.gas && !input.brake) {
-      fwd += ACCEL * this.accelMul * Math.max(0.12, 1 - Math.max(0, fwd) / top) * dt;
+      fwd += (fwd < -0.5 ? BRAKE : ACCEL * this.accelMul * Math.max(0.12, 1 - Math.max(0, fwd) / top)) * dt;
+    } else if (input.brake && fwd > 0.5) {
+      fwd = Math.max(0, fwd - BRAKE * dt);
+    } else if (input.brake && (fwd < -0.5 || this.stoppedFor > REVERSE_DELAY)) {
+      fwd = Math.max(-REVERSE_TOP, fwd - ACCEL * 0.6 * dt);
     } else if (input.brake) {
-      fwd -= (fwd > 0.5 ? BRAKE : ACCEL * 0.6) * dt;
-      fwd = Math.max(fwd, -REVERSE_TOP);
+      fwd = 0; // held at a standstill until the reverse kicks in
     } else {
       fwd -= fwd * 0.35 * dt + Math.sign(fwd) * 1.2 * dt; // rolling resistance
       if (Math.abs(fwd) < 0.3) fwd = 0;
@@ -96,10 +113,13 @@ export class CityDrive {
     const f = this.forward;
     const r = new THREE.Vector2(f.y, -f.x);
     let side = this.vel.dot(r);
-    const drifting = input.brake && Math.abs(this.steer) > 0.35 && fwd > 12;
-    side *= Math.exp(-(drifting ? DRIFT_GRIP : GRIP) * dt);
-    // a drift keeps its speed through the corner rather than stopping dead
-    if (drifting) fwd += BRAKE * 0.72 * dt;
+    const drifting = handbrake && fwd > 8;
+    const braking = input.brake && fwd > 0.5;
+    side *= Math.exp(-(drifting ? DRIFT_GRIP : braking ? BRAKING_GRIP : GRIP) * dt);
+    // the handbrake scrubs a little speed; the drift carries the rest round
+    if (handbrake) fwd = Math.max(0, fwd - HANDBRAKE * dt);
+    this.braking = braking || (handbrake && fwd > 0.5) || (input.gas && fwd < -0.5);
+    this.reversing = input.brake && fwd < -0.5;
     this.slip = side;
     this.vel.set(f.x * fwd + r.x * side, f.y * fwd + r.y * side);
 
