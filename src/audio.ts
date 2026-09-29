@@ -124,6 +124,28 @@ export class AudioManager {
     return this.masterGain ?? this.ctx!.destination;
   }
 
+  /** Listeners for volume and mute changes: the radio follows them. */
+  onLevel: (volume: number, muted: boolean) => void = () => {};
+  /** While the radio plays, game music stands down; it comes back after. */
+  private radioOn = false;
+
+  /** The radio started or stopped: silence the game's music, or bring it back. */
+  setRadio(on: boolean): void {
+    if (on === this.radioOn) return;
+    this.radioOn = on;
+    if (on) {
+      this.stopMusicSource();
+    } else if (this.musicName) {
+      const name = this.musicName;
+      this.musicName = null;
+      void this.playMusic(name, this.musicVol);
+    }
+  }
+
+  get isMuted(): boolean {
+    return this.muted;
+  }
+
   /** Current master volume (0..1), for the UI slider to reflect. */
   get level(): number {
     return this.volume;
@@ -135,6 +157,7 @@ export class AudioManager {
     try {
       localStorage.setItem('minirush.volume', String(this.volume));
     } catch { /* persistence is best-effort */ }
+    this.onLevel(this.volume, this.muted);
     if (this.masterGain && this.ctx) {
       this.masterGain.gain.setTargetAtTime(this.volume, this.ctx.currentTime, 0.03);
     }
@@ -143,6 +166,7 @@ export class AudioManager {
   /** Mute/unmute everything live — running music and engine included. */
   setMuted(m: boolean): void {
     this.muted = m;
+    this.onLevel(this.volume, m);
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
     this.musicGain?.gain.cancelScheduledValues(t);
@@ -310,12 +334,13 @@ export class AudioManager {
     this.musicVol = volume;
     this.stopMusicSource();
     if (this.muted) { this.stopMusicSource(); return; } // remembered for unmute
+    if (this.radioOn) return;                           // remembered for when the radio stops
     let buf = this.musicBufs.get(name) ?? null;
     if (!buf) {
       buf = await this.fetchBuffer(`${this.musicBase}${name}`);
       if (buf) this.musicBufs.set(name, buf);
     }
-    if (request !== this.musicRequest || this.muted) return;
+    if (request !== this.musicRequest || this.muted || this.radioOn) return;
     if (!buf) {
       this.startSynthMusic(name);
       return;

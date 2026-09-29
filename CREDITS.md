@@ -14,8 +14,12 @@ falls back to a procedural stand-in for any file that isn't on disk.
 |---|---|---|---|
 | `car_traffic_1..6.glb`, `car_wheel.glb` | [PSX Style Cars](https://ggbot.itch.io/psx-style-cars) | GGBotNet | CC0 1.0 |
 | `city_building_1..3.glb` | [Downtown City MegaKit](https://quaternius.itch.io/downtown-city-megakit) (Standard/free) | Quaternius | CC0 1.0 |
+| Magnum .357 (Gun Run driver's pistol; not yet in the game) | Magnum357 | [bobadams3d on CGTrader](https://www.cgtrader.com/designers/bobadams3d) | CGTrader model, credited as the author asks |
 | `passenger.glb` — character | Boy 01 | [abubakaraulakh096 on CGTrader](https://www.cgtrader.com/designers/abubakaraulakh096) | CGTrader free model, credited as the author asks |
 | `passenger.glb` — animation (Walking, Entering Car, Exiting Car, Sitting Idle, Standing Idle) | [Mixamo](https://www.mixamo.com) | Adobe | Mixamo terms: royalty-free in games |
+
+| `env/garage_2k.jpg` — the showroom car's reflections | [Autoshop 01](https://polyhaven.com/a/autoshop_01) (tonemapped, resized) | Poly Haven | CC0 1.0 |
+| `public/fonts/orbitron-latin.woff2` | [Orbitron](https://fonts.google.com/specimen/Orbitron) | Matt McInerney | SIL Open Font License 1.1 |
 
 `passenger.glb` is the Boy 01 character rigged through Mixamo with the five
 clips above baked in, decimated to about 18k triangles and a 1024 px WebP

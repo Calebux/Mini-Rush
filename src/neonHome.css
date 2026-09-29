@@ -1,0 +1,341 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   NEON NIGHT — the front end's look, loaded last so it wins.
+
+   One palette with the game's own nights: near-black navy, MAGENTA for the
+   one thing to press, CYAN for information and hairlines, and YELLOW kept
+   for money (NIM and coins) so a prize is the only warm thing on screen.
+   The old green-and-gold tokens are redefined here, so every screen built
+   on them (garage, workshop, driver card) follows without being rewritten.
+   ───────────────────────────────────────────────────────────────────────── */
+
+@font-face {
+  font-family: 'Orbitron';
+  src: url('/fonts/orbitron-latin.woff2') format('woff2');
+  font-weight: 400 900;
+  font-display: swap;
+}
+
+:root {
+  --nn-bg: #060712;
+  --nn-glass: rgba(11, 13, 28, .82);
+  --nn-glass-hi: rgba(20, 22, 44, .9);
+  --nn-magenta: #ff2e9a;
+  --nn-magenta-hi: #ff6fbd;
+  --nn-cyan: #22e6ff;
+  --nn-violet: #8b5cf6;
+  --nn-money: #fcd34d;
+  --nn-text: #eef2ff;
+  --nn-muted: #9aa3c7;
+  --nn-line: rgba(34, 230, 255, .22);
+  --nn-line-hi: rgba(34, 230, 255, .55);
+  --nn-display: 'Orbitron', 'Eurostile', 'Arial Black', -apple-system, sans-serif;
+
+  /* the old tokens, pointed at the new palette */
+  --rg-deep: #14163a;
+  --rg-deep-2: #0c0e24;
+  --rg-glass: var(--nn-glass);
+  --gold: var(--nn-magenta);
+  --gold-hi: var(--nn-magenta-hi);
+  --gold-ink: #ffffff;
+  --cream: var(--nn-text);
+  --muted: var(--nn-muted);
+  --line: var(--nn-line);
+}
+
+html, body { background: var(--nn-bg); }
+
+/* ── the home screen ─────────────────────────────────────────────────── */
+
+#menu {
+  background:
+    linear-gradient(180deg, rgba(6,7,18,.72) 0%, rgba(6,7,18,0) 22%, rgba(6,7,18,0) 38%, rgba(6,7,18,.9) 62%, #060712 100%);
+  gap: 10px;
+}
+#menu .logo {
+  font-family: var(--nn-display); font-style: normal; font-weight: 900;
+  font-size: clamp(26px, 8vw, 38px); letter-spacing: 1px; transform: none;
+  text-shadow: 0 0 22px rgba(255,46,154,.35);
+}
+#menu .logo em {
+  font-style: normal;
+  background: linear-gradient(90deg, var(--nn-magenta), var(--nn-cyan));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+#menu .sub-logo {
+  font-family: var(--nn-display); font-style: normal; font-weight: 600;
+  font-size: 8px; letter-spacing: 3.2px; color: var(--nn-cyan);
+}
+#menu .wallet-chip, #menu #wallet-chip.connectable {
+  font-family: var(--nn-display); font-weight: 800; font-size: 9px; letter-spacing: 1.4px;
+  color: var(--nn-text); border: 1px solid var(--nn-line-hi); border-radius: 999px;
+  background: rgba(11,13,28,.7); padding: 9px 13px;
+}
+
+/* the car: the name in the display face, the hint quieter */
+.showroom-caption small, #home-car-eyebrow {
+  font-family: var(--nn-display); font-weight: 600; font-size: 8px; letter-spacing: 2.6px; color: var(--nn-cyan);
+}
+#home-car-name {
+  font-family: var(--nn-display); font-style: normal; font-weight: 900;
+  font-size: clamp(22px, 6.4vw, 34px); letter-spacing: 1px;
+  text-shadow: 0 0 20px rgba(34,230,255,.25), 0 2px 12px #000;
+}
+.showroom-hint {
+  font-family: var(--nn-display); font-weight: 600; font-size: 8px; letter-spacing: 1.6px;
+  background: rgba(11,13,28,.7); border: 1px solid var(--nn-line); color: var(--nn-muted);
+}
+
+/* the panel: glass, a hairline, one accent */
+#menu .menu-panel {
+  background: var(--nn-glass); border: 1px solid var(--nn-line); border-radius: 16px;
+  box-shadow: 0 0 0 1px rgba(255,46,154,.06) inset, 0 20px 60px rgba(0,0,0,.55);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  gap: 10px; padding: 14px;
+}
+#menu .setup-pill {
+  background: rgba(255,255,255,.03); border: 1px solid var(--nn-line); border-radius: 8px;
+  min-width: 0;
+}
+#menu .setup-pill span {
+  font-family: var(--nn-display); font-size: 7.5px; letter-spacing: 2px; color: var(--nn-cyan); opacity: .85;
+}
+#menu .setup-pill strong {
+  font-family: var(--nn-display); font-weight: 800; font-size: 12px; letter-spacing: .5px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;
+}
+
+/* the mode line: a quiet row, not a second call to action */
+#menu .mode-home {
+  border: 1px solid var(--nn-line); background: rgba(255,255,255,.03); border-radius: 10px;
+  padding: 9px 12px; gap: 10px;
+}
+#menu .mode-home-icon { font-size: 22px; }
+#menu .mode-home-copy small { font-family: var(--nn-display); font-size: 7.5px; letter-spacing: 2px; color: var(--nn-muted); }
+#menu .mode-home-copy small b { color: var(--nn-cyan); }
+#menu .mode-home-copy strong {
+  font-family: var(--nn-display); font-style: normal; font-weight: 900; font-size: 15px; letter-spacing: .5px;
+  color: var(--nn-text);
+}
+#menu .mode-home-copy em { font-style: normal; font-size: 11px; color: var(--nn-muted); }
+#menu .mode-home-cta {
+  font-family: var(--nn-display); font-weight: 800; font-size: 9px; letter-spacing: 1.6px;
+  color: var(--nn-cyan); background: transparent; border: 1px solid var(--nn-line-hi); border-radius: 999px;
+  padding: 7px 11px; box-shadow: none;
+}
+
+/* the one thing to press */
+#menu .menu-actions { gap: 8px; }
+#menu #btn-play {
+  font-family: var(--nn-display); font-style: normal; font-weight: 900; font-size: 20px; letter-spacing: 3px;
+  color: #fff; border: 0; border-radius: 12px; padding: 16px;
+  background: linear-gradient(100deg, var(--nn-magenta) 0%, #d62bd8 55%, var(--nn-violet) 100%);
+  box-shadow: 0 0 0 1px rgba(255,255,255,.12) inset, 0 10px 34px rgba(255,46,154,.45);
+}
+#menu #btn-play:active { transform: scale(.98); }
+#menu #btn-garage-menu {
+  font-family: var(--nn-display); font-weight: 800; font-size: 11px; letter-spacing: 2px;
+  color: var(--nn-text); background: rgba(255,255,255,.04); border: 1px solid var(--nn-line-hi); border-radius: 12px;
+}
+
+/* the bounty: slim, and the only yellow on the screen */
+#menu #btn-bounty {
+  border-radius: 12px; padding: 11px 14px; text-align: left;
+  border: 1px solid rgba(252,211,77,.45);
+  background: linear-gradient(100deg, rgba(252,211,77,.14), rgba(11,13,28,.6) 55%);
+  box-shadow: none; color: var(--nn-text);
+}
+#menu #btn-bounty.live {
+  border-color: rgba(252,211,77,.85);
+  box-shadow: 0 0 0 1px rgba(252,211,77,.35), 0 8px 28px rgba(252,211,77,.18);
+}
+#menu #btn-bounty .ev-label {
+  font-family: var(--nn-display); font-size: 7.5px; letter-spacing: 2.4px; color: var(--nn-money);
+}
+#menu #btn-bounty .ev-title {
+  font-family: var(--nn-display); font-weight: 900; font-size: 14px; letter-spacing: .4px; color: var(--nn-money);
+  display: block; margin-top: 3px;
+}
+#menu #btn-bounty .ev-meta { display: block; font-size: 10.5px; color: var(--nn-muted); margin-top: 3px; }
+
+/* the ways to play: four tiles, one style, each with room for its text */
+/* The ways to play beyond a race live in MODES now; the tiles stay in the
+   page, hidden, because the mode cards start their flows through them. */
+.play-tiles { display: none; }
+#menu .play-tile {
+  min-width: 0; margin: 0; text-align: left; cursor: pointer;
+  padding: 10px 12px; border-radius: 12px; min-height: 68px;
+  display: flex; flex-direction: column; justify-content: center; gap: 3px;
+  color: var(--nn-text); border: 1px solid var(--nn-line);
+  background: linear-gradient(135deg, rgba(34,230,255,.07), rgba(139,92,246,.08) 60%, rgba(11,13,28,.5));
+  box-shadow: none; transform: none;
+}
+#menu .play-tile:hover { border-color: var(--nn-line-hi); }
+#menu .play-tile:active { transform: scale(.98); }
+#menu .play-tile .ev-label, #menu .play-tile .ev-title {
+  display: block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#menu .play-tile .ev-label {
+  font-family: var(--nn-display); font-weight: 600; font-size: 7px; letter-spacing: 1.6px; color: var(--nn-cyan);
+}
+#menu .play-tile .ev-title {
+  font-family: var(--nn-display); font-weight: 800; font-size: 12px; letter-spacing: .3px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#menu .play-tile .ev-meta {
+  font-size: 10px; line-height: 1.3; color: var(--nn-muted);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+#menu #btn-weekend.live { border-color: rgba(252,211,77,.6); }
+#menu #btn-weekend.live .ev-label { color: var(--nn-money); }
+
+/* stats and links: quiet */
+#menu #bank-line { color: var(--nn-money); font-family: var(--nn-display); font-size: 11px; letter-spacing: .5px; }
+#menu #vol-slider { accent-color: var(--nn-cyan); }
+#menu .home-links button, #menu .home-links #btn-how {
+  font-family: var(--nn-display); font-weight: 600; font-size: 8px; letter-spacing: 1.6px; color: var(--nn-muted);
+}
+#menu .home-links button:hover { color: var(--nn-cyan); }
+
+/* ── desktop: the car is the hero, the panel a proper sidebar ─────────── */
+@media (min-width: 900px) and (min-height: 560px) {
+  #menu {
+    display: grid; grid-template-columns: minmax(0, 1fr) 400px; grid-template-rows: auto minmax(0, 1fr);
+    align-items: stretch; gap: 0 32px;
+    padding: 28px 36px max(28px, var(--safe-bottom));
+    background:
+      linear-gradient(90deg, rgba(6,7,18,0) 0%, rgba(6,7,18,0) 55%, rgba(6,7,18,.72) 100%),
+      linear-gradient(180deg, rgba(6,7,18,.6) 0%, rgba(6,7,18,0) 18%, rgba(6,7,18,0) 78%, rgba(6,7,18,.7) 100%);
+  }
+  #menu .menu-top { grid-column: 1 / -1; width: 100%; max-width: none; }
+  #home-car-stage { grid-column: 1; grid-row: 2; width: 100%; max-width: none; min-height: 0; }
+  #menu .menu-panel {
+    grid-column: 2; grid-row: 2; width: 100%; max-width: none; align-self: center;
+    max-height: 100%; overflow-y: auto; padding: 18px; gap: 12px; scrollbar-width: thin;
+  }
+  #menu .logo { font-size: 40px; }
+  .showroom-caption { top: 8px; left: 4px; }
+  #home-car-name { font-size: 46px; }
+  .showroom-hint { right: 4px; bottom: 10px; }
+  #menu #btn-play { font-size: 22px; padding: 18px; }
+}
+
+/* ── short phones: tighten, keep RACE in thumb reach ──────────────────── */
+@media (max-height: 740px) and (max-width: 899px) {
+  #menu .menu-panel { gap: 8px; padding: 12px; }
+  #menu .play-tile { min-height: 58px; padding: 8px 10px; }
+  #menu .play-tile .ev-meta { -webkit-line-clamp: 1; }
+  #menu .mode-home-copy em { display: none; }
+  #menu #btn-play { padding: 13px; }
+}
+
+/* ── the mode deck ───────────────────────────────────────────────────── */
+
+#modes { background: radial-gradient(90% 55% at 50% 46%, var(--accent-soft, rgba(255,46,154,.2)), transparent 72%), rgba(6,7,18,.86); }
+#modes .mode-eyebrow {
+  font-family: var(--nn-display); font-weight: 700; font-size: 9px; letter-spacing: 3px; color: var(--nn-cyan);
+}
+#modes .mode-counter { font-family: var(--nn-display); font-style: normal; color: var(--nn-muted); }
+#modes .mode-counter strong { font-family: var(--nn-display); font-style: normal; font-weight: 900; color: var(--nn-text); }
+#modes .mode-close {
+  border: 1px solid var(--nn-line-hi); background: rgba(11,13,28,.7); color: var(--nn-text);
+}
+
+/* section tabs */
+.mode-tabs { display: flex; justify-content: center; gap: 6px; margin: 2px auto 0; flex-wrap: wrap; }
+.mode-tab {
+  font-family: var(--nn-display); font-weight: 800; font-size: 9px; letter-spacing: 2px;
+  color: var(--nn-muted); background: rgba(11,13,28,.6); border: 1px solid var(--nn-line);
+  border-radius: 999px; padding: 8px 13px; cursor: pointer;
+}
+.mode-tab.on { color: #fff; border-color: var(--accent, var(--nn-magenta)); box-shadow: 0 0 16px var(--accent-soft, rgba(255,46,154,.3)); }
+
+/* the card: glass, the mode's own colour on the edge, the icon in a badge */
+#modes .mode-slide {
+  background:
+    radial-gradient(120% 60% at 20% 0%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 60%),
+    linear-gradient(180deg, rgba(20,22,44,.94), rgba(9,10,24,.96));
+  border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  border-radius: 20px; font-style: normal;
+}
+#modes .mode-slide.is-active {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent), 0 24px 60px rgba(0,0,0,.55), 0 0 46px -8px var(--accent);
+}
+#modes .slide-num {
+  font-family: var(--nn-display); font-style: normal; font-weight: 900; letter-spacing: 1px;
+  -webkit-text-stroke: 1px color-mix(in srgb, var(--accent) 45%, transparent); color: transparent;
+}
+#modes .slide-icon {
+  display: grid; place-items: center; width: 64px; height: 64px; font-size: 34px; border-radius: 18px;
+  background: color-mix(in srgb, var(--accent) 16%, rgba(11,13,28,.8));
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 0 0 26px -6px var(--accent);
+}
+#modes .slide-risk {
+  font-family: var(--nn-display); font-weight: 800; font-size: 9px; letter-spacing: 2.4px;
+  color: #0a0b18; background: var(--accent); border-radius: 999px;
+}
+#modes .slide-name {
+  font-family: var(--nn-display); font-style: normal; font-weight: 900; letter-spacing: .5px; line-height: 1.05;
+  font-size: clamp(24px, 7vw, 34px);
+}
+#modes .slide-copy { color: var(--nn-muted); font-size: 14px; line-height: 1.45; }
+#modes .mode-card-stats > span {
+  font-family: var(--nn-display); font-weight: 700; font-size: 9px; letter-spacing: 1.4px;
+  background: rgba(255,255,255,.05); border: 1px solid var(--nn-line); color: var(--nn-text);
+}
+#modes .slide-meter span { font-family: var(--nn-display); font-size: 8px; letter-spacing: 2px; color: var(--nn-muted); }
+#modes .slide-meter i { background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 50%, #fff)); }
+
+/* the footer: cyan laps, magenta go */
+#modes .lap-label { font-family: var(--nn-display); color: var(--nn-muted); letter-spacing: 2px; }
+#modes .lap-chip {
+  font-family: var(--nn-display); font-weight: 800; color: var(--nn-text);
+  background: rgba(11,13,28,.7); border: 1px solid var(--nn-line);
+}
+#modes .lap-chip.sel { background: var(--nn-cyan); color: #06121a; border-color: var(--nn-cyan); box-shadow: 0 0 18px rgba(34,230,255,.45); }
+#lap-select.gone { visibility: hidden; }
+#modes .mode-dots i { background: rgba(154,163,199,.35); }
+#modes .mode-dots i.on { background: var(--accent); }
+#modes .mode-cta {
+  font-family: var(--nn-display); font-style: normal; font-weight: 900; letter-spacing: 2px; color: #fff;
+  background: linear-gradient(100deg, var(--nn-magenta) 0%, #d62bd8 55%, var(--nn-violet) 100%);
+  border: 0; box-shadow: 0 10px 34px rgba(255,46,154,.4); transform: none;
+}
+#modes .mode-cta.locked { background: rgba(255,255,255,.08); color: var(--nn-muted); box-shadow: none; }
+#modes .deck-arrow { border: 1px solid var(--nn-line-hi); background: rgba(11,13,28,.7); color: var(--nn-text); }
+
+/* ── NEON FM ─────────────────────────────────────────────────────────── */
+.radio-tag {
+  font-family: var(--nn-display); font-weight: 800; font-size: 9px; letter-spacing: 1.4px; color: var(--nn-text);
+  background: rgba(11,13,28,.7); border: 1px solid var(--nn-line-hi); border-radius: 999px;
+  padding: 7px 11px; cursor: pointer; white-space: nowrap; max-width: 190px; overflow: hidden; text-overflow: ellipsis;
+}
+.radio-tag.on { border-color: var(--nn-magenta); color: #fff; box-shadow: 0 0 14px rgba(255,46,154,.35); }
+#city-radio.on { border-color: var(--nn-magenta); box-shadow: 0 0 14px rgba(255,46,154,.35); }
+#radio-panel {
+  position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-end; justify-content: center;
+  background: rgba(3,4,10,.55); padding: 16px 16px max(16px, var(--safe-bottom, 0px));
+}
+#radio-panel[hidden] { display: none; }
+.radio-card {
+  width: min(100%, 420px); padding: 16px; border-radius: 18px; color: var(--nn-text);
+  background: linear-gradient(180deg, rgba(20,22,44,.97), rgba(9,10,24,.97));
+  border: 1px solid var(--nn-line-hi); box-shadow: 0 0 40px -10px var(--nn-magenta), 0 20px 60px rgba(0,0,0,.6);
+  font-family: var(--nn-display);
+}
+.radio-head { display: flex; justify-content: space-between; align-items: center; }
+.radio-head strong { font-size: 14px; font-weight: 900; letter-spacing: 2px; color: var(--nn-magenta); }
+.radio-x { background: none; border: 1px solid var(--nn-line); color: var(--nn-text); border-radius: 999px; width: 30px; height: 30px; cursor: pointer; }
+.radio-now { margin: 12px 0; padding: 12px; border-radius: 12px; background: rgba(255,255,255,.04); border: 1px solid var(--nn-line); }
+.radio-now small { display: block; font-size: 8px; letter-spacing: 2.4px; color: var(--nn-cyan); }
+.radio-now b { display: block; font-size: 15px; font-weight: 900; margin-top: 5px; line-height: 1.25; }
+.radio-now em { display: block; font-style: normal; font-size: 9px; color: var(--nn-muted); margin-top: 3px; letter-spacing: 1.5px; }
+.radio-bands { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 6px; }
+.radio-bands button, .radio-actions button {
+  font-family: var(--nn-display); font-weight: 800; font-size: 9px; letter-spacing: 1.4px; color: var(--nn-text);
+  background: rgba(255,255,255,.04); border: 1px solid var(--nn-line); border-radius: 10px; padding: 10px 8px; cursor: pointer;
+}
+.radio-bands button.on { border-color: var(--nn-magenta); background: rgba(255,46,154,.16); color: #fff; }
+.radio-actions { display: grid; grid-template-columns: 1fr auto; gap: 6px; margin-top: 10px; }
+.radio-actions .radio-next { background: linear-gradient(100deg, var(--nn-magenta), var(--nn-violet)); border: 0; color: #fff; }
+.radio-note { margin: 10px 0 0; font-family: -apple-system, sans-serif; font-size: 9.5px; line-height: 1.35; color: var(--nn-muted); }

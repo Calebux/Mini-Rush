@@ -50,6 +50,7 @@ export class InputManager {
   private shiftHeld = false;
   private padIndex: number | null = null;
   private padPressed: boolean[] = [];
+  private padUsed = false;        // a real press or stick move has been seen
   private navDir = '';
   private navAt = 0;
 
@@ -73,6 +74,7 @@ export class InputManager {
 
   /** The connected controller's name, or null. */
   get padName(): string | null {
+    if (!this.padUsed) return null;
     const pad = this.padIndex === null ? null : navigator.getGamepads?.()[this.padIndex];
     return pad?.id ?? null;
   }
@@ -90,8 +92,12 @@ export class InputManager {
       const index = pad?.index ?? null;
       if (index !== this.padIndex) {
         this.padIndex = index;
-        this.padPressed = [];
-        this.onPadChange(pad?.id ?? null);
+        // Whatever is held when a pad appears is its resting state, not a
+        // press: some devices (and headless browsers) report a button stuck
+        // down, and that must not click through the menu.
+        this.padPressed = pad ? pad.buttons.map((b) => b.pressed) : [];
+        if (!pad && this.padUsed) this.onPadChange(null);
+        this.padUsed = false;
       }
     }
     if (!pad) {
@@ -126,6 +132,16 @@ export class InputManager {
     this.navDir = dir;
     // buttons act once, on the press
     const edge = (i: number) => pressed(i) && !this.padPressed[i];
+    if (!this.padUsed && (pad.buttons.some((b, i) => b.pressed && !this.padPressed[i]) || Math.abs(stick) > 0.5)) {
+      this.padUsed = true;
+      this.onPadChange(pad.id); // announced on its first real use, not on a phantom
+    }
+    if (!this.padUsed) {
+      this.padSteer = 0;
+      this.padGas = this.padBrake = this.padHandbrake = false;
+      this.padPressed = pad.buttons.map((b) => b.pressed);
+      return;
+    }
     if (edge(PAD.cross)) this.onPadAccept();
     if (edge(PAD.square)) this.onCamera();
     if (edge(PAD.triangle)) this.onPadMap();

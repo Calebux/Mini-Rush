@@ -1541,6 +1541,7 @@
       <div class="pause-actions">
         <button class="btn" id="btn-resume" type="button">RESUME</button>
         <button class="btn ghost" id="btn-pause-restart" type="button">RESTART</button>
+        <button class="radio-tag" id="btn-radio-pause" type="button" aria-label="NEON FM radio">📻 RADIO</button>
       </div>
     </div>
   </div>
@@ -1561,7 +1562,7 @@
     <div class="menu-top">
       <div class="brand-block">
         <div class="logo">Mini<em>Rush</em></div>
-        <div class="sub-logo">CUSTOMS & COMPETITION</div>
+        <div class="sub-logo">NEON STREET RACING</div>
         <div class="checker"></div>
       </div>
       <div class="menu-side">
@@ -1602,13 +1603,12 @@
         <button class="btn ghost" id="btn-garage-menu" type="button" aria-label="Open garage">GARAGE</button>
       </div>
       <button id="btn-bounty" type="button" aria-label="Open the bounty board">💰 BOUNTY BOARD</button>
-      <div class="city-modes">
-        <button id="btn-taxi" type="button" aria-label="Passenger mode: pick up fares and deliver them">🚕 PASSENGER<small>Pick up fares, get paid</small></button>
-        <button id="btn-city" type="button" aria-label="Free roam in Neon City">🌆 FREE ROAM<small>Collectibles &amp; street races</small></button>
-      </div>
-      <div class="menu-secondary">
-        <button id="btn-daily" type="button">⚡ DAILY RUN</button>
-        <button id="btn-weekend" type="button">🏆 WEEKEND GP</button>
+      <!-- one row of tiles, one style: the ways to play besides a race -->
+      <div class="play-tiles">
+        <button id="btn-taxi" class="play-tile" type="button" aria-label="Passenger mode: pick up fares and deliver them"><span class="ev-label">NEON CITY</span><strong class="ev-title">🚕 PASSENGER</strong><small class="ev-meta">Pick up fares, get paid</small></button>
+        <button id="btn-city" class="play-tile" type="button" aria-label="Free roam in Neon City"><span class="ev-label">NEON CITY</span><strong class="ev-title">🌆 FREE ROAM</strong><small class="ev-meta">Tokens &amp; street races</small></button>
+        <button id="btn-daily" class="play-tile" type="button">⚡ DAILY RUN</button>
+        <button id="btn-weekend" class="play-tile" type="button">🏆 WEEKEND GP</button>
       </div>
       <div id="menu-stats">
         <div class="stat-stack">
@@ -1617,6 +1617,7 @@
           <span class="mstat hidden" id="streak-line"></span>
         </div>
         <div id="vol-row">
+          <button class="radio-tag" id="btn-radio" type="button" aria-label="NEON FM radio">📻 RADIO</button>
           <button class="mstat" id="btn-mute" type="button" aria-label="Toggle sound">🔊</button>
           <input type="range" id="vol-slider" min="0" max="100" aria-label="Volume" />
         </div>
@@ -1842,6 +1843,7 @@
         </div>
         <button class="mode-close" id="btn-modes-close" type="button" aria-label="Close modes">✕</button>
       </header>
+      <nav class="mode-tabs" id="mode-tabs" aria-label="Mode sections"></nav>
       <div class="mode-deck" id="mode-deck" aria-label="Race modes"></div>
       <footer class="mode-stage-foot">
         <div id="lap-select">

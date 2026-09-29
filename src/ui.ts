@@ -88,6 +88,48 @@ const activateOnEnter = (el: HTMLElement, fn: () => void): void => {
 };
 // mouse + hover ⇒ a physical keyboard is almost certainly attached
 const hasKeyboard = () => matchMedia('(any-hover: hover) and (any-pointer: fine)').matches;
+/**
+ * Deck cards that are not race modes: they open their own flow through the
+ * menu button that already starts it. They sit after the race modes, with
+ * the Weekend GP (a mode, but an event) next to the Daily Run.
+ */
+interface DeckExtra {
+  id: string; name: string; icon: string; group: string; tagline: string;
+  pills: string[]; accent: string; button: string; cta: string;
+}
+const DECK_EXTRAS: DeckExtra[] = [
+  { id: 'daily', name: 'DAILY RUN', icon: '⚡', group: 'EVENT', accent: '#22e6ff', button: 'btn-daily',
+    cta: 'RUN TODAY\'S CIRCUIT', pills: ['ONE CIRCUIT', 'EVERYONE', 'RESETS DAILY'],
+    tagline: 'One circuit for everyone, today only. Post a score and climb the daily board.' },
+  { id: 'taxi', name: 'PASSENGER', icon: '🚕', group: 'NEON CITY', accent: '#fcd34d', button: 'btn-taxi',
+    cta: 'START A SHIFT', pills: ['OPEN CITY', 'FARES', 'GPS'],
+    tagline: 'Pick up fares across Neon City, deliver them against the clock, and get paid.' },
+  { id: 'free', name: 'FREE ROAM', icon: '🌆', group: 'NEON CITY', accent: '#a36bff', button: 'btn-city',
+    cta: 'DRIVE THE CITY', pills: ['OPEN CITY', 'TOKENS', 'STREET RACES'],
+    tagline: 'Drive anywhere in Neon City. Find hidden tokens that unlock cars, and start street races.' }
+];
+/**
+ * Deck order, the way Gran Turismo leads with its world: the Neon City cards
+ * first (Passenger opens the deck), then the race modes, then the events.
+ */
+const DECK_CITY = DECK_EXTRAS.filter((x) => x.group === 'NEON CITY');
+const DECK_TAIL = DECK_EXTRAS.filter((x) => x.group !== 'NEON CITY');
+/** The card at a deck position: a race mode's index, or an extra. */
+const deckEntry = (pos: number): { mode: number } | { extra: DeckExtra } | null => {
+  if (pos < DECK_CITY.length) return { extra: DECK_CITY[pos] };
+  const i = pos - DECK_CITY.length;
+  if (i < MODES.length) return { mode: i };
+  const x = DECK_TAIL[i - MODES.length];
+  return x ? { extra: x } : null;
+};
+const modeToDeck = (i: number): number => i + DECK_CITY.length;
+/** The deck's sections, and the first card of each, in deck order. */
+const DECK_GROUPS = [
+  { label: 'NEON CITY', first: () => 0 },
+  { label: 'RACES', first: () => modeToDeck(0) },
+  { label: 'EVENTS', first: () => modeToDeck(MODES.findIndex((m) => m.id === 'weekend')) }
+];
+
 const MODE_RISK: Record<string, string> = {
   gp: 'RACE',
   burnout: 'WILD',
@@ -104,7 +146,7 @@ const MODE_RISK: Record<string, string> = {
 // Each mode owns a colour on the select deck: card edge, glow, CTA and the
 // overlay grade all take it, so flicking between modes reads as a scene change.
 const MODE_ACCENT: Record<string, string> = {
-  gp: '#fcff52',
+  gp: '#ff2e9a',
   burnout: '#ff6a1f',
   copchase: '#3d8bff',
   gunrun: '#ff3b4a',
@@ -353,6 +395,17 @@ export class UI {
      * aren't allowed on; one you can field quietly moves you onto a legal car
      * rather than refusing the tap.
      */
+    /** A deck pick: a race mode, or an event / city card that opens its own flow. */
+    const chooseDeck = (pos: number): void => {
+      const entry = deckEntry(pos);
+      if (!entry) return;
+      const button = 'extra' in entry ? entry.extra.button
+        : MODES[entry.mode].id === 'weekend' ? 'btn-weekend' : null;
+      if (!button) { chooseMode((entry as { mode: number }).mode, 'modes'); return; }
+      $('modes').classList.add('hidden');
+      this.menu.classList.remove('hidden');
+      $(button).click();
+    };
     const chooseMode = (i: number, from: 'menu' | 'modes'): void => {
       const m = MODES[i];
       const shelf = m.requiresClass ? eligibleCars(m) : [];
@@ -632,10 +685,11 @@ export class UI {
       card.addEventListener('click', () => {
         card.blur();
         if (this.deckDragged) return;
-        if (i === this.deckIndex) {
-          chooseMode(i, 'modes');
+        const pos = this.modeCards.indexOf(card);
+        if (pos === this.deckIndex) {
+          chooseDeck(pos);
         } else {
-          this.deckIndex = i;
+          this.deckIndex = pos;
           this.audio.play('select');
           this.layoutDeck();
         }
@@ -643,6 +697,55 @@ export class UI {
       deck.appendChild(card);
       this.modeCards.push(card);
       dots.appendChild(document.createElement('i'));
+    });
+
+    DECK_EXTRAS.forEach((x) => {
+      const card = document.createElement('button');
+      card.className = 'mode-card mode-slide deck-extra';
+      card.type = 'button';
+      card.dataset.mode = x.id;
+      card.setAttribute('aria-label', `${x.name}: ${x.tagline}`);
+      card.style.setProperty('--accent', x.accent);
+      card.innerHTML =
+        `<span class="slide-glow"></span>` +
+        `<span class="slide-num"></span>` +
+        `<span class="slide-icon">${x.icon}</span>` +
+        `<span class="slide-risk">${x.group}</span>` +
+        `<span class="slide-name">${x.name}</span>` +
+        `<span class="slide-copy">${x.tagline}</span>` +
+        `<span class="mode-card-stats">${x.pills.map((t, n) => `<span style="--i:${n}">${t}</span>`).join('')}</span>`;
+      card.addEventListener('click', () => {
+        card.blur();
+        if (this.deckDragged) return;
+        const pos = this.modeCards.indexOf(card);
+        if (pos === this.deckIndex) chooseDeck(pos);
+        else { this.deckIndex = pos; this.audio.play('select'); this.layoutDeck(); }
+      });
+      deck.appendChild(card);
+      this.modeCards.push(card);
+      dots.appendChild(document.createElement('i'));
+    });
+    // put the cards in deck order: city, races, events; then number them
+    const byId = new Map(this.modeCards.map((c) => [c.dataset.mode, c]));
+    this.modeCards = [
+      ...DECK_CITY.map((x) => byId.get(x.id)!),
+      ...MODES.map((m) => byId.get(m.id)!),
+      ...DECK_TAIL.map((x) => byId.get(x.id)!)
+    ];
+    this.modeCards.forEach((c, n) => {
+      deck.appendChild(c);
+      const num = c.querySelector('.slide-num');
+      if (num) num.textContent = String(n + 1).padStart(2, '0');
+    });
+    // section tabs: jump to the first card of a group
+    const tabs = $('mode-tabs');
+    DECK_GROUPS.forEach((g) => {
+      const t = document.createElement('button');
+      t.type = 'button';
+      t.className = 'mode-tab';
+      t.textContent = g.label;
+      t.addEventListener('click', () => { this.deckIndex = g.first(); this.audio.play('select'); this.layoutDeck(); });
+      tabs.appendChild(t);
     });
 
     // swipe: cards track the finger, then settle one step either way
@@ -674,12 +777,12 @@ export class UI {
     deck.addEventListener('pointerleave', release);
     on('mode-prev', () => this.stepDeck(-1));
     on('mode-next', () => this.stepDeck(1));
-    on('mode-go', () => chooseMode(this.deckIndex, 'modes'));
+    on('mode-go', () => chooseDeck(this.deckIndex));
     window.addEventListener('keydown', (e) => {
       if ($('modes').classList.contains('hidden')) return;
       if (e.key === 'ArrowRight') this.stepDeck(1);
       else if (e.key === 'ArrowLeft') this.stepDeck(-1);
-      else if (e.key === 'Enter') chooseMode(this.deckIndex, 'modes');
+      else if (e.key === 'Enter') chooseDeck(this.deckIndex);
       else if (e.key === 'Escape') $('btn-modes-close').click();
       else return;
       e.preventDefault();
@@ -692,7 +795,7 @@ export class UI {
     });
     const openModes = (): void => {
       this.audio.play('open');
-      this.deckIndex = this.modeIndex; // open on the mode you're already on
+      this.deckIndex = modeToDeck(this.modeIndex); // open on the mode you're already on
       this.refreshModeLocks();
       this.menu.classList.add('hidden');
       const page = $('modes');
@@ -702,7 +805,7 @@ export class UI {
     };
     on('mode-all', openModes);
 
-    $('home-mode-count').textContent = String(MODES.length);
+    $('home-mode-count').textContent = String(this.modeCards.length);
     this.setRacers(4);
     this.refreshBest();
     this.refreshBank();
@@ -724,7 +827,7 @@ export class UI {
       if (!m.requiresClass) return;
       const locked = modeLocked(m);
       const label = `${KIND_LABEL[m.requiresClass]} ONLY`;
-      const card = this.modeCards[i];
+      const card = this.modeCards[modeToDeck(i)];
       if (card) {
         card.classList.toggle('locked', locked);
         const req = card.querySelector('.mode-card-req');
@@ -759,19 +862,36 @@ export class UI {
       card.tabIndex = i === this.deckIndex ? 0 : -1;
     });
     if (frac !== 0) return;
-    const m = MODES[this.deckIndex];
-    if (!m) return;
-    const accent = MODE_ACCENT[m.id] ?? '#fcff52';
+    const entry = deckEntry(this.deckIndex);
+    if (!entry) return;
+    const extra = 'extra' in entry ? entry.extra : undefined;
+    const m = MODES['mode' in entry ? entry.mode : 0];
+    const accent = extra?.accent ?? MODE_ACCENT[m.id] ?? '#fcff52';
     const page = $('modes');
     page.style.setProperty('--accent', accent);
     page.style.setProperty('--accent-soft', hexAlpha(accent, 0.3));
     $('mode-count-now').textContent = String(this.deckIndex + 1).padStart(2, '0');
-    $('mode-count-total').textContent = String(MODES.length).padStart(2, '0');
+    $('mode-count-total').textContent = String(this.modeCards.length).padStart(2, '0');
     $('mode-dots').querySelectorAll('i').forEach((dot, i) => {
       dot.classList.toggle('on', i === this.deckIndex);
     });
+    // the section tab this card belongs to
+    const firsts = DECK_GROUPS.map((g) => g.first());
+    const group = firsts.reduce((at, first, k) => (this.deckIndex >= first ? k : at), 0);
+    $('mode-tabs').querySelectorAll('.mode-tab').forEach((t, k) => t.classList.toggle('on', k === group));
     $<HTMLButtonElement>('mode-prev').disabled = this.deckIndex === 0;
-    $<HTMLButtonElement>('mode-next').disabled = this.deckIndex === MODES.length - 1;
+    $<HTMLButtonElement>('mode-next').disabled = this.deckIndex === this.modeCards.length - 1;
+    if (extra || m.id === 'weekend') {
+      $('lap-select').classList.remove('gone');
+      const go = $('mode-go');
+      go.textContent = extra ? extra.cta : weekendOpen() ? 'ENTER THE WEEKEND GP' : 'PRACTISE THE WEEKEND GP';
+      go.classList.remove('locked');
+      // events and the city set their own laps (or have none)
+      $('lap-select').classList.add('locked');
+      $('lap-select').classList.toggle('gone', !!extra && extra.group === 'NEON CITY');
+      return;
+    }
+    $('lap-select').classList.remove('gone');
     const locked = modeLocked(m);
     const go = $('mode-go');
     go.textContent = locked && m.requiresClass
@@ -786,7 +906,7 @@ export class UI {
 
   /** Move deck focus one step; the ends hold rather than wrap. */
   private stepDeck(dir: number): void {
-    const next = Math.max(0, Math.min(MODES.length - 1, this.deckIndex + dir));
+    const next = Math.max(0, Math.min(this.modeCards.length - 1, this.deckIndex + dir));
     if (next === this.deckIndex) {
       this.layoutDeck();
       return;
@@ -1010,8 +1130,8 @@ export class UI {
       }
     });
     this.modeCards.forEach((c, ci) => {
-      c.classList.toggle('sel', ci === i);
-      c.setAttribute('aria-pressed', String(ci === i));
+      c.classList.toggle('sel', ci === modeToDeck(i));
+      c.setAttribute('aria-pressed', String(ci === modeToDeck(i)));
     });
     $('mode-tag').textContent = m.tagline;
     $('mode-name-line').textContent = `${m.icon} ${m.name} · ${MODE_RISK[m.id] ?? 'MODE'}`;

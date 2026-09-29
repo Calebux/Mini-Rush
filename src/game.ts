@@ -34,6 +34,7 @@ import { createPostFX, LookId, PostFX, savedLook } from './postfx';
 import { Rain } from './rain';
 import { RaceMinimap } from './raceMap';
 import { PadMenu } from './padMenu';
+import { Radio, RadioPanel } from './radio';
 import { carReflection, lightCars, mapEnvironment } from './lighting';
 import { CityMode } from './city/cityMode';
 import { detectTier, QUALITY, QualityTier } from './quality';
@@ -222,6 +223,8 @@ export class Game {
   private city: CityMode | null = null;   // free roam, while it is running
   private raceMap: RaceMinimap | null = null;
   private padMenu = new PadMenu();
+  private radio!: Radio;
+  private radioPanel!: RadioPanel;
 
   constructor(container: HTMLElement) {
     // debug/test handle (crashcheck.mjs pokes at physics through this)
@@ -328,6 +331,13 @@ export class Game {
     this.ui.onBountyExit = () => this.exitBounty();
 
     this.gun = new GunHud(document.getElementById('hud')!);
+    // NEON FM: internet radio, opened from the menu, the pause card and the city
+    this.radio = new Radio(this.audio);
+    this.radioPanel = new RadioPanel(this.radio);
+    for (const id of ['btn-radio', 'btn-radio-pause']) {
+      const b = document.getElementById(id);
+      if (b) this.radioPanel.attach(b);
+    }
 
     this.input = new InputManager(document.body);
     // In the city a tap is a steering touch, Space/N fire nitro, Esc/P leave.
@@ -496,6 +506,8 @@ export class Game {
       input: this.input, spec: this.carSpec(this.carIndex), tier: this.quality, mode,
       onExit: () => this.exitCity()
     });
+    const cityRadio = document.getElementById('city-radio');
+    if (cityRadio) this.radioPanel.attach(cityRadio);
     void this.audio.playMusic('race');
   }
 

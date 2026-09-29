@@ -768,6 +768,7 @@ function buildHud(mode: 'free' | 'taxi'): HTMLElement {
         <strong id="city-district">DOWNTOWN</strong>
       </div>
       <div class="city-actions">
+        <button class="city-btn" id="city-radio" type="button" aria-label="NEON FM radio">📻</button>
         <button class="city-btn" id="city-cam-btn" type="button" aria-label="Change camera">CAM</button>
         <button class="city-btn" id="city-map-btn" type="button">MAP</button>
         <button class="city-btn" id="city-exit" type="button">EXIT</button>
