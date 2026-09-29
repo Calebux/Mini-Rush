@@ -9,6 +9,7 @@
 // table (convex/bounty.ts), so a bounty is posted or pulled in the Convex
 // dashboard with no redeploy. VITE_BOUNTY_WEEK / VITE_BOUNTY_PRIZE remain a
 // build-time fallback for a deployment without Convex. See docs/bounty.md.
+import { MAPS } from './maps';
 import { MODES } from './modes';
 import { weekKey, weeklySeed } from './weekly';
 
@@ -112,9 +113,15 @@ export function bountySeed(): number {
   return (Math.imul(weeklySeed(), 2654435761) >>> 0) % 1e9 || 17;
 }
 
-/** This week's bounty city. */
+/**
+ * The bounty city: Neon City, every week, from 2026-W40. The circuit still
+ * changes weekly (bountySeed); the city stays, so the prize race has one home.
+ * Falls back to the week's pick if the map list ever loses it.
+ */
 export function bountyMapIndex(mapCount: number): number {
   if (!Number.isFinite(mapCount) || mapCount <= 0) return 0;
+  const neon = MAPS.findIndex((m) => m.id === 'neon');
+  if (neon >= 0 && neon < mapCount) return neon;
   return (Math.imul(bountySeed(), 40503) >>> 0) % Math.floor(mapCount);
 }
 

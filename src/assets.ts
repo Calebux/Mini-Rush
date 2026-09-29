@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { clone as skeletonClone } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { CarSpec } from './cars';
 import { buildCar, CAR_COLORS, carGroundFx, polishCar } from './meshes';
 import { finishVehicle, repaintVehicle, toonify } from './toon';
@@ -59,6 +60,8 @@ export class AssetLibrary {
   streetlight: THREE.Group | null = null;
   bonusPlane: THREE.Group | null = null;
   wheel: THREE.Group | null = null;
+  /** The city passenger: a rigged character and its Mixamo clips (walk, enter, exit, sit, idle). */
+  passenger: { scene: THREE.Group; clips: THREE.AnimationClip[]; height: number } | null = null;
 
   private loader = new GLTFLoader();
   private base = `${import.meta.env.BASE_URL}assets/models/`;
@@ -72,7 +75,8 @@ export class AssetLibrary {
         this.playerCar = m && this.addWheels(m);
       }),
       this.tryLoad('prop_streetlight.glb', 5.0).then((m) => void (this.streetlight = m)),
-      this.tryLoad('plane_bonus.glb', 8.0).then((m) => void (this.bonusPlane = m))
+      this.tryLoad('plane_bonus.glb', 8.0).then((m) => void (this.bonusPlane = m)),
+      this.loadPassenger()
     ];
     for (let i = 1; i <= 6; i++) {
       jobs.push(this.tryLoad(`car_traffic_${i}.glb`, 3.8).then((m) => {
@@ -190,6 +194,34 @@ export class AssetLibrary {
   }
 
   /**
+   * The passenger keeps its animations and its own scale: tryLoad's wrapper
+   * would drop the clips, and the clips' root motion is in the model's units.
+   */
+  private async loadPassenger(): Promise<void> {
+    try {
+      const gltf = await this.loader.loadAsync(`${this.base}passenger.glb`);
+      const box = new THREE.Box3().setFromObject(gltf.scene);
+      gltf.scene.traverse((o) => {
+        const mesh = o as THREE.SkinnedMesh;
+        if (mesh.isSkinnedMesh) mesh.frustumCulled = false; // bounds are the bind pose, not the pose
+      });
+      this.passenger = { scene: gltf.scene, clips: gltf.animations, height: box.max.y - box.min.y };
+    } catch {
+      this.passenger = null; // optional: the city falls back to a built figure
+    }
+  }
+
+  /**
+   * A copy of the passenger with its own skeleton. A plain clone() leaves the
+   * copy's skin bound to the original's bones, so animating it moves nothing.
+   */
+  clonePassenger(): { root: THREE.Group; clips: THREE.AnimationClip[]; height: number } | null {
+    if (!this.passenger) return null;
+    return { root: skeletonClone(this.passenger.scene) as THREE.Group, clips: this.passenger.clips,
+      height: this.passenger.height };
+  }
+
+  /**
    * Load one GLB and normalize it: sit on y=0, centered on x/z, scaled so its
    * largest ('max') or vertical ('y') dimension equals targetSize.
    * All shipped cars face +Z; racers AND traffic use π - track heading.
@@ -242,4 +274,3 @@ export class AssetLibrary {
     return wrapper;
   }
 }
-

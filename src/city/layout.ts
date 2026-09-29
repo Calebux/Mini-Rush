@@ -17,6 +17,17 @@ export const EDGE = HALF + STREET / 2 + RING;
 /** Where the harbour water starts, past the south expressway. */
 export const SHORE = EDGE + 6;
 
+// The east freeway leaves the old ring over the harbour and lands on a second
+// island. Keep these coordinates separate from the original grid so the main
+// city can stay cheap to stream while the expansion gets its own dressing.
+export const EAST_ISLAND_X0 = EDGE + 72;
+export const EAST_ISLAND_X1 = EDGE + 620;
+export const EAST_ISLAND_Z0 = -330;
+export const EAST_ISLAND_Z1 = 300;
+export const BRIDGE_Z = -126;
+export const BRIDGE_HALF = 24;
+export const CITY_EXTENT = EAST_ISLAND_X1 + 36;
+
 export type District = 'downtown' | 'midtown' | 'market' | 'harbour' | 'plaza';
 
 export interface Block {
@@ -63,6 +74,12 @@ export function blockAt(x: number, z: number): Block | null {
 
 /** The district name to announce for a point. Out on the ring it is the expressway. */
 export function districtAt(x: number, z: number): string {
+  if (x > EAST_ISLAND_X0 && x < EAST_ISLAND_X1 && z > EAST_ISLAND_Z0 && z < EAST_ISLAND_Z1) {
+    return 'EAST ISLAND';
+  }
+  if (x > EDGE && x <= EAST_ISLAND_X0 && Math.abs(z - BRIDGE_Z) < BRIDGE_HALF) {
+    return 'EAST FREEWAY';
+  }
   if (Math.abs(x) > HALF + STREET / 2 || Math.abs(z) > HALF + STREET / 2) return 'EXPRESSWAY';
   const b = blockAt(x, z);
   return b ? DISTRICT_NAME[b.district] : 'EXPRESSWAY';

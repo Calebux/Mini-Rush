@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { glow, isSharedNeonTexture, NEON_PALETTE, puddleRoughness, Quads, signAtlas } from '../neonCity';
 import {
-  Block, BLOCKS, CITY_BLOCKS, EDGE, HALF, PITCH, RING, SHORE, STREET, streetAt
+  Block, BLOCKS, BRIDGE_HALF, BRIDGE_Z, CITY_BLOCKS, CITY_EXTENT, EAST_ISLAND_X0,
+  EAST_ISLAND_X1, EAST_ISLAND_Z0, EAST_ISLAND_Z1, EDGE, HALF, PITCH, RING, SHORE,
+  STREET, streetAt
 } from './layout';
 
 /**
@@ -181,6 +183,7 @@ export class CityWorld {
     this.materials.push(facadeMat, solidMat, signMat, lightMat);
 
     this.buildGround();
+    this.buildEastIsland();
 
     const n = Math.ceil(BLOCKS / CHUNK);
     const grid: Chunk[][] = [];
@@ -219,7 +222,7 @@ export class CityWorld {
 
   /** Streets, the expressway, the harbour water and the city's outer wall. */
   private buildGround(): void {
-    const size = (EDGE + 420) * 2;
+    const size = CITY_EXTENT * 2 + 240;
     const tex = asphaltTexture().clone();
     tex.repeat.set(size / 9, size / 9);
     const puddles = puddleRoughness().clone();
@@ -239,6 +242,67 @@ export class CityWorld {
     water.position.set(0, 0.03, SHORE + 450);
     this.group.add(water);
     this.materials.push(water.material as THREE.Material);
+  }
+
+  /** Long freeway bridge and a compact second island beyond the old map edge. */
+  private buildEastIsland(): void {
+    const expansion = new THREE.Group();
+    expansion.name = 'east-island-expansion';
+    const islandWidth = EAST_ISLAND_X1 - EAST_ISLAND_X0;
+    const islandDepth = EAST_ISLAND_Z1 - EAST_ISLAND_Z0;
+    const land = new THREE.Mesh(new THREE.BoxGeometry(islandWidth, 0.18, islandDepth),
+      new THREE.MeshStandardMaterial({ color: 0x1a2532, roughness: 0.92 }));
+    land.position.set((EAST_ISLAND_X0 + EAST_ISLAND_X1) / 2, -0.02, (EAST_ISLAND_Z0 + EAST_ISLAND_Z1) / 2);
+    land.receiveShadow = true;
+    expansion.add(land);
+    const roadTexture = asphaltTexture().clone();
+    roadTexture.needsUpdate = true;
+    roadTexture.repeat.set(34, 4);
+    const roadMat = new THREE.MeshStandardMaterial({ map: roadTexture, roughness: 0.72, metalness: 0.16, color: 0x7b8294 });
+    const road = new THREE.Mesh(new THREE.BoxGeometry(islandWidth - 28, 0.12, 22), roadMat);
+    road.position.set((EAST_ISLAND_X0 + EAST_ISLAND_X1) / 2, 0.1, BRIDGE_Z);
+    road.receiveShadow = true;
+    expansion.add(road);
+    const bridgeWidth = EAST_ISLAND_X0 - EDGE + 16;
+    const bridge = new THREE.Mesh(new THREE.BoxGeometry(bridgeWidth, 0.35, BRIDGE_HALF * 2), roadMat);
+    bridge.position.set((EDGE + EAST_ISLAND_X0) / 2, 0.18, BRIDGE_Z);
+    bridge.receiveShadow = true;
+    expansion.add(bridge);
+    const railMat = new THREE.MeshBasicMaterial({ color: 0x22e6ff, transparent: true, opacity: 0.8 });
+    for (const side of [-1, 1]) {
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(bridgeWidth, 0.7, 0.25), railMat);
+      rail.position.set((EDGE + EAST_ISLAND_X0) / 2, 0.72, BRIDGE_Z + side * (BRIDGE_HALF - 1));
+      expansion.add(rail);
+      const islandRail = new THREE.Mesh(new THREE.BoxGeometry(islandWidth - 28, 0.45, 0.18), railMat);
+      islandRail.position.set((EAST_ISLAND_X0 + EAST_ISLAND_X1) / 2, 0.55, BRIDGE_Z + side * 10.3);
+      expansion.add(islandRail);
+    }
+    const lineMat = new THREE.MeshBasicMaterial({ color: 0xe6ecf5, transparent: true, opacity: 0.52 });
+    for (let x = EDGE + 16; x < EAST_ISLAND_X1 - 12; x += 18) {
+      const dash = new THREE.Mesh(new THREE.BoxGeometry(8, 0.035, 0.16), lineMat);
+      dash.position.set(x, 0.4, BRIDGE_Z);
+      expansion.add(dash);
+    }
+    const rand = rng(0x15e451);
+    for (let i = 0; i < 22; i++) {
+      const x = EAST_ISLAND_X0 + 32 + rand() * (islandWidth - 64);
+      const z = EAST_ISLAND_Z0 + 24 + rand() * (islandDepth - 48);
+      if (Math.abs(z - BRIDGE_Z) < 38) continue;
+      const width = 10 + rand() * 20, depth = 10 + rand() * 18, height = 9 + rand() * 34;
+      const color = new THREE.Color().setHSL(0.57 + rand() * 0.12, 0.2, 0.16 + rand() * 0.14);
+      const building = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth),
+        new THREE.MeshStandardMaterial({ color, roughness: 0.58, metalness: 0.2 }));
+      building.position.set(x, height / 2, z);
+      expansion.add(building);
+      if (rand() < 0.7) {
+        const sign = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(width * 0.65, 8), 1.2),
+          new THREE.MeshBasicMaterial({ color: rand() < 0.5 ? 0xff2e9a : 0x22e6ff, transparent: true, opacity: 0.85 }));
+        sign.position.set(x, Math.min(height - 2, 8 + rand() * 14), z - depth / 2 - 0.1);
+        expansion.add(sign);
+      }
+    }
+    this.group.add(expansion);
+    this.materials.push(roadMat, railMat, lineMat, land.material as THREE.Material);
   }
 
   /** Towers, shops, plazas or the harbour, depending on the block's district. */
@@ -466,6 +530,7 @@ export class CityWorld {
         [t, -EDGE - 1, t + len, -EDGE], [t, EDGE, t + len, EDGE + 1],
         [-EDGE - 1, t, -EDGE, t + len], [EDGE, t, EDGE + 1, t + len]
       ]) {
+        if (x0 === EDGE && z0 < BRIDGE_Z + BRIDGE_HALF && z1 > BRIDGE_Z - BRIDGE_HALF) continue;
         const chunk = chunkAt((x0 + x1) / 2, (z0 + z1) / 2);
         chunk.solids.box(x0, 0, z0, x1, 1.2, z1, wall);
         const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2, horiz = x1 - x0 > z1 - z0;

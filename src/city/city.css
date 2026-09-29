@@ -8,7 +8,8 @@ body.city-mode #btn-pause,
 body.city-mode #btn-cam,
 body.city-mode #dash,
 body.city-mode #drift-ui,
-body.city-mode #key-hints { display: none !important; }
+body.city-mode #key-hints,
+body.city-mode #race-mini { display: none !important; }
 
 #city-hud {
   position: fixed; inset: 0; z-index: 6; pointer-events: none;
@@ -31,6 +32,32 @@ body.city-mode #key-hints { display: none !important; }
 .city-where { padding: 8px 12px 9px; min-width: 150px; }
 .city-where small { display: block; font-size: 9px; opacity: .7; color: #22e6ff; }
 .city-where strong { display: block; font-size: 16px; font-weight: 800; margin-top: 2px; }
+.city-activity {
+  position: absolute; top: max(84px, calc(56px + env(safe-area-inset-top))); left: 12px;
+  width: min(290px, calc(100vw - 24px)); padding: 9px 11px 10px;
+  border-color: rgba(255,46,154,.35);
+}
+.city-activity-kicker { display: flex; justify-content: space-between; color: #22e6ff; font-size: 9px; }
+.city-activity-kicker b { color: #fcff52; font-variant-numeric: tabular-nums; }
+.city-activity strong { display: block; color: #fff; font-size: 15px; margin-top: 4px; }
+.city-activity small { display: block; opacity: .72; font-size: 10px; line-height: 1.25; margin: 4px 0 8px; letter-spacing: .02em; }
+.city-activity .city-btn { padding: 7px 10px; font-size: 9px; border-color: rgba(255,46,154,.55); }
+.city-activity .city-btn.is-route { color: #fcff52; border-color: rgba(252,255,82,.5); }
+.city-activity .city-btn:disabled { opacity: .65; cursor: default; }
+#city-toast {
+  position: absolute; left: 50%; top: 21%; transform: translate(-50%, -12px);
+  width: min(88vw, 420px); padding: 13px 16px; text-align: center;
+  border: 1px solid var(--toast-color, #22e6ff); border-radius: 4px;
+  background: rgba(8,10,22,.88); color: #fff; font-size: 12px; font-weight: 900;
+  letter-spacing: .1em; opacity: 0; pointer-events: none;
+  box-shadow: 0 0 28px color-mix(in srgb, var(--toast-color, #22e6ff) 35%, transparent);
+}
+#city-toast.show { animation: city-toast-in 2.6s ease both; }
+@keyframes city-toast-in {
+  0% { opacity: 0; transform: translate(-50%, -12px) scale(.96); }
+  12%, 78% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -4px) scale(.98); }
+}
 #city-district.flash { animation: city-flash .9s ease-out; }
 @keyframes city-flash {
   0% { color: #ff2e9a; text-shadow: 0 0 14px #ff2e9a; }
@@ -91,3 +118,42 @@ body.city-mode #key-hints { display: none !important; }
 }
 #btn-city small { display: block; font-size: 10px; font-weight: 700; opacity: .75; letter-spacing: .06em; margin-top: 2px; }
 #btn-city:active { transform: scale(.98); }
+
+/* the two ways into the city, side by side on the menu */
+.city-modes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.city-modes #btn-city { margin-top: 0; }
+#btn-taxi {
+  width: 100%; padding: 12px 14px; border-radius: 12px; cursor: pointer;
+  font-weight: 900; letter-spacing: .08em; font-size: 14px; color: #fff; text-align: left;
+  border: 1px solid rgba(252,255,82,.5);
+  background:
+    radial-gradient(120% 140% at 0% 0%, rgba(252,255,82,.28), transparent 60%),
+    radial-gradient(120% 140% at 100% 100%, rgba(139,92,246,.35), transparent 60%),
+    #0d0f1e;
+  box-shadow: 0 0 22px rgba(252,255,82,.14);
+}
+#btn-taxi small { display: block; font-size: 10px; font-weight: 700; opacity: .75; letter-spacing: .06em; margin-top: 2px; }
+#btn-taxi:active { transform: scale(.98); }
+
+.city-activity-buttons { display: flex; gap: 6px; }
+.city-activity .city-btn.ghost { border-color: rgba(233,241,255,.25); color: rgba(233,241,255,.75); }
+.city-activity-kicker b.late { color: #ff5e6c; }
+
+/* turn-by-turn: the dispatch card's last row, so it never sits on the controls */
+#city-nav {
+  display: flex; align-items: center; gap: 9px; margin-top: 8px; padding: 7px 9px;
+  background: rgba(252,255,82,.07); border: 1px solid rgba(252,255,82,.4); border-radius: 3px;
+  white-space: nowrap;
+}
+#city-nav[hidden] { display: none; }
+#city-nav i {
+  width: 22px; height: 22px; flex: none;
+  background: #fcff52;
+  -webkit-mask: var(--nav-icon) center / contain no-repeat; mask: var(--nav-icon) center / contain no-repeat;
+}
+#city-nav[data-turn="left"] i { --nav-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M20 21v-8a4 4 0 0 0-4-4H6.5l3.3-3.3L8.4 4.3 2.7 10l5.7 5.7 1.4-1.4L6.5 11H16a2 2 0 0 1 2 2v8z'/%3E%3C/svg%3E"); }
+#city-nav[data-turn="right"] i { --nav-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4 21v-8a4 4 0 0 1 4-4h9.5l-3.3-3.3 1.4-1.4 5.7 5.7-5.7 5.7-1.4-1.4 3.3-3.3H8a2 2 0 0 0-2 2v8z'/%3E%3C/svg%3E"); }
+#city-nav[data-turn="around"] i { --nav-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M8 21V9a5 5 0 0 1 10 0v6.2l2.3-2.3 1.4 1.4L17 19l-4.7-4.7 1.4-1.4 2.3 2.3V9a3 3 0 0 0-6 0v12z'/%3E%3C/svg%3E"); }
+#city-nav[data-turn="arrive"] i { --nav-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z'/%3E%3C/svg%3E"); }
+#city-nav b { display: block; font-size: 13px; font-weight: 900; color: #fff; letter-spacing: .1em; }
+#city-nav small { display: block; font-size: 9px; color: #fcff52; opacity: .85; margin-top: 1px; }

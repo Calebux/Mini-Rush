@@ -76,6 +76,15 @@ Query params for testing: `?len=500` (lap length in metres, default 1800),
   into another vehicle. Danfos have a longer contact zone. Gentle clips retain
   88% of speed; hard impacts retain 72%. A near miss pays once the player has
   fully cleared the vehicle, and only if the pass stayed clear of contact.
+- **Neon City** — two modes open from the menu. **Passenger**: accept a fare
+  and the passenger is waiting on the pavement; stop beside them and they walk
+  over and climb in (Mixamo clips on a rigged character, `src/city/passenger.ts`),
+  then the GPS routes you along the roads to the drop-off against the clock
+  (`src/city/fares.ts`, `src/city/roads.ts`). **Free roam**: hidden tokens
+  unlock garage cars and street races start from the map
+  (`src/city/activities.ts`). Civilian traffic loops the grid, and the east
+  freeway crosses a bridge to a second island. Races elsewhere carry a round,
+  heading-up minimap (`src/raceMap.ts`).
 - **Impact cinematics** — takedowns and wrecks dilate time to 0.3×, drop the
   camera into the impact and white out the frame, then hand control straight
   back. Boost drives radial streaks, a chromatic fringe and a warm push in the

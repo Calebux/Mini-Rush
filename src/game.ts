@@ -32,6 +32,7 @@ import { setUnderglow } from './meshes';
 import { Player } from './player';
 import { createPostFX, LookId, PostFX, savedLook } from './postfx';
 import { Rain } from './rain';
+import { RaceMinimap } from './raceMap';
 import { CityMode } from './city/cityMode';
 import { detectTier, QUALITY, QualityTier } from './quality';
 import { RivalManager } from './rivals';
@@ -217,6 +218,7 @@ export class Game {
   private sprayFlip = false;
   private look: LookId = savedLook();
   private city: CityMode | null = null;   // free roam, while it is running
+  private raceMap: RaceMinimap | null = null;
 
   constructor(container: HTMLElement) {
     // debug/test handle (crashcheck.mjs pokes at physics through this)
@@ -338,7 +340,8 @@ export class Game {
         this.city.toggleMap();
       }
     });
-    document.getElementById('btn-city')?.addEventListener('click', () => this.startCity());
+    document.getElementById('btn-city')?.addEventListener('click', () => this.startCity('free'));
+    document.getElementById('btn-taxi')?.addEventListener('click', () => this.startCity('taxi'));
     this.ui.onBrake = (down) => (this.input.uiBrake = down);
     this.ui.onGas = (down) => (this.input.uiGas = down);
     this.ui.onCamera = () => this.cycleCamera();
@@ -457,13 +460,13 @@ export class Game {
   }
 
   /** Free roam in Neon City. The race world stays built behind the menu. */
-  private startCity(): void {
+  private startCity(mode: 'free' | 'taxi' = 'free'): void {
     if (this.city || this.state !== 'menu') return;
     this.audio.play('start');
     this.ui.showCity();
     this.city = new CityMode({
       renderer: this.renderer, camera: this.camera, assets: this.assets, audio: this.audio,
-      input: this.input, spec: this.carSpec(this.carIndex), tier: this.quality,
+      input: this.input, spec: this.carSpec(this.carIndex), tier: this.quality, mode,
       onExit: () => this.exitCity()
     });
     void this.audio.playMusic('race');
@@ -801,6 +804,11 @@ export class Game {
     this.resetGrid();
     this.ui.setRacers(mode.rivals + 1);
     this.ui.drawTrackMap(this.track.outline(), map.districts.map((d) => d.accent));
+    const mini = document.getElementById('race-mini') as HTMLCanvasElement | null;
+    if (mini) {
+      this.raceMap ??= new RaceMinimap(mini);
+      this.raceMap.setTrack(this.track, map.districts[0].accent);
+    }
     if (this.state === 'boot') {
       // seat the menu camera immediately so boot doesn't swoop in from origin
       const b = this.track.frame(-6 - CAMS[0].back);
@@ -1518,6 +1526,7 @@ export class Game {
         }
         if (this.player.s >= this.raceLaps * this.track.length) this.finishRace();
         this.updateHud();
+        this.drawRaceMap();
         break;
       }
 
@@ -1945,6 +1954,16 @@ export class Game {
       if (!car.mesh.visible || car.wrecked > 0) continue;
       separate(p, car, PLAYER_X_LIMIT, RIVAL_X_LIMIT, car.contactLength);
     }
+  }
+
+  /** The round minimap: the circuit turning under you, the field as dots. */
+  private drawRaceMap(): void {
+    if (!this.raceMap) return;
+    const a = this.track.frame(this.player.s), b = this.track.frame(this.player.s + 2);
+    const len = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+    this.raceMap.draw(this.player.mesh.position, { x: (b.x - a.x) / len, z: (b.z - a.z) / len },
+      this.rivals.rivals.map((r) => ({ x: r.mesh.position.x, z: r.mesh.position.z,
+        colour: r.finishTime >= 0 ? 'rgba(233,241,255,0.4)' : '#ff2e9a' })));
   }
 
   private updateHud(): void {

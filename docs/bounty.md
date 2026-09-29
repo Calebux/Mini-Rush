@@ -18,7 +18,8 @@ builds (RUSH ONE) are out too, so every entrant drives the same car.
 - The free **VIPER GT** only. Every other car costs NIM, and RUSH ONE is a
   workshop build, so neither can enter — though the AI field still drives the
   fast shelf. Coin upgrades apply: they are earned by racing, not bought.
-- The circuit seed and city derive from the ISO week (`src/bounty.ts`), so every
+- The race is always in Neon City (from 2026-W40); the circuit seed derives from
+  the ISO week (`src/bounty.ts`), so every
   entrant races the same track all week. It is a different circuit from the
   Weekly Cup.
 

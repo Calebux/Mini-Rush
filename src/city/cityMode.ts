@@ -11,8 +11,17 @@ import { createPostFX, PostFX, savedLook } from '../postfx';
 import type { QualityTier } from '../quality';
 import { Rain } from '../rain';
 import { SmokePool } from '../smoke';
+import { CityActivities, cityActivityPoints } from './activities';
+import { FareDispatch } from './fares';
+import { nextTurn, P, route, routeLength } from './roads';
 import { CityDrive } from './drive';
-import { CITY_BLOCKS, districtAt, EDGE, HALF, SHORE, SPAWN, STREET } from './layout';
+import { PassengerSequence } from './passenger';
+import {
+  BRIDGE_HALF, BRIDGE_Z, CITY_BLOCKS, CITY_EXTENT, districtAt, EDGE,
+  EAST_ISLAND_X0, EAST_ISLAND_X1, EAST_ISLAND_Z0, EAST_ISLAND_Z1,
+  HALF, SPAWN, STREET
+} from './layout';
+import { CityTraffic } from './traffic';
 import { CityWorld } from './world';
 import './city.css';
 
@@ -24,10 +33,12 @@ export interface CityDeps {
   input: InputManager;
   spec: CarSpec;
   tier: QualityTier;
+  /** free roam (collectibles, street races) or passenger fares */
+  mode: 'free' | 'taxi';
   onExit: () => void;
 }
 
-const MAP_RANGE = EDGE + 30;        // metres from the centre the map image covers
+const MAP_RANGE = CITY_EXTENT + 34; // metres from the centre the map image covers
 const MAP_PX = 640;
 
 /**
@@ -37,6 +48,14 @@ const MAP_PX = 640;
 export class CityMode {
   private scene = new THREE.Scene();
   private world = new CityWorld();
+  private activities: CityActivities | null;
+  private fares: FareDispatch | null;
+  private route: P[] = [];
+  private routeFor = '';
+  private routeTimer = 0;
+  private chevrons: THREE.Mesh[] = [];
+  private traffic: CityTraffic;
+  private passenger: PassengerSequence;
   private drive: CityDrive;
   private car: THREE.Group;
   private carFx: THREE.Mesh[] = [];
@@ -68,6 +87,10 @@ export class CityMode {
     moon.position.set(-60, 90, -40);
     this.scene.add(moon);
     this.scene.add(this.world.group);
+    this.activities = deps.mode === 'free' ? new CityActivities(this.scene) : null;
+    this.fares = deps.mode === 'taxi' ? new FareDispatch({ x: SPAWN.x, z: SPAWN.z }) : null;
+    this.buildChevrons();
+    this.traffic = new CityTraffic(this.scene, deps.assets);
     this.horizon = buildHorizon(theme);
     this.sky.add(this.horizon);
     this.scene.add(this.sky);
@@ -78,6 +101,7 @@ export class CityMode {
     this.drive.yaw = SPAWN.yaw;
     this.car = deps.assets.cloneCar(deps.spec);
     this.scene.add(this.car);
+    this.passenger = new PassengerSequence(this.scene, this.car, deps.spec.color, deps.assets.clonePassenger());
     this.addCarLights();
 
     this.rain = new Rain(deps.tier === 0 ? 1200 : 2600);
@@ -90,12 +114,17 @@ export class CityMode {
     this.resize();
 
     this.mapImage = drawCityMap();
-    this.hud = buildHud();
+    this.hud = buildHud(deps.mode);
     document.body.appendChild(this.hud);
     this.mini = (this.hud.querySelector('#city-mini') as HTMLCanvasElement).getContext('2d')!;
     this.bigMap = this.hud.querySelector('#city-bigmap') as HTMLElement;
     this.hud.querySelector('#city-exit')!.addEventListener('click', () => deps.onExit());
     this.hud.querySelector('#city-nitro')!.addEventListener('click', () => this.nitro());
+    this.hud.querySelector('#city-gps')!.addEventListener('click', () => this.panelAction());
+    this.hud.querySelector('#city-skip')!.addEventListener('click', () => {
+      this.fares?.skip({ x: this.drive.x, z: this.drive.z });
+      this.deps.audio.play('select');
+    });
     const toggleMap = () => this.toggleMap();
     this.hud.querySelector('#city-mini')!.addEventListener('click', toggleMap);
     this.hud.querySelector('#city-map-btn')!.addEventListener('click', toggleMap);
@@ -151,8 +180,30 @@ export class CityMode {
     const dt = Math.min(real, 0.05);
     const input = this.deps.input;
     const steer = THREE.MathUtils.clamp(input.keySteer + input.touchSteer, -1, 1);
-    this.drive.update(dt, { steer, gas: input.gas, brake: input.braking });
+    const passengerSequenceActive = this.passenger.isPlaying();
+    if (!passengerSequenceActive) this.drive.update(dt, { steer, gas: input.gas, brake: input.braking });
     const d = this.drive;
+    this.traffic.update(dt, d);
+    if (this.activities) {
+      this.activities.update(dt, elapsed, d.x, d.z);
+      for (let event = this.activities.consumeEvent(); event; event = this.activities.consumeEvent()) {
+        this.deps.audio.play(event.type.includes('finish') ? 'finish' : event.type === 'collect' ? 'combo' : 'go');
+        this.showToast(event.text, event.color);
+      }
+    }
+    if (this.fares) this.updateFares(dt);
+    const passengerSequence = this.passenger.update(dt);
+    if (passengerSequence === 'pickup' && this.fares) {
+      this.fares.boarded();
+      this.deps.audio.play('go');
+      this.showToast(`${this.fares.name} ON BOARD · ${this.fares.dropoff.name}`, '#8b5cf6');
+    }
+    if (passengerSequence === 'dropoff' && this.fares) {
+      const paid = this.fares.alighted();
+      this.deps.audio.play('finish');
+      this.showToast(`FARE PAID · +${paid} COINS`, '#fcff52');
+    }
+    this.updateRoute(dt);
 
     // the car
     const speed = d.speed;
@@ -189,6 +240,118 @@ export class CityMode {
     else this.deps.renderer.render(this.scene, this.deps.camera);
   }
 
+  /** The panel's button: accept a fare, take the next one, or the free-roam radar's action. */
+  private panelAction(): void {
+    const d = this.drive;
+    if (this.fares) {
+      const status = this.fares.status();
+      if (status.stage === 'offer') {
+        this.fares.accept();
+        const { stand, x, z } = this.fares.pickup;
+        this.passenger.waitAt(stand.x, stand.z, x, z);
+        this.deps.audio.play('select');
+        this.showToast(`RIDE ACCEPTED · ${this.fares.name} IS WAITING`, '#8b5cf6');
+      } else if (status.stage === 'paid') {
+        this.fares.offer({ x: d.x, z: d.z });
+        this.deps.audio.play('open');
+      }
+      return;
+    }
+    if (!this.activities) return;
+    const status = this.activities.status(d.x, d.z);
+    if (status.action === 'SET GPS') this.activities.setNearestGps(d.x, d.z);
+    else this.activities.activateNearby(d.x, d.z);
+  }
+
+  /** Pull up beside the waiting passenger, or at the destination, and stop. */
+  private updateFares(dt: number): void {
+    const fares = this.fares!, d = this.drive;
+    fares.tick(dt);
+    if (this.passenger.isPlaying()) return;
+    const what = fares.arrive(d.x, d.z, Math.abs(d.speed) < 1.5);
+    // the passenger walks in the car's frame: put the car where the drive is
+    // before they measure it, not where it was drawn last frame
+    if (what) {
+      this.car.position.set(d.x, 0, d.z);
+      this.car.rotation.set(0, d.yaw, 0);
+      this.car.updateMatrixWorld(true);
+    }
+    if (what === 'board') {
+      d.vel.set(0, 0);
+      this.passenger.startPickup();
+    } else if (what === 'alight') {
+      d.vel.set(0, 0);
+      this.passenger.startDropoff(fares.dropoff.stand);
+    }
+  }
+
+  /** Where the GPS is pointing, whichever mode is running. */
+  private navTarget(): (P & { label: string; color: number }) | null {
+    if (this.fares) return this.fares.status().target;
+    return this.activities?.status(this.drive.x, this.drive.z).target ?? null;
+  }
+
+  /**
+   * Re-plan the route a few times a second (the car moves, the target
+   * changes), then lay chevrons on the road along the next stretch of it.
+   */
+  private updateRoute(dt: number): void {
+    this.routeTimer -= dt;
+    const target = this.navTarget();
+    const id = target ? `${Math.round(target.x)},${Math.round(target.z)}` : '';
+    if (this.routeTimer > 0 && id === this.routeFor) return;
+    this.routeTimer = 0.4;
+    this.routeFor = id;
+    const f = this.drive.forward;
+    this.route = target ? route({ x: this.drive.x, z: this.drive.z }, target, { x: f.x, z: f.y }) : [];
+    const color = new THREE.Color(target?.color ?? 0x22e6ff);
+    // chevrons every 9 m from 12 m ahead, following the polyline
+    let k = 0, walked = 0, next = 12;
+    for (let i = 1; i < this.route.length && k < this.chevrons.length; i++) {
+      const a = this.route[i - 1], b = this.route[i];
+      const len = Math.hypot(b.x - a.x, b.z - a.z);
+      while (next <= walked + len && k < this.chevrons.length) {
+        const t = (next - walked) / len;
+        const mesh = this.chevrons[k++];
+        mesh.position.set(a.x + (b.x - a.x) * t, 0.09, a.z + (b.z - a.z) * t);
+        mesh.rotation.y = Math.atan2(-(b.x - a.x), -(b.z - a.z));
+        (mesh.material as THREE.MeshBasicMaterial).color.copy(color).multiplyScalar(0.9 * (1 - k / (this.chevrons.length + 4)));
+        mesh.visible = true;
+        next += 9;
+      }
+      walked += len;
+    }
+    for (; k < this.chevrons.length; k++) this.chevrons[k].visible = false;
+  }
+
+  /** A pool of glowing road arrows the route lays down ahead of the car. */
+  private buildChevrons(): void {
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const ctx = c.getContext('2d')!;
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 9;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.shadowColor = '#fff';
+    ctx.shadowBlur = 10;
+    ctx.beginPath();
+    ctx.moveTo(14, 44);
+    ctx.lineTo(32, 20);
+    ctx.lineTo(50, 44);
+    ctx.stroke();
+    const texture = new THREE.CanvasTexture(c);
+    const geometry = new THREE.PlaneGeometry(2.6, 2.6).rotateX(-Math.PI / 2);
+    for (let i = 0; i < 16; i++) {
+      const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ map: texture, transparent: true,
+        depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+      mesh.renderOrder = 2;
+      mesh.visible = false;
+      this.scene.add(mesh);
+      this.chevrons.push(mesh);
+    }
+  }
+
   private emitSmoke(drifting: boolean, speed: number): void {
     const d = this.drive;
     const f = d.forward;
@@ -213,10 +376,17 @@ export class CityMode {
     const travel = d.vel.lengthSq() > 16 ? d.vel.clone().normalize() : d.forward;
     const dir = d.forward.clone().lerp(travel, 0.45).normalize();
     const back = 8.2 + Math.max(0, speed) * 0.05;
-    const want = new THREE.Vector3(d.x - dir.x * back, 3.9 + Math.max(0, speed) * 0.018, d.z - dir.y * back);
-    const k = 1 - Math.exp(-dt * 6);
+    let want = new THREE.Vector3(d.x - dir.x * back, 3.9 + Math.max(0, speed) * 0.018, d.z - dir.y * back);
+    let look = new THREE.Vector3(d.x + dir.x * 6, 1.3, d.z + dir.y * 6);
+    // a passenger getting in or out: swing round to watch the door
+    const shot = this.passenger.cameraShot();
+    if (shot) {
+      want = shot.position;
+      look = shot.look;
+    }
+    const k = 1 - Math.exp(-dt * (shot ? 2.2 : 6));
     this.camPos.lerp(want, k);
-    this.camLook.lerp(new THREE.Vector3(d.x + dir.x * 6, 1.3, d.z + dir.y * 6), 1 - Math.exp(-dt * 10));
+    this.camLook.lerp(look, 1 - Math.exp(-dt * (shot ? 3 : 10)));
     cam.position.copy(this.camPos);
     if (this.shake > 0) {
       cam.position.x += (Math.random() - 0.5) * this.shake * 0.3;
@@ -251,12 +421,59 @@ export class CityMode {
       void tag.offsetWidth;
       tag.classList.add('flash');
     }
+    const activityTitle = this.hud.querySelector('#city-activity-title') as HTMLElement;
+    const activityDetail = this.hud.querySelector('#city-activity-detail') as HTMLElement;
+    const activityButton = this.hud.querySelector('#city-gps') as HTMLButtonElement;
+    const skip = this.hud.querySelector('#city-skip') as HTMLButtonElement;
+    const timer = this.hud.querySelector('#city-activity-time') as HTMLElement;
+    if (this.fares) {
+      const fare = this.fares.status();
+      activityTitle.textContent = fare.title;
+      activityDetail.textContent = fare.detail;
+      activityButton.textContent = fare.action ?? 'DRIVE';
+      activityButton.hidden = !fare.action;
+      skip.hidden = fare.stage !== 'offer';
+      timer.textContent = fare.stage === 'ride' ? `${fare.timer.toFixed(1)}s` : '';
+      timer.classList.toggle('late', fare.stage === 'ride' && fare.timer <= 0);
+    } else if (this.activities) {
+      const activity = this.activities.status(this.drive.x, this.drive.z);
+      activityTitle.textContent = activity.title;
+      activityDetail.textContent = activity.detail;
+      activityButton.textContent = activity.action === 'SET GPS' && !activity.target ? 'FIND NEXT' : activity.action;
+      activityButton.disabled = activity.action === 'RACING';
+      activityButton.classList.toggle('is-route', !!activity.target);
+      skip.hidden = true;
+      timer.textContent = activity.timer > 0 ? `${Math.max(0, activity.timer).toFixed(1)}s` : '';
+    }
+    this.updateNav();
     this.districtTimer += dt;
     this.drawMinimap();
     if (this.bigMap.classList.contains('open') && this.districtTimer > 0.25) {
       this.districtTimer = 0;
       this.drawBigMap();
     }
+  }
+
+  /** The turn banner: the next turn and how far, or the distance to arrive. */
+  private updateNav(): void {
+    const nav = this.hud.querySelector('#city-nav') as HTMLElement;
+    const target = this.navTarget();
+    if (!target || this.route.length < 2 || this.passenger.isPlaying()) {
+      nav.hidden = true;
+      return;
+    }
+    let turn: { turn: 'left' | 'right' | 'arrive' | 'around'; metres: number } = nextTurn(this.route);
+    const left = routeLength(this.route);
+    // the route's first stretch runs back past the car: say so first
+    const [a, b] = this.route, f = this.drive.forward;
+    const len = Math.hypot(b.x - a.x, b.z - a.z);
+    if (len > 8 && ((b.x - a.x) * f.x + (b.z - a.z) * f.y) / len < -0.5) turn = { turn: 'around', metres: 0 };
+    const round = (m: number) => (m > 1000 ? `${(m / 1000).toFixed(1)} KM` : `${Math.max(10, Math.round(m / 10) * 10)} M`);
+    nav.hidden = false;
+    nav.dataset.turn = turn.turn;
+    (nav.querySelector('b') as HTMLElement).textContent = turn.turn === 'arrive' ? `ARRIVE · ${round(left)}`
+      : turn.turn === 'around' ? 'TURN AROUND' : `TURN ${turn.turn.toUpperCase()} · ${round(turn.metres)}`;
+    (nav.querySelector('small') as HTMLElement).textContent = `${target.label} · ${round(left)}`;
   }
 
   /** Heading-up minimap: the car at the centre pointing up, the city turning under it. */
@@ -277,6 +494,7 @@ export class CityMode {
     ctx.rotate(-Math.PI / 2 - Math.atan2(f.y, f.x));
     ctx.scale(zoom, zoom);
     ctx.drawImage(this.mapImage, -px, -pz);
+    this.drawMapMarkers(ctx, scale, -px, -pz, zoom);
     ctx.restore();
     arrow(ctx, size / 2, size / 2, -Math.PI / 2, 9);
   }
@@ -287,8 +505,64 @@ export class CityMode {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(this.mapImage, 0, 0, canvas.width, canvas.height);
     const s = canvas.width / (MAP_RANGE * 2);
+    this.drawMapMarkers(ctx, s, 0, 0, 1);
     const f = this.drive.forward;
     arrow(ctx, (this.drive.x + MAP_RANGE) * s, (this.drive.z + MAP_RANGE) * s, Math.atan2(f.y, f.x), 11);
+  }
+
+  private drawMapMarkers(ctx: CanvasRenderingContext2D, scale: number, offsetX: number, offsetZ: number, zoom: number): void {
+    const draw = (x: number, z: number, color: number, size: number, alpha = 1) => {
+      const px = (x + MAP_RANGE) * scale + offsetX;
+      const pz = (z + MAP_RANGE) * scale + offsetZ;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = `#${color.toString(16).padStart(6, '0')}`;
+      ctx.shadowColor = ctx.fillStyle;
+      ctx.shadowBlur = 7 * zoom;
+      ctx.beginPath();
+      ctx.arc(px, pz, size * Math.max(0.6, zoom), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    };
+    if (this.activities) {
+      for (const point of cityActivityPoints()) {
+        if (!this.activities.isAvailable(point.id)) continue;
+        draw(point.x, point.z, point.color, point.kind === 'collectible' ? 3 : 4, 0.95);
+      }
+    }
+    if (this.fares?.stage === 'offer') {
+      // preview the fare: where they are and where they are going
+      draw(this.fares.pickup.x, this.fares.pickup.z, 0x8b5cf6, 5, 0.9);
+      draw(this.fares.dropoff.x, this.fares.dropoff.z, 0xfcff52, 5, 0.9);
+    }
+    const target = this.navTarget();
+    if (target && this.route.length > 1) {
+      // the route itself, along the roads, glowing
+      ctx.save();
+      ctx.strokeStyle = `#${target.color.toString(16).padStart(6, '0')}`;
+      ctx.shadowColor = ctx.strokeStyle;
+      ctx.shadowBlur = 6 * zoom;
+      ctx.lineWidth = 3.2 / Math.max(0.35, zoom) * Math.min(1, zoom * 1.4);
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      this.route.forEach((p, i) => {
+        const px = (p.x + MAP_RANGE) * scale + offsetX, pz = (p.z + MAP_RANGE) * scale + offsetZ;
+        if (i) ctx.lineTo(px, pz); else ctx.moveTo(px, pz);
+      });
+      ctx.stroke();
+      ctx.restore();
+      draw(target.x, target.z, target.color, 6, 1);
+    }
+  }
+
+  private showToast(text: string, color: string): void {
+    const toast = this.hud.querySelector('#city-toast') as HTMLElement;
+    toast.textContent = text;
+    toast.style.setProperty('--toast-color', color);
+    toast.classList.remove('show');
+    void toast.offsetWidth;
+    toast.classList.add('show');
   }
 
   dispose(): void {
@@ -299,7 +573,16 @@ export class CityMode {
       mesh.geometry.dispose();
       (mesh.material as THREE.Material).dispose();
     }
+    this.passenger.dispose();
     disposeCarInstance(this.car);
+    this.activities?.dispose();
+    for (const mesh of this.chevrons) {
+      this.scene.remove(mesh);
+      (mesh.material as THREE.MeshBasicMaterial).map?.dispose();
+      (mesh.material as THREE.Material).dispose();
+    }
+    this.chevrons[0]?.geometry.dispose();
+    this.traffic.dispose();
     this.world.dispose();
     this.rain.dispose();
     disposeHorizon(this.horizon);
@@ -337,10 +620,18 @@ function drawCityMap(): HTMLCanvasElement {
   const X = (x: number) => (x + MAP_RANGE) * s;
   ctx.fillStyle = '#0a0d16';
   ctx.fillRect(0, 0, MAP_PX, MAP_PX);
-  ctx.fillStyle = '#12314a';                          // harbour water
-  ctx.fillRect(0, X(SHORE), MAP_PX, MAP_PX);
+  ctx.fillStyle = '#12314a';                          // water around both shores
+  ctx.fillRect(0, 0, MAP_PX, MAP_PX);
   ctx.fillStyle = '#39415a';                          // every street and the ring
   ctx.fillRect(X(-EDGE), X(-EDGE), (EDGE * 2) * s, (EDGE * 2) * s);
+  ctx.fillStyle = '#263849';                          // east island
+  ctx.fillRect(X(EAST_ISLAND_X0), X(EAST_ISLAND_Z0),
+    (EAST_ISLAND_X1 - EAST_ISLAND_X0) * s, (EAST_ISLAND_Z1 - EAST_ISLAND_Z0) * s);
+  ctx.fillStyle = '#41495e';                          // bridge + long freeway
+  ctx.fillRect(X(EDGE), X(BRIDGE_Z - BRIDGE_HALF),
+    (EAST_ISLAND_X0 - EDGE) * s, BRIDGE_HALF * 2 * s);
+  ctx.fillRect(X(EAST_ISLAND_X0), X(BRIDGE_Z - 11),
+    (EAST_ISLAND_X1 - EAST_ISLAND_X0) * s, 22 * s);
   const tint: Record<string, string> = {
     downtown: '#241a3a', midtown: '#1a2030', market: '#2c1f24', harbour: '#1b2626', plaza: '#18322c'
   };
@@ -375,13 +666,13 @@ function arrow(ctx: CanvasRenderingContext2D, x: number, y: number, angle: numbe
   ctx.restore();
 }
 
-function buildHud(): HTMLElement {
+function buildHud(mode: 'free' | 'taxi'): HTMLElement {
   const hud = document.createElement('div');
   hud.id = 'city-hud';
   hud.innerHTML = `
     <div class="city-top">
       <div class="city-panel city-where">
-        <small>FREE ROAM · NEON CITY</small>
+        <small>${mode === 'taxi' ? 'PASSENGER' : 'FREE ROAM'} · NEON CITY</small>
         <strong id="city-district">DOWNTOWN</strong>
       </div>
       <div class="city-actions">
@@ -389,8 +680,19 @@ function buildHud(): HTMLElement {
         <button class="city-btn" id="city-exit" type="button">EXIT</button>
       </div>
     </div>
+    <div class="city-panel city-activity">
+      <div class="city-activity-kicker"><span>${mode === 'taxi' ? 'DISPATCH' : 'ACTIVITY RADAR'}</span><b id="city-activity-time"></b></div>
+      <strong id="city-activity-title">ACTIVITY RADAR</strong>
+      <small id="city-activity-detail">Set a waypoint to find collectibles, races and rides.</small>
+      <div class="city-activity-buttons">
+        <button class="city-btn" id="city-gps" type="button">FIND NEXT</button>
+        <button class="city-btn ghost" id="city-skip" type="button" hidden>SKIP</button>
+      </div>
+      <div id="city-nav" hidden><i aria-hidden="true"></i><span><b></b><small></small></span></div>
+    </div>
     <canvas id="city-mini" width="150" height="150" aria-label="Minimap. Tap for the full map."></canvas>
     <button id="city-nitro" type="button" aria-label="Nitro"><span>NITRO</span></button>
+    <div id="city-toast" role="status" aria-live="polite"></div>
     <div id="city-bigmap" role="dialog" aria-label="City map">
       <div class="city-bigmap-card">
         <div class="city-bigmap-head"><span>NEON CITY</span><small>TAP TO CLOSE</small></div>

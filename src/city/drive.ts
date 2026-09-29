@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { BASE_SPEED } from '../constants';
-import { blockAt, CITY_BLOCKS, EDGE } from './layout';
+import {
+  blockAt, BRIDGE_HALF, BRIDGE_Z, CITY_BLOCKS, EAST_ISLAND_X0, EAST_ISLAND_X1,
+  EAST_ISLAND_Z0, EAST_ISLAND_Z1, EDGE
+} from './layout';
 
 /**
  * Arcade car for the open city. The race car rides a spline; this one goes
@@ -105,6 +108,15 @@ export class CityDrive {
     this.collide();
   }
 
+  /** A civilian car can shove the player without reaching into wall physics. */
+  bumpFromTraffic(nx: number, nz: number, force: number): void {
+    this.x += nx * 0.35;
+    this.z += nz * 0.35;
+    this.vel.x += nx * force;
+    this.vel.y += nz * force;
+    this.impact = Math.max(this.impact, force);
+  }
+
   /** Kerbs of the blocks around the car and the expressway's outer wall. */
   private collide(): void {
     const near = [blockAt(this.x, this.z)];
@@ -120,8 +132,18 @@ export class CityDrive {
       this.pushOut(block.x0, block.z0, block.x1, block.z1);
     }
     const lim = EDGE - RADIUS;
-    if (Math.abs(this.x) > lim) this.hit(Math.sign(this.x) * (Math.abs(this.x) - lim), 0);
-    if (Math.abs(this.z) > lim) this.hit(0, Math.sign(this.z) * (Math.abs(this.z) - lim));
+    const island = this.x > EAST_ISLAND_X0 && this.x < EAST_ISLAND_X1
+      && this.z > EAST_ISLAND_Z0 + RADIUS && this.z < EAST_ISLAND_Z1 - RADIUS;
+    const bridge = this.x > EDGE - RADIUS && this.x < EAST_ISLAND_X0
+      && Math.abs(this.z - BRIDGE_Z) < BRIDGE_HALF - RADIUS;
+    if (!island && !bridge) {
+      if (Math.abs(this.x) > lim) this.hit(Math.sign(this.x) * (Math.abs(this.x) - lim), 0);
+      if (Math.abs(this.z) > lim) this.hit(0, Math.sign(this.z) * (Math.abs(this.z) - lim));
+    } else if (island) {
+      if (this.x > EAST_ISLAND_X1 - RADIUS) this.hit(this.x - (EAST_ISLAND_X1 - RADIUS), 0);
+      if (this.z > EAST_ISLAND_Z1 - RADIUS) this.hit(0, this.z - (EAST_ISLAND_Z1 - RADIUS));
+      if (this.z < EAST_ISLAND_Z0 + RADIUS) this.hit(0, this.z - (EAST_ISLAND_Z0 + RADIUS));
+    }
   }
 
   /** Circle against one kerb rectangle. */
