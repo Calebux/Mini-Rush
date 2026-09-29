@@ -6,7 +6,7 @@ import { BOUNTY_MODE, bountyMapIndex, bountySeed } from './bounty';
 import { CARS } from './cars';
 import { separate } from './collision';
 import {
-  districtIndexAt, HEAT_COOL, HEAT_GRACE, HEAT_LIMIT, PIT_SCRUB, PLAYER_X_LIMIT,
+  BASE_SPEED, districtIndexAt, HEAT_COOL, HEAT_GRACE, HEAT_LIMIT, PIT_SCRUB, PLAYER_X_LIMIT,
   RIVAL_X_LIMIT, TRACK_LENGTH_DEFAULT
 } from './constants';
 import { dailyMapIndex, dailySeed } from './daily';
@@ -30,7 +30,8 @@ import { Rival } from './rivals';
 import { InputManager } from './input';
 import { setUnderglow } from './meshes';
 import { Player } from './player';
-import { createPostFX, PostFX } from './postfx';
+import { createPostFX, LookId, PostFX, savedLook } from './postfx';
+import { Rain } from './rain';
 import { detectTier, QUALITY, QualityTier } from './quality';
 import { RivalManager } from './rivals';
 import { Scenery } from './scenery';
@@ -210,6 +211,10 @@ export class Game {
   private driftBestThisRace = 0;    // longest single chain this race
   private weather: WeatherSpec | null = null;
   private weatherLabel: HTMLElement | null = null;
+  private rain: Rain | null = null;   // built on the first wet race, kept after
+  private wet = false;                // rain, or a neon city's slick streets: tyres throw spray
+  private sprayFlip = false;
+  private look: LookId = savedLook();
 
   constructor(container: HTMLElement) {
     // debug/test handle (crashcheck.mjs pokes at physics through this)
@@ -690,10 +695,30 @@ export class Game {
       this.sun.color.setHex(0xffefd3);
       this.sun.intensity = 2.35;
     }
+    if (theme.neon) {
+      // The city lights itself. Keep a violet sky fill so car paint still has
+      // shape, and a weak cold key for the shadows; the signs do the rest.
+      this.hemi.color.setHex(0x9a8ce6);
+      this.hemi.groundColor.setHex(0x2a1f48);
+      this.hemi.intensity = 2.1;
+      this.sun.color.setHex(0xa9b9ff);
+      this.sun.intensity = 1.1;
+      this.scene.environmentIntensity = 1.6;
+    }
+    this.sunDisc.visible = !theme.neon; // no moon over a sky this lit up
     this.sunDisc.scale.setScalar(theme.night ? 0.65 : 1);
     (this.sunDisc.material as THREE.MeshBasicMaterial).color.setHex(theme.night ? 0xdceaff : 0xffecc8);
     this.sunGlow.visible = !theme.night;
     this.postfx?.setMood(theme.night);
+    this.postfx?.setLook(this.look, !!theme.neon);
+    // Rain falls in the world when the weather says so, on any map.
+    const raining = this.weather.type === 'rain';
+    if (raining && !this.rain) this.rain = new Rain(this.quality === 0 ? 1200 : 2600);
+    if (this.rain) {
+      if (raining) this.scene.add(this.rain.object);
+      else this.scene.remove(this.rain.object);
+    }
+    this.wet = raining || !!theme.neon;
     setUnderglow(theme.night ? 1 : 0.2);
     this.scenery = new Scenery(this.scene, this.track, seed, map);
     this.sunOffset.set(-35, 50, -30);
@@ -1246,7 +1271,9 @@ export class Game {
     this.postfx?.dispose();
     this.postfx = createPostFX(this.renderer, this.scene, this.camera, this.quality);
     this.postfx?.setSize(window.innerWidth, window.innerHeight, this.curDpr);
-    this.postfx?.setMood(environmentTheme(MAPS[this.mapIndex]).night);
+    const theme = environmentTheme(MAPS[this.mapIndex]);
+    this.postfx?.setMood(theme.night);
+    this.postfx?.setLook(this.look, !!theme.neon);
     this.sun.castShadow = q.shadows;
     this.renderer.shadowMap.enabled = q.shadows;
     // A resized map has to be thrown away before three will allocate the new one.
@@ -1312,8 +1339,14 @@ export class Game {
     let trafficUpdated = false;
     this.cine.flash = Math.max(0, this.cine.flash - real * 5.5);
     // Boost drama ramps in fast and falls away slowly, so the release breathes.
-    const wanted = this.player.nitroActive ? 1 : 0;
-    this.boostFx += (wanted - this.boostFx) * Math.min(1, real * (wanted ? 9 : 3.5));
+    // Near the car's own top speed a lighter dose of it comes in on its own:
+    // the edges start to tear before the nitro does it properly.
+    const top = BASE_SPEED * this.player.speedMul;
+    const flatOut = this.state === 'racing'
+      ? THREE.MathUtils.clamp((this.player.v / top - 0.7) / 0.3, 0, 1) * 0.42 : 0;
+    const wanted = this.player.nitroActive ? 1 : flatOut;
+    this.boostFx += (wanted - this.boostFx) * Math.min(1, real * (wanted > this.boostFx ? 9 : 3.5));
+    this.postfx?.tick(elapsed);
     this.postfx?.setDrama(this.boostFx, this.cine.flash);
     this.adaptResolution(Math.min(frameTime, 0.25));
 
@@ -1481,6 +1514,7 @@ export class Game {
       this.scenery.update(focus);
       this.announceDistrict(focus);
       this.updateCamera(dt);
+      this.rain?.update(this.camera, elapsed);
       this.renderFrame();
     }
   }
@@ -1491,7 +1525,9 @@ export class Game {
     const drifting = p.drifting;
     const dusting = p.dusting;
     const boosting = p.nitroActive;
-    if (!drifting && !dusting && !boosting) {
+    // on a wet road the rear tyres lift a fine spray once the car is moving
+    const spraying = this.wet && p.v > 14 && !dusting;
+    if (!drifting && !dusting && !boosting && !spraying) {
       this.smokeT = 0;
       return;
     }
@@ -1518,6 +1554,14 @@ export class Game {
       }
       if (boosting) {
         this.smoke.spawn(rear.x + rear.nx * p.x, 0.45, rear.z + rear.nz * p.x, 0x7fd4ff, 0.4);
+      }
+      // Every other tick, so spray never starves the pool drift smoke draws from.
+      if (spraying && !drifting && (this.sprayFlip = !this.sprayFlip)) {
+        const back = this.track.frame(p.s - 2.2);
+        for (const side of [-0.8, 0.8]) {
+          const lat = p.x + side;
+          this.smoke.spawn(back.x + back.nx * lat, 0.22, back.z + back.nz * lat, 0xaebbd4, 0.4);
+        }
       }
     }
   }

@@ -13,6 +13,7 @@ import { toonify, toonMat } from './toon';
 import { Track } from './track';
 import { bakedPath } from './trackPaths';
 import { dressLagosCoast } from './coast';
+import { isSharedNeonTexture, NeonDressing, puddleRoughness } from './neonCity';
 
 interface Placed {
   s: number;
@@ -89,6 +90,7 @@ export class Scenery {
   private window: VisibilityWindow;
   private roadMat: THREE.MeshStandardMaterial;
   private kit: EnvironmentKit;
+  private neon: NeonDressing | null = null;
   private disposed = false;
 
   constructor(
@@ -111,6 +113,15 @@ export class Scenery {
     const road = track.buildRoadMesh(roadStyle);
     this.roadMat = road.material as THREE.MeshStandardMaterial;
     this.roadMat.color.setHex(theme.night ? 0x9ca9bd : 0xebe7dc);
+    if (theme.neon) {
+      // Rain-slick tarmac: dark, glossy, with puddles. The sheen comes from the
+      // environment cube and the lights; the streaks from the signs are geometry.
+      this.roadMat.color.setHex(0x7d8599);
+      this.roadMat.roughness = 1;
+      this.roadMat.roughnessMap = puddleRoughness();
+      this.roadMat.metalness = 0.15;
+      this.roadMat.envMapIntensity = 1.8;
+    }
     road.receiveShadow = true;
     this.group.add(road);
     if (map.circuit) this.loadCircuitModel(map.circuit);
@@ -130,6 +141,7 @@ export class Scenery {
     const route = track.outline(2);
     const clearOfRoad = (obj: THREE.Object3D, radius: number) =>
       route.every((p) => Math.hypot(p.x - obj.position.x, p.z - obj.position.z) > 6 + radius);
+    const neon = theme.neon ? (this.neon = new NeonDressing(track, mulberry32(seed ^ 0x6e656f6e))) : null;
 
     for (const side of [-1, 1]) {
       let s = map.id === 'lagos' ? track.length * 2 / 3 + 10 : 14;
@@ -252,7 +264,11 @@ export class Scenery {
         const setback = dist + (rand() - 0.5) * (isRural(flavor) ? 6 : 3.4);
         track.place(obj, s, side * setback, isRural(flavor) ? 0 : 0.2);
         obj.rotation.y += (side > 0 ? Math.PI / 2 : -Math.PI / 2) + (rand() - 0.5) * 0.16;
-        if (rand() > 0.12 && clearOfRoad(obj, setback > 12 ? 5 : 1.3)) addStatic(obj, s);
+        if (rand() > 0.12 && clearOfRoad(obj, setback > 12 ? 5 : 1.3)) {
+          addStatic(obj, s);
+          const size = obj.userData.dimensions as { w: number; h: number; d: number } | undefined;
+          if (neon && size) neon.facade(s, side, setback - size.d / 2, size.h, size.w);
+        }
         if (!shore && s % 45 < 20) {
           // Deserts and mountains fill their back row with stone; a conifer behind
           // the Giza ruins was the one plant that gave the kit away.
@@ -303,6 +319,7 @@ export class Scenery {
         kit.box(portal, 0, 9, 0, 15, 0.65, 0.7, 0x4a6376);
         kit.box(portal, 0, 8.7, -0.38, 13.6, 0.12, 0.1, 0xef61ae, true);
         track.place(portal, s, 0); addStatic(portal, s);
+        neon?.portal(s);
       }
     }
 
@@ -318,7 +335,10 @@ export class Scenery {
         : kit.lamp();
       this.track.place(lamp, s, side * 8.8, 0.2);
       lamp.rotation.y += side > 0 ? Math.PI / 2 : -Math.PI / 2;
-      if (clearOfRoad(lamp, 0.5)) addStatic(lamp, s);
+      if (clearOfRoad(lamp, 0.5)) {
+        addStatic(lamp, s);
+        neon?.lamp(s, side);
+      }
     }
 
     // launch ramps along long straightaways (jump over traffic or catch air)
@@ -391,6 +411,10 @@ export class Scenery {
       items.push({ s: index * 60 + 30, obj: batch });
     }
     for (const geometry of sourceGeometries) geometry.dispose();
+    for (const placed of neon?.build() ?? []) {
+      this.group.add(placed.obj);
+      items.push(placed);
+    }
     items.sort((a, b) => a.s - b.s);
     this.window = new VisibilityWindow(items, 90, 260, track.length);
     scene.add(this.group);
@@ -413,12 +437,15 @@ export class Scenery {
     for (const g of geometries) g.dispose();
     for (const m of materials) {
       const texture = (m as THREE.MeshToonMaterial).map;
+      if (isSharedNeonTexture(texture)) continue; // disposed with the dressing
+
       // The road's repeat texture is cached across races.
       if (texture instanceof THREE.CanvasTexture && m !== this.roadMat) texture.dispose();
       if (m !== this.roadMat) (m as THREE.MeshStandardMaterial).bumpMap?.dispose();
       m.dispose();
     }
     this.kit.dispose();
+    this.neon?.dispose();
   }
 
   /**

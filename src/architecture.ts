@@ -44,26 +44,37 @@ export function localBuilding(id: string, kit: EnvironmentKit, rand: () => numbe
 
   if (['neon', 'tokyo', 'seoul', 'beijing', 'saopaulo'].includes(id)) {
     // Contemporary cities get curtain walls, not the Lagos stucco facade.
-    const w = 7 + rand() * 4, d = 7 + rand() * 3;
-    const floors = (tall ? 10 : 5) + Math.floor(rand() * 6), h = floors * 3;
-    box(0, h / 2, 0, w, h, d, glass);
     const cyber = id === 'neon', tokyo = id === 'tokyo';
+    const w = 7 + rand() * 4, d = 7 + rand() * 3;
+    // Neon City is a canyon: the street reads as a street only when the walls
+    // rise well past the top of the screen.
+    const floors = cyber ? (tall ? 13 : 8) + Math.floor(rand() * 9)
+      : (tall ? 10 : 5) + Math.floor(rand() * 6);
+    const h = floors * 3;
+    g.userData.dimensions = { w, h, d };
+    box(0, h / 2, 0, w, h, d, cyber ? 0x1c2436 : glass);
+    // one trim colour per tower, so a street of them is not one repeated ring
+    const band = cyber && t.windows ? t.windows[Math.floor(rand() * t.windows.length)] : t.accent;
     for (let f = 0; f <= floors; f++) {
       const y = f * 3;
-      box(0, y, 0, w + 0.35, cyber ? 0.12 : 0.3, d + 0.35,
-        cyber && f % 3 === 0 ? t.accent : wall, cyber && f % 3 === 0);
+      const lit = cyber && f % 4 === 0;
+      box(0, y, 0, w + 0.35, cyber ? 0.12 : 0.3, d + 0.35, lit ? band : wall, lit);
     }
     for (const side of [-1, 1]) {
       for (let col = -2; col <= 2; col++) {
         box(col * w / 5, h / 2, side * (d / 2 + 0.05), 0.13, h, 0.18, wall);
         if (t.night) for (let f = 0; f < floors; f++) {
-          if (rand() > 0.35) continue;
+          if (rand() > (cyber ? 0.5 : 0.35)) continue;
+          const lit = t.windows ? t.windows[Math.floor(rand() * t.windows.length)]
+            : id === 'seoul' ? 0xc6edee : 0xffd9a1;
           box(col * w / 5 + w / 10, f * 3 + 1.5, side * (d / 2 + 0.07),
-            w / 5 - 0.3, 1.8, 0.08, id === 'seoul' ? 0xc6edee : 0xffd9a1, true);
+            w / 5 - 0.3, 1.8, 0.08, lit, true);
         }
       }
-      if (cyber || tokyo) {
-        const neon = cyber ? 0xf15aa7 : 0xffae62;
+      // Neon City's signs are real lettered boards (src/neonCity.ts); the
+      // painted strip stays for Tokyo only.
+      if (tokyo) {
+        const neon = 0xffae62;
         box(side * w * 0.38, h * 0.48, side * (d / 2 + 0.3), 1.15, h * 0.66, 0.5, neon, true);
         for (let mark = 0; mark < 5; mark++) {
           box(side * w * 0.38, h * (0.23 + mark * 0.11), side * (d / 2 + 0.57),

@@ -10,6 +10,12 @@ export interface EnvironmentTheme {
   pavement: number; facade: number[]; accent: number; foliage: number; rock: number;
   water: number; night: boolean; coast: boolean;
   landscape: 'city' | 'mountains' | 'forest' | 'desert' | 'stadium';
+  /** Emissive strength of lit windows and trims; above 1 reaches the bloom threshold. */
+  glow?: number;
+  /** Lit-window colours, when a city's windows are not all the same warm white. */
+  windows?: number[];
+  /** Wet streets: glossy puddled tarmac, neon signs, their reflections. */
+  neon?: boolean;
 }
 
 const DAY: EnvironmentTheme = {
@@ -27,8 +33,12 @@ const THEMES: Record<string, Partial<EnvironmentTheme>> = {
   beijing: { sky: 0x849fae, horizon: 0xedcfae, fog: 0xb7ada0,
     facade: [0xaaa296, 0xc3b7a0, 0x8b9595], accent: 0xa34234, pavement: 0xb4afa3 },
   mumbai: { coast: true, sky: 0x79b4c7, facade: [0xd7b28a, 0xe0c9a1, 0xbb9c8e, 0xa5b6a7], accent: 0x3d7f80 },
-  neon: { night: true, sky: 0x101a32, horizon: 0x4f476a, fog: 0x3c465c,
-    ground: 0x252e3b, pavement: 0x576373, facade: [0x47566b, 0x5a526e, 0x38475d], accent: 0x47dcd2, foliage: 0x3c686b },
+  // Lit by its own signs: a near-black sky with the city's magenta haze on the
+  // horizon, dark facades, and windows in more than one colour.
+  neon: { night: true, neon: true, sky: 0x07061a, horizon: 0x4a2466, fog: 0x2a1c48,
+    ground: 0x161a24, pavement: 0x3a4152, facade: [0x2c3346, 0x362d4c, 0x283240, 0x3b4154],
+    accent: 0xff2e9a, foliage: 0x1f3a3c, glow: 1.05,
+    windows: [0x9fe8ff, 0xffc987, 0xff8fd8, 0xe6f0ff, 0xb7a2ff] },
   london: { sky: 0x889eae, horizon: 0xd8d9cb, fog: 0xaeb9b9, pavement: 0xb2b2a8,
     facade: [0x94766b, 0xa48a77, 0x7d8588], accent: 0x375849, foliage: 0x496448, ground: 0x5e7058 },
   tokyo: { night: true, sky: 0x172a48, horizon: 0x7d7184, fog: 0x62697e,
@@ -79,6 +89,17 @@ export function buildReflectionSky(theme: EnvironmentTheme): THREE.CubeTexture {
     gradient.addColorStop(0, new THREE.Color(i === 3 ? theme.ground : theme.sky).getStyle());
     gradient.addColorStop(1, new THREE.Color(i === 2 ? theme.sky : theme.horizon).getStyle());
     ctx.fillStyle = gradient; ctx.fillRect(0, 0, 64, 64);
+    if (theme.neon && i !== 2 && i !== 3) {
+      // The street's signs, as the glossy tarmac and car paint see them: tall
+      // coloured bars around the horizon band. This is what a wet road reflects
+      // at a grazing angle, so it is most of the "wet" look for no extra draw.
+      const signs = theme.windows ?? [theme.accent];
+      for (let bar = 0; bar < 7; bar++) {
+        const x = (bar * 9 + i * 5) % 60, w = 2 + ((bar + i) % 3) * 2;
+        ctx.fillStyle = new THREE.Color(signs[(bar + i) % signs.length]).getStyle();
+        ctx.fillRect(x, 20 + ((bar * 7) % 14), w, 14 + ((bar * 5) % 16));
+      }
+    }
     return canvas;
   });
   const texture = new THREE.CubeTexture(faces);
@@ -122,8 +143,8 @@ export class EnvironmentKit {
     const key = `${color}/${glow}`;
     let material = this.materials.get(key);
     if (!material) {
-      material = new THREE.MeshStandardMaterial({ color, roughness: 0.86,
-        ...(glow ? { emissive: color, emissiveIntensity: 0.65 } : {}) });
+      material = new THREE.MeshStandardMaterial({ color, roughness: this.theme.neon ? 0.62 : 0.86,
+        ...(glow ? { emissive: color, emissiveIntensity: this.theme.glow ?? 0.65 } : {}) });
       this.materials.set(key, material);
     }
     return material;
@@ -577,7 +598,7 @@ export function batchEnvironment(root: THREE.Group, aoStrength = 1): THREE.Group
       const shaded = material.clone();
       shaded.vertexColors = true;
       const mesh = new THREE.Mesh(merged, shaded);
-      mesh.castShadow = true;
+      mesh.castShadow = !material.transparent;
       mesh.receiveShadow = true;
       group.add(mesh);
     }
