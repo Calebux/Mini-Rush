@@ -14,6 +14,7 @@ falls back to a procedural stand-in for any file that isn't on disk.
 |---|---|---|---|
 | `car_traffic_1..6.glb`, `car_wheel.glb` | [PSX Style Cars](https://ggbot.itch.io/psx-style-cars) | GGBotNet | CC0 1.0 |
 | `city_building_1..3.glb` | [Downtown City MegaKit](https://quaternius.itch.io/downtown-city-megakit) (Standard/free) | Quaternius | CC0 1.0 |
+| `police_officer.glb` — the city's police officer | Cartoon police officer (decimated, textures to WebP) with Mixamo clips (Walk With Rifle, Standing Arguing, Standing Idle, Strafing) | ⚠️ character source not recorded yet; animation: Mixamo | **ask the user** |
 | `police_heli.glb` — the city police helicopter | Police helicopter (textures resized to WebP) | ⚠️ source not recorded yet | **ask the user** |
 | `armored_truck.glb` — the city's 4★ armoured truck | Armoured six-wheeler (decimated 689k → 27k triangles, repainted) | ⚠️ source not recorded yet | **ask the user** |
 | Magnum .357 (Gun Run driver's pistol; not yet in the game) | Magnum357 | [bobadams3d on CGTrader](https://www.cgtrader.com/designers/bobadams3d) | CGTrader model, credited as the author asks |

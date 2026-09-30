@@ -167,3 +167,22 @@ body.city-mode #race-mini { display: none !important; }
     bottom: calc(max(24px, var(--safe-bottom, 0px)) + 196px); }
   #city-wanted b { font-size: 15px; }
 }
+
+/* the city's pause card */
+#city-pause { position: absolute; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center;
+  background: rgba(3,4,10,.62); pointer-events: auto; padding: 16px; }
+#city-pause.hidden { display: none; }
+.city-pause-card { width: min(100%, 320px); display: flex; flex-direction: column; gap: 10px; padding: 20px; border-radius: 18px; text-align: center;
+  background: linear-gradient(180deg, rgba(20,22,44,.96), rgba(9,10,24,.96)); border: 1px solid rgba(34,230,255,.55);
+  box-shadow: 0 0 40px -10px #ff2e9a, 0 20px 60px rgba(0,0,0,.6); }
+.city-pause-card small { font-size: 9px; letter-spacing: .3em; color: #22e6ff; }
+.city-pause-card strong { font-size: 26px; font-weight: 900; letter-spacing: .1em; margin-bottom: 6px; }
+.city-pause-card .city-btn { width: 100%; padding: 13px; font-size: 11px; }
+.city-pause-card .city-btn.big { background: linear-gradient(100deg, #ff2e9a, #8b5cf6); border: 0; font-size: 13px; }
+.city-pause-card em { font-style: normal; font-size: 9px; letter-spacing: .08em; color: #9aa3c7; margin-top: 4px; }
+
+/* with a controller connected, the card's buttons show which pad button presses them */
+#city-hud.has-pad [data-pad]::before {
+  content: attr(data-pad); display: inline-block; margin-right: 6px; padding: 1px 5px; border-radius: 999px;
+  background: rgba(255,255,255,.14); font-size: .95em;
+}

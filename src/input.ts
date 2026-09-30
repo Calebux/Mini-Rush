@@ -28,6 +28,8 @@ export class InputManager {
   onPadMap: () => void = () => {};
   /** ○ on a controller. */
   onPadBack: () => void = () => {};
+  /** L3 / R3 (a stick clicked in): a secondary action, e.g. skip a fare. */
+  onPadAlt: () => void = () => {};
   /** R, or Share / the touchpad on a pad: next radio station. */
   onRadio: () => void = () => {};
   /** A controller appeared or went away. */
@@ -150,6 +152,7 @@ export class InputManager {
     if (edge(PAD.circle)) this.onPadBack();
     if (edge(PAD.options)) this.onPause();
     if (edge(PAD.share) || edge(16) || edge(17)) this.onRadio();
+    if (edge(10) || edge(11)) this.onPadAlt();
     this.padPressed = pad.buttons.map((b) => b.pressed);
   }
 

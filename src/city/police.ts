@@ -1,6 +1,5 @@
 import * as THREE from 'three';
-import type { AssetLibrary } from '../assets';
-import { disposeCarInstance } from '../assets';
+import { AssetLibrary, disposeCarInstance } from '../assets';
 import { glow } from '../neonCity';
 import { CityDrive } from './drive';
 import { EDGE } from './layout';
@@ -23,6 +22,21 @@ const EVADE_RADIUS = 105;        // no unit this close: you are out of sight
 const EVADE_TIME = 9;            // seconds out of sight to lose the stars
 const BUST_TIME = 3;             // seconds stopped beside a cruiser
 const HELI_HEIGHT = 34;
+const OFFICER_HEIGHT = 1.62;     // the officer as played, metres
+const ARGUE_TIME = 3.6;          // seconds at the window before the fine
+
+/** The officer walking up after a bust: out of the cruiser, to the window, arguing. */
+interface Arrest {
+  body: THREE.Group;
+  mixer: THREE.AnimationMixer | null;
+  walk: THREE.AnimationAction | null;
+  argue: THREE.AnimationAction | null;
+  target: THREE.Vector3;
+  phase: 'walk' | 'argue';
+  t: number;
+  stars: number;
+  speed: number;
+}
 
 export type PoliceEvent = { type: 'wanted' | 'evaded' | 'busted'; stars: number };
 
@@ -53,11 +67,19 @@ export class CityPolice {
   private truckModel: THREE.Group | null = null;
   private heliModel: THREE.Group | null = null;
   private sirenOn = false;
+  private officerModel: { scene: THREE.Group; clips: THREE.AnimationClip[]; height: number } | null = null;
+  private arrest: Arrest | null = null;
 
   constructor(private scene: THREE.Scene, private assets: AssetLibrary,
     private audio: { startSiren(): void; siren(level: number): void; stopSiren(): void }) {
     assets.loadExtra('armored_truck.glb', 6.4).then((m) => { this.truckModel = m; });
     assets.loadExtra('police_heli.glb', 11).then((m) => { this.heliModel = m; });
+    assets.loadCharacter('police_officer.glb').then((m) => { this.officerModel = m; });
+  }
+
+  /** An arrest is playing: the player's car is held. */
+  get arresting(): boolean {
+    return this.arrest !== null;
   }
 
   get stars(): number {
@@ -88,6 +110,7 @@ export class CityPolice {
 
   /** Clear everything: after a bust, or when leaving the city. */
   clear(): void {
+    this.endArrest();
     this.heat = 0;
     this.evade = this.bust = 0;
     for (const u of this.units) this.removeUnit(u);
@@ -98,6 +121,10 @@ export class CityPolice {
 
   update(dt: number, player: CityDrive): void {
     this.time += dt;
+    if (this.arrest) {
+      this.updateArrest(dt, player);
+      return;
+    }
     const stars = this.stars;
     this.spawn(stars, player);
 
@@ -164,8 +191,7 @@ export class CityPolice {
       if (slow && unitNear) this.bust += dt;
       else this.bust = Math.max(0, this.bust - dt * 1.5);
       if (this.bust >= BUST_TIME) {
-        this.events.push({ type: 'busted', stars });
-        this.clear();
+        this.startArrest(player, stars);
         return;
       }
     } else {
@@ -268,6 +294,100 @@ export class CityPolice {
     }
     u.mesh.position.set(d.x, 0, d.z);
     u.mesh.rotation.set(0, d.yaw, 0);
+  }
+
+  /** Busted: the nearest cruiser's officer gets out and walks to the window. */
+  private startArrest(player: CityDrive, stars: number): void {
+    player.vel.set(0, 0);
+    const src = this.officerModel;
+    const cruiser = this.units.filter((u) => u.kind === 'car')
+      .sort((a, b) => Math.hypot(a.drive.x - player.x, a.drive.z - player.z) - Math.hypot(b.drive.x - player.x, b.drive.z - player.z))[0];
+    if (!src || !cruiser) {
+      // no officer to send (the model is still loading): the bust lands at once
+      this.events.push({ type: 'busted', stars });
+      this.clear();
+      return;
+    }
+    for (const u of this.units) u.drive.vel.set(0, 0);
+    const { root, clips, height } = AssetLibrary.cloneCharacter(src);
+    root.scale.setScalar(OFFICER_HEIGHT / height);
+    const body = new THREE.Group();
+    body.add(root);
+    // out of the cruiser's driver side
+    const cf = cruiser.drive.forward;
+    body.position.set(cruiser.drive.x + cf.y * 1.4, 0, cruiser.drive.z - cf.x * 1.4);
+    this.scene.add(body);
+    // to the player's window (their left side), a step out from the door
+    const pf = player.forward;
+    const target = new THREE.Vector3(player.x + pf.y * 1.9 + pf.x * 0.3, 0, player.z - pf.x * 1.9 + pf.y * 0.3);
+    const mixer = new THREE.AnimationMixer(root);
+    const clip = (n: string) => clips.find((c) => c.name === n);
+    const inPlace = (c: THREE.AnimationClip | undefined) => {
+      if (!c) return undefined;
+      const copy = c.clone();
+      for (const track of copy.tracks) {
+        if (!/Hips\.position$/.test(track.name)) continue;
+        const v = track.values;
+        for (let i = 0; i < v.length; i += 3) { v[i] = v[0]; v[i + 2] = v[2]; }
+      }
+      return copy;
+    };
+    const walkClip = inPlace(clip('walk')), argueClip = clip('argue');
+    const walk = walkClip ? mixer.clipAction(walkClip) : null;
+    const argue = argueClip ? mixer.clipAction(argueClip) : null;
+    walk?.play();
+    this.arrest = { body, mixer, walk, argue, target, phase: 'walk', t: 0, stars, speed: 1.35 };
+    this.bust = 0;
+  }
+
+  private updateArrest(dt: number, player: CityDrive): void {
+    const a = this.arrest!;
+    player.vel.set(0, 0);
+    a.t += dt;
+    a.mixer?.update(dt);
+    // the light bars keep flashing and the helicopter keeps circling
+    const on = Math.floor(this.time * 7) % 2 === 0;
+    for (const u of this.units) u.lights.forEach((l, i) => { l.visible = (i === 0) === on; });
+    for (const r of this.heliRotors) r.rotation[r.userData.axis as 'x' | 'y' | 'z'] += dt * 38;
+    if (a.phase === 'walk') {
+      const toGo = a.target.clone().sub(a.body.position);
+      const step = a.speed * dt;
+      if (toGo.length() <= step || a.t > 8) {
+        a.body.position.copy(a.target);
+        a.phase = 'argue';
+        a.t = 0;
+        if (a.argue) { a.argue.reset().play(); a.walk?.crossFadeTo(a.argue, 0.3, false); }
+      } else {
+        a.body.position.addScaledVector(toGo.normalize(), step);
+        a.body.rotation.y = Math.atan2(toGo.x, toGo.z);
+      }
+      return;
+    }
+    // at the window, facing the driver
+    const face = Math.atan2(player.x - a.body.position.x, player.z - a.body.position.z);
+    a.body.rotation.y += Math.atan2(Math.sin(face - a.body.rotation.y), Math.cos(face - a.body.rotation.y)) * Math.min(1, dt * 6);
+    if (a.t >= ARGUE_TIME) {
+      this.events.push({ type: 'busted', stars: a.stars });
+      this.clear();
+    }
+  }
+
+  private endArrest(): void {
+    if (!this.arrest) return;
+    this.arrest.mixer?.stopAllAction();
+    this.scene.remove(this.arrest.body);
+    this.arrest = null;
+  }
+
+  /** Where the camera should look during an arrest: the officer at the window. */
+  arrestShot(player: CityDrive): { position: THREE.Vector3; look: THREE.Vector3 } | null {
+    if (!this.arrest) return null;
+    const o = this.arrest.body.position;
+    const pf = player.forward;
+    return {
+      position: new THREE.Vector3(player.x + pf.y * 6.5 + pf.x * 4.5, 2.4, player.z - pf.x * 6.5 + pf.y * 4.5),
+      look: new THREE.Vector3(o.x * 0.6 + player.x * 0.4, 1.1, o.z * 0.6 + player.z * 0.4)
+    };
   }
 
   private removeUnit(u: Unit): void {

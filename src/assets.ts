@@ -209,6 +209,29 @@ export class AssetLibrary {
     return job;
   }
 
+  private characters = new Map<string, Promise<{ scene: THREE.Group; clips: THREE.AnimationClip[]; height: number } | null>>();
+
+  /**
+   * A rigged character with its clips (the city's police officer), loaded
+   * on first ask. cloneCharacter gives each copy its own skeleton.
+   */
+  loadCharacter(file: string): Promise<{ scene: THREE.Group; clips: THREE.AnimationClip[]; height: number } | null> {
+    let job = this.characters.get(file);
+    if (!job) {
+      job = this.loader.loadAsync(`${this.base}${file}`).then((gltf) => {
+        const box = new THREE.Box3().setFromObject(gltf.scene);
+        gltf.scene.traverse((o) => { if ((o as THREE.SkinnedMesh).isSkinnedMesh) o.frustumCulled = false; });
+        return { scene: gltf.scene, clips: gltf.animations, height: box.max.y - box.min.y };
+      }).catch(() => null);
+      this.characters.set(file, job);
+    }
+    return job;
+  }
+
+  static cloneCharacter(src: { scene: THREE.Group; clips: THREE.AnimationClip[]; height: number }) {
+    return { root: skeletonClone(src.scene) as THREE.Group, clips: src.clips, height: src.height };
+  }
+
   /**
    * The passenger keeps its animations and its own scale: tryLoad's wrapper
    * would drop the clips, and the clips' root motion is in the model's units.

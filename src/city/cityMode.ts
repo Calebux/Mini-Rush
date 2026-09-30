@@ -47,12 +47,13 @@ export interface CityDeps {
  * ones ride on the car with no lag.
  */
 const CITY_CAMS = [
-  { name: 'CHASE', back: 8.2, h: 3.9, ahead: 6, lookH: 1.3, fov: 66, lag: 6, attached: false },
-  { name: 'FAR CHASE', back: 13.5, h: 6.4, ahead: 8, lookH: 1.2, fov: 60, lag: 5, attached: false },
-  { name: 'LOW', back: 5.4, h: 1.6, ahead: 10, lookH: 1.1, fov: 72, lag: 8, attached: false },
-  { name: 'HOOD', back: -1.1, h: 1.45, ahead: 20, lookH: 1.05, fov: 72, lag: 0, attached: true },
-  { name: 'BUMPER', back: -2.3, h: 0.62, ahead: 20, lookH: 0.6, fov: 76, lag: 0, attached: true },
-  { name: 'TOP DOWN', back: 3, h: 34, ahead: 4, lookH: 0, fov: 55, lag: 4, attached: false }
+  // pull: metres the camera backs off per m/s of speed; zoom: degrees of fov per m/s
+  { name: 'CHASE', back: 8.2, h: 3.9, ahead: 6, lookH: 1.3, fov: 66, lag: 6, attached: false, pull: 0.035, zoom: 0.18 },
+  { name: 'FAR CHASE', back: 13.5, h: 6.4, ahead: 8, lookH: 1.2, fov: 60, lag: 5, attached: false, pull: 0.035, zoom: 0.14 },
+  { name: 'LOW', back: 5.2, h: 1.55, ahead: 10, lookH: 1.1, fov: 70, lag: 10, attached: false, pull: 0, zoom: 0.08 },
+  { name: 'HOOD', back: -1.1, h: 1.45, ahead: 20, lookH: 1.05, fov: 72, lag: 0, attached: true, pull: 0, zoom: 0.16 },
+  { name: 'BUMPER', back: -2.3, h: 0.62, ahead: 20, lookH: 0.6, fov: 76, lag: 0, attached: true, pull: 0, zoom: 0.16 },
+  { name: 'TOP DOWN', back: 3, h: 34, ahead: 4, lookH: 0, fov: 55, lag: 4, attached: false, pull: 0, zoom: 0 }
 ] as const;
 
 const MAP_RANGE = CITY_EXTENT + 34; // metres from the centre the map image covers
@@ -86,6 +87,9 @@ export class CityMode {
   private camLook = new THREE.Vector3();
   private shake = 0;
   private camMode = 0;
+  // the camera and its target, kept as offsets from the car so speed never adds lag
+  private camOffset = new THREE.Vector3(0, 4.5, -9);
+  private lookOffset = new THREE.Vector3(0, 1.2, 6);
   private brakeLamp: THREE.Mesh | null = null;
   private reverseLamp: THREE.Mesh | null = null;
   private tailPool: THREE.Mesh | null = null;
@@ -144,6 +148,8 @@ export class CityMode {
     this.mini = (this.hud.querySelector('#city-mini') as HTMLCanvasElement).getContext('2d')!;
     this.bigMap = this.hud.querySelector('#city-bigmap') as HTMLElement;
     this.hud.querySelector('#city-exit')!.addEventListener('click', () => deps.onExit());
+    this.hud.querySelector('#city-pause-btn')!.addEventListener('click', () => this.togglePause());
+    this.hud.querySelector('#city-resume')!.addEventListener('click', () => this.togglePause(false));
     this.hud.querySelector('#city-nitro')!.addEventListener('click', () => this.nitro());
     this.hud.querySelector('#city-gps')!.addEventListener('click', () => this.panelAction());
     this.hud.querySelector('#city-skip')!.addEventListener('click', () => {
@@ -245,13 +251,29 @@ export class CityMode {
     this.postfx?.setSize(window.innerWidth, window.innerHeight, r.getPixelRatio());
   }
 
+  paused = false;
+
+  /** Pause or resume: the world stops, the menu shows. The ride is kept. */
+  togglePause(on = !this.paused): void {
+    if (on === this.paused) return;
+    this.paused = on;
+    this.hud.querySelector('#city-pause')!.classList.toggle('hidden', !on);
+    if (on) { this.deps.audio.stopEngine(); this.deps.audio.stopSiren(); this.deps.audio.play('back'); }
+    else { this.deps.audio.startEngine(); this.deps.audio.play('select'); }
+  }
+
   /** One frame: drive, dress, film. `real` is the frame time in seconds. */
   frame(real: number, elapsed: number): void {
+    if (this.paused) {
+      if (this.postfx) this.postfx.composer.render();
+      else this.deps.renderer.render(this.scene, this.deps.camera);
+      return;
+    }
     const dt = Math.min(real, 0.05);
     const input = this.deps.input;
     const steer = THREE.MathUtils.clamp(input.keySteer + input.touchSteer, -1, 1);
     const passengerSequenceActive = this.passenger.isPlaying();
-    if (!passengerSequenceActive) {
+    if (!passengerSequenceActive && !this.police.arresting) {
       this.drive.update(dt, { steer, gas: input.gas, brake: input.braking, handbrake: input.handbrake });
     }
     this.updateLamps();
@@ -318,6 +340,18 @@ export class CityMode {
 
     if (this.postfx) this.postfx.composer.render();
     else this.deps.renderer.render(this.scene, this.deps.camera);
+  }
+
+  /** ○ on a pad: the card's button. */
+  padAction(): void {
+    const button = this.hud.querySelector('#city-gps') as HTMLButtonElement;
+    if (!button.hidden && !button.disabled) this.panelAction();
+  }
+
+  /** L3 / R3 on a pad: skip the fare on offer. */
+  padSkip(): void {
+    const skip = this.hud.querySelector('#city-skip') as HTMLButtonElement;
+    if (!skip.hidden) skip.click();
   }
 
   /** The panel's button: accept a fare, take the next one, or the free-roam radar's action. */
@@ -490,19 +524,24 @@ export class CityMode {
     const travel = d.vel.lengthSq() > 16 && d.speed > 0 ? d.vel.clone().normalize() : d.forward;
     // on the car the view is the nose's; behind it, a blend toward travel
     const dir = mode.attached ? d.forward : d.forward.clone().lerp(travel, 0.45).normalize();
-    const back = mode.back + (mode.attached ? 0 : Math.max(0, speed) * 0.05);
-    let want = new THREE.Vector3(d.x - dir.x * back, mode.h + (mode.attached ? 0 : Math.max(0, speed) * 0.018), d.z - dir.y * back);
+    const back = mode.back + Math.max(0, speed) * mode.pull;
+    let want = new THREE.Vector3(d.x - dir.x * back, mode.h + Math.max(0, speed) * mode.pull * 0.4, d.z - dir.y * back);
     let look = new THREE.Vector3(d.x + dir.x * mode.ahead, mode.lookH, d.z + dir.y * mode.ahead);
     // a passenger getting in or out: swing round to watch the door
-    const shot = this.passenger.cameraShot();
+    const shot = this.passenger.cameraShot() ?? this.police.arrestShot(d);
     if (shot) {
       want = shot.position;
       look = shot.look;
     }
     const rigid = mode.attached && !shot;
     const k = rigid ? 1 : 1 - Math.exp(-dt * (shot ? 2.2 : mode.lag));
-    this.camPos.lerp(want, k);
-    this.camLook.lerp(look, rigid ? 1 : 1 - Math.exp(-dt * (shot ? 3 : 10)));
+    // Smooth the camera's offset from the car, not its place in the world:
+    // smoothing a world position trails further behind the faster you go.
+    const car = new THREE.Vector3(d.x, 0, d.z);
+    this.camOffset.lerp(want.clone().sub(car), k);
+    this.camPos.copy(car).add(this.camOffset);
+    this.lookOffset.lerp(look.clone().sub(car), rigid ? 1 : 1 - Math.exp(-dt * (shot ? 3 : 10)));
+    this.camLook.copy(car).add(this.lookOffset);
     cam.position.copy(this.camPos);
     if (this.shake > 0) {
       cam.position.x += (Math.random() - 0.5) * this.shake * 0.3;
@@ -510,7 +549,7 @@ export class CityMode {
       this.shake = Math.max(0, this.shake - dt * 3);
     }
     cam.lookAt(this.camLook);
-    const fov = mode.fov + Math.max(0, speed) * 0.22 + (d.boosting ? 9 : 0);
+    const fov = mode.fov + Math.max(0, speed) * mode.zoom + (d.boosting ? 7 : 0);
     if (Math.abs(cam.fov - fov) > 0.1) {
       cam.fov = THREE.MathUtils.damp(cam.fov, fov, 4, dt);
       cam.updateProjectionMatrix();
@@ -519,6 +558,7 @@ export class CityMode {
 
   private updateHud(dt: number, speed: number): void {
     this.updateWanted();
+    this.hud.classList.toggle('has-pad', !!this.deps.input.padName);
     const kmh = Math.round(Math.abs(speed) * 3.6);
     const speedEl = document.getElementById('hud-speed-v');
     if (speedEl) speedEl.textContent = String(kmh);
@@ -816,7 +856,7 @@ function buildHud(mode: 'free' | 'taxi'): HTMLElement {
         <button class="city-btn radio-next-hud" id="city-radio-next" type="button" aria-label="Radio: next station">⏭</button>
         <button class="city-btn" id="city-cam-btn" type="button" aria-label="Change camera">CAM</button>
         <button class="city-btn" id="city-map-btn" type="button">MAP</button>
-        <button class="city-btn" id="city-exit" type="button">EXIT</button>
+        <button class="city-btn" id="city-pause-btn" type="button" aria-label="Pause">⏸</button>
       </div>
     </div>
     <div class="city-panel city-activity">
@@ -824,8 +864,8 @@ function buildHud(mode: 'free' | 'taxi'): HTMLElement {
       <strong id="city-activity-title">ACTIVITY RADAR</strong>
       <small id="city-activity-detail">Set a waypoint to find collectibles, races and rides.</small>
       <div class="city-activity-buttons">
-        <button class="city-btn" id="city-gps" type="button">FIND NEXT</button>
-        <button class="city-btn ghost" id="city-skip" type="button" hidden>SKIP</button>
+        <button class="city-btn" id="city-gps" data-pad="○" type="button">FIND NEXT</button>
+        <button class="city-btn ghost" id="city-skip" data-pad="R3" type="button" hidden>SKIP</button>
       </div>
       <div id="city-nav" hidden><i aria-hidden="true"></i><span><b></b><small></small></span></div>
     </div>
@@ -833,6 +873,16 @@ function buildHud(mode: 'free' | 'taxi'): HTMLElement {
     <button id="city-nitro" type="button" aria-label="Nitro"><span>NITRO</span></button>
     <button id="city-drift" type="button" aria-label="Handbrake: hold to drift">DRIFT</button>
     <div id="city-toast" role="status" aria-live="polite"></div>
+    <div id="city-pause" class="overlay hidden" role="dialog" aria-label="Paused">
+      <div class="city-pause-card">
+        <small>NEON CITY</small>
+        <strong>PAUSED</strong>
+        <button class="city-btn big" id="city-resume" type="button">RESUME</button>
+        <button class="city-btn" id="city-pause-radio" type="button">📻 RADIO</button>
+        <button class="city-btn" id="city-exit" type="button">EXIT TO MENU</button>
+        <em>🎮 Options resumes · keyboard P / Esc</em>
+      </div>
+    </div>
     <div id="city-wanted" hidden><b></b><small></small><span><i></i></span></div>
     <div id="city-bigmap" role="dialog" aria-label="City map">
       <div class="city-bigmap-card">

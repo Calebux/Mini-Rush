@@ -347,7 +347,7 @@ export class Game {
     this.input.onTap = () => { if (!this.city) this.onTap(); };
     this.input.onCamera = () => (this.city ? this.city.cycleCamera() : this.cycleCamera());
     this.input.onNitroKey = () => (this.city ? this.city.nitro() : this.boostNitro());
-    this.input.onPause = () => (this.city ? this.exitCity() : this.togglePause());
+    this.input.onPause = () => (this.city ? this.city.togglePause() : this.togglePause());
     window.addEventListener('keydown', (e) => {
       if (!this.city || e.repeat) return;
       if (e.key === ' ') this.city.nitro();
@@ -370,7 +370,9 @@ export class Game {
     this.input.onPadBack = () => {
       if (this.padInMenu()) this.padMenu.back();
       else if (this.city?.mapOpen) this.city.toggleMap();
+      else this.city?.padAction(); // ○ in the city: accept the ride, next fare, find next
     };
+    this.input.onPadAlt = () => this.city?.padSkip();
     this.input.onPadChange = (name) => {
       this.ui.popText(name ? 'CONTROLLER CONNECTED' : 'CONTROLLER DISCONNECTED', '#22e6ff');
     };
@@ -389,6 +391,7 @@ export class Game {
 
     window.addEventListener('resize', () => this.onResize());
     document.addEventListener('visibilitychange', () => {
+      if (document.hidden && this.city) this.city.togglePause(true);
       if (document.hidden && !this.paused && (this.state === 'countdown' || this.state === 'racing')) {
         this.togglePause();
       }
@@ -513,7 +516,7 @@ export class Game {
 
   /** A screen of buttons rather than a car to drive: the pad navigates it. */
   private padInMenu(): boolean {
-    if (this.city) return false; // the city has its own buttons: △ map, ○ close, Options exit
+    if (this.city) return this.city.paused; // the city's pause card takes the pad; otherwise it drives
     return this.paused || this.state === 'menu' || this.state === 'finished';
   }
 
@@ -529,6 +532,8 @@ export class Game {
     });
     const cityRadio = document.getElementById('city-radio');
     if (cityRadio) this.radioPanel.attach(cityRadio);
+    const pauseRadio = document.getElementById('city-pause-radio');
+    if (pauseRadio) this.radioPanel.attach(pauseRadio);
     document.getElementById('city-radio-next')?.addEventListener('click', (e) => { e.stopPropagation(); this.radioNext(); });
     void this.audio.playMusic('race');
   }
