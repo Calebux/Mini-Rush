@@ -186,3 +186,24 @@ body.city-mode #race-mini { display: none !important; }
   content: attr(data-pad); display: inline-block; margin-right: 6px; padding: 1px 5px; border-radius: 999px;
   background: rgba(255,255,255,.14); font-size: .95em;
 }
+
+/* the card's header folds it */
+.city-activity-kicker { width: 100%; background: none; border: 0; padding: 0; cursor: pointer; font: inherit; font-size: 9px;
+  letter-spacing: inherit; color: #22e6ff; align-items: center; gap: 8px; text-align: left; }
+.city-activity-kicker span { flex: 1; }
+.city-activity-kicker i { font-style: normal; font-size: 11px; transition: transform .15s; color: #e9f1ff; }
+.city-activity.collapsed { width: auto; max-width: min(290px, calc(100vw - 24px)); padding: 7px 11px; }
+.city-activity.collapsed > :not(.city-activity-kicker):not(#city-activity-title) { display: none !important; }
+.city-activity.collapsed #city-activity-title { font-size: 11px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.city-activity.collapsed .city-activity-kicker i { transform: rotate(-90deg); }
+
+/* phones, and Nimiq Pay's webview above all: a slimmer top bar */
+@media (max-width: 480px) {
+  .city-top { top: max(8px, env(safe-area-inset-top)); left: 8px; right: 8px; }
+  .city-where { padding: 5px 8px 6px; }
+  .city-where small { font-size: 7px; }
+  .city-where strong { font-size: 11px; }
+  .city-actions .city-btn { padding: 7px 7px; font-size: 8px; min-width: 30px; }
+  .city-activity { top: max(56px, calc(46px + env(safe-area-inset-top))); left: 8px; padding: 7px 9px 8px; }
+  .city-activity strong { font-size: 13px; }
+}

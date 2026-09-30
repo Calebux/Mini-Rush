@@ -26,6 +26,32 @@ import { CityTraffic } from './traffic';
 import { CityPolice } from './police';
 import { spend } from '../economy';
 import { CityWorld } from './world';
+import { KadunaWorld } from './kadunaWorld';
+
+export type OpenCity = 'kaduna' | 'neon';
+
+/** How each open city looks and what its places are called. */
+const CITY_STYLE = {
+  neon: {
+    name: 'NEON CITY', night: true, rain: true, themeMap: 'neon',
+    sky: ['#05040d', '#1b1236', '#4a2466'], fog: [0x2a1c48, 40, 430] as const,
+    hemi: [0x9a8ce6, 0x2a1f48, 1.35] as const, sun: [0xa9b9ff, 1.1] as const,
+    districts: { downtown: 'DOWNTOWN', midtown: 'MIDTOWN', market: 'NIGHT MARKET', harbour: 'HARBOUR', plaza: 'PLAZA',
+      ring: 'EXPRESSWAY', island: 'EAST ISLAND', bridge: 'EAST FREEWAY' },
+    map: { ground: '#0a0d16', water: '#12314a', roads: '#39415a', island: '#263849', rail: '#22e6ff', centre: 'rgba(255,46,154,0.55)',
+      blocks: { downtown: '#241a3a', midtown: '#1a2030', market: '#2c1f24', harbour: '#1b2626', plaza: '#18322c' } }
+  },
+  kaduna: {
+    name: 'KADUNA', night: false, rain: false, themeMap: 'lagos',
+    sky: ['#7fa9c9', '#c9d4d6', '#e6d3b0'], fog: [0xd8c7a6, 90, 620] as const,
+    hemi: [0xf1ecdf, 0x8a6a4a, 1.25] as const, sun: [0xfff1d6, 2.6] as const,
+    districts: { downtown: 'AHMADU BELLO WAY', midtown: 'UNGWAN RIMI', market: 'KASUWA', harbour: 'RIVER BANK', plaza: 'MURTALA SQUARE',
+      ring: 'EASTERN BYPASS', island: 'SABON TASHA', bridge: 'KADUNA BRIDGE' },
+    map: { ground: '#caa77a', water: '#5f7a5c', roads: '#6b6b6b', island: '#b88457', rail: '#d6342b', centre: 'rgba(240,234,217,0.6)',
+      blocks: { downtown: '#e2d6bd', midtown: '#d8c9a8', market: '#d6a86a', harbour: '#9fb07f', plaza: '#8fa25a' } }
+  }
+} as const;
+type CityStyle = typeof CITY_STYLE[OpenCity];
 import './city.css';
 
 export interface CityDeps {
@@ -39,6 +65,8 @@ export interface CityDeps {
   /** free roam (collectibles, street races) or passenger fares */
   mode: 'free' | 'taxi';
   onExit: () => void;
+  /** which open city; Kaduna unless told otherwise */
+  city?: OpenCity;
 }
 
 /**
@@ -65,7 +93,9 @@ const MAP_PX = 640;
  */
 export class CityMode {
   private scene = new THREE.Scene();
-  private world = new CityWorld();
+  private world: CityWorld | KadunaWorld;
+  private style: CityStyle;
+  private sun: THREE.DirectionalLight;
   private activities: CityActivities | null;
   private fares: FareDispatch | null;
   private route: P[] = [];
@@ -103,18 +133,28 @@ export class CityMode {
   private districtTimer = 0;
 
   constructor(private deps: CityDeps) {
-    const theme = environmentTheme(MAPS.find((m) => m.id === 'neon')!);
-    this.scene.background = skyGradient();
-    this.scene.fog = new THREE.Fog(0x2a1c48, 40, 430);
+    const style = this.style = CITY_STYLE[deps.city ?? 'kaduna'];
+    this.world = deps.city === 'neon' ? new CityWorld() : new KadunaWorld(deps.assets);
+    const theme = environmentTheme(MAPS.find((m) => m.id === style.themeMap)!);
+    this.scene.background = skyGradient(style.sky);
+    this.scene.fog = new THREE.Fog(style.fog[0], style.fog[1], style.fog[2]);
     this.scene.environment = buildReflectionSky(theme);
-    this.scene.environmentIntensity = 1.1;
-    this.scene.add(new THREE.HemisphereLight(0x9a8ce6, 0x2a1f48, 1.35));
-    const moon = new THREE.DirectionalLight(0xa9b9ff, 1.1);
-    moon.position.set(-60, 90, -40);
-    this.scene.add(moon);
+    this.scene.environmentIntensity = style.night ? 1.1 : 0.8;
+    this.scene.add(new THREE.HemisphereLight(style.hemi[0], style.hemi[1], style.hemi[2]));
+    this.sun = new THREE.DirectionalLight(style.sun[0], style.sun[1]);
+    this.sun.position.set(-60, 90, -40);
+    if (!style.night) {
+      // daylight: a real sun that throws shadows, its shadow box following the car
+      this.sun.castShadow = deps.tier > 0;
+      this.sun.shadow.mapSize.set(deps.tier > 1 ? 2048 : 1024, deps.tier > 1 ? 2048 : 1024);
+      Object.assign(this.sun.shadow.camera, { left: -60, right: 60, top: 60, bottom: -60, near: 1, far: 260 });
+      this.sun.shadow.bias = -0.0004;
+      this.sun.shadow.normalBias = 0.05;
+    }
+    this.scene.add(this.sun, this.sun.target);
     this.scene.add(this.world.group);
     this.activities = deps.mode === 'free' ? new CityActivities(this.scene) : null;
-    this.fares = deps.mode === 'taxi' ? new FareDispatch({ x: SPAWN.x, z: SPAWN.z }) : null;
+    this.fares = deps.mode === 'taxi' ? new FareDispatch({ x: SPAWN.x, z: SPAWN.z }, deps.city ?? 'kaduna') : null;
     this.buildChevrons();
     this.traffic = new CityTraffic(this.scene, deps.assets);
     this.police = new CityPolice(this.scene, deps.assets, deps.audio);
@@ -134,16 +174,16 @@ export class CityMode {
     lightCars(this.scene, mapEnvironment(deps.renderer, theme), carReflection(theme));
 
     this.rain = new Rain(deps.tier === 0 ? 1200 : 2600);
-    this.scene.add(this.rain.object);
+    if (style.rain) this.scene.add(this.rain.object);
     this.smoke = new SmokePool(this.scene, 40);
 
     this.postfx = createPostFX(deps.renderer, this.scene, deps.camera, deps.tier);
-    this.postfx?.setMood(true);
-    this.postfx?.setLook(savedLook(), true);
+    this.postfx?.setMood(style.night);
+    this.postfx?.setLook(savedLook(), style.night);
     this.resize();
 
-    this.mapImage = drawCityMap();
-    this.hud = buildHud(deps.mode);
+    this.mapImage = drawCityMap(style);
+    this.hud = buildHud(deps.mode, style.name);
     document.body.appendChild(this.hud);
     this.mini = (this.hud.querySelector('#city-mini') as HTMLCanvasElement).getContext('2d')!;
     this.bigMap = this.hud.querySelector('#city-bigmap') as HTMLElement;
@@ -160,6 +200,18 @@ export class CityMode {
     this.hud.querySelector('#city-mini')!.addEventListener('click', toggleMap);
     this.hud.querySelector('#city-map-btn')!.addEventListener('click', toggleMap);
     this.hud.querySelector('#city-cam-btn')!.addEventListener('click', () => this.cycleCamera());
+    // the card folds down to one line, and remembers it
+    const card = this.hud.querySelector('.city-activity') as HTMLElement;
+    const fold = (on: boolean) => {
+      card.classList.toggle('collapsed', on);
+      this.hud.querySelector('#city-activity-toggle')!.setAttribute('aria-expanded', String(!on));
+      try { localStorage.setItem('minirush.city.card', on ? 'folded' : 'open'); } catch { /* this session only */ }
+    };
+    let folded = false;
+    try { folded = localStorage.getItem('minirush.city.card') === 'folded'; } catch { /* default open */ }
+    fold(folded);
+    this.hud.querySelector('#city-activity-toggle')!.addEventListener('click', () => fold(!card.classList.contains('collapsed')));
+    this.foldCard = fold;
     // the drift button is held, like a handbrake lever
     const drift = this.hud.querySelector('#city-drift') as HTMLElement;
     const hold = (on: boolean) => (e: Event) => { e.preventDefault(); deps.input.uiHandbrake = on; drift.classList.toggle('on', on); };
@@ -204,6 +256,7 @@ export class CityMode {
     const material = new THREE.MeshBasicMaterial({ map: glow(), transparent: true, depthWrite: false,
       blending: THREE.AdditiveBlending, fog: false, color: new THREE.Color(0xdfe8ff).multiplyScalar(0.55) });
     const beam = new THREE.Mesh(new THREE.PlaneGeometry(7, 16), material);
+    beam.visible = this.style.night; // a pool of headlight on the road only reads after dark
     beam.rotation.x = -Math.PI / 2;
     beam.position.set(0, 0.06, 9.5);
     const tail = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.8),
@@ -252,6 +305,13 @@ export class CityMode {
   }
 
   paused = false;
+  private foldCard: (on: boolean) => void = () => {};
+
+  /** Fold or open the dispatch / radar card (the pad's D-pad up while stopped does it too). */
+  toggleCard(): void {
+    const card = this.hud.querySelector('.city-activity') as HTMLElement;
+    this.foldCard(!card.classList.contains('collapsed'));
+  }
 
   /** Pause or resume: the world stops, the menu shows. The ride is kept. */
   togglePause(on = !this.paused): void {
@@ -333,7 +393,11 @@ export class CityMode {
     this.postfx?.tick(elapsed);
 
     this.updateCamera(dt, speed);
-    this.world.update(d.x, d.z);
+    this.world.update(d.x, d.z, dt);
+    if (this.sun.castShadow) {
+      this.sun.position.set(d.x - 60, 90, d.z - 40);
+      this.sun.target.position.set(d.x, 0, d.z);
+    }
     this.sky.position.set(this.deps.camera.position.x, 0, this.deps.camera.position.z);
     this.rain.update(this.deps.camera, elapsed);
     this.updateHud(dt, speed);
@@ -484,6 +548,17 @@ export class CityMode {
     }
   }
 
+  /** The district to announce, in this city's own names. */
+  private districtName(x: number, z: number): string {
+    const generic = districtAt(x, z);
+    const d = this.style.districts;
+    const table: Record<string, string> = {
+      DOWNTOWN: d.downtown, MIDTOWN: d.midtown, 'NIGHT MARKET': d.market, HARBOUR: d.harbour, PLAZA: d.plaza,
+      EXPRESSWAY: d.ring, 'EAST ISLAND': d.island, 'EAST FREEWAY': d.bridge
+    };
+    return table[generic] ?? generic;
+  }
+
   /** The wanted stars, and the bust / evade meter under them. */
   private updateWanted(): void {
     const el = this.hud.querySelector('#city-wanted') as HTMLElement;
@@ -569,7 +644,7 @@ export class CityMode {
     nitro.classList.toggle('ready', this.drive.nitro >= 0.999 && !this.drive.boosting);
     nitro.classList.toggle('on', this.drive.boosting);
 
-    const here = districtAt(this.drive.x, this.drive.z);
+    const here = this.districtName(this.drive.x, this.drive.z);
     if (here !== this.district) {
       this.district = here;
       const tag = this.hud.querySelector('#city-district') as HTMLElement;
@@ -771,15 +846,15 @@ function localBounds(car: THREE.Group): THREE.Box3 {
 }
 
 /** Night sky: near-black overhead, the city's magenta glow at the horizon. */
-function skyGradient(): THREE.CanvasTexture {
+function skyGradient(stops: readonly string[]): THREE.CanvasTexture {
   const c = document.createElement('canvas');
   c.width = 2;
   c.height = 256;
   const ctx = c.getContext('2d')!;
   const g = ctx.createLinearGradient(0, 0, 0, 256);
-  g.addColorStop(0, '#05040d');
-  g.addColorStop(0.55, '#1b1236');
-  g.addColorStop(1, '#4a2466');
+  g.addColorStop(0, stops[0]);
+  g.addColorStop(0.55, stops[1]);
+  g.addColorStop(1, stops[2]);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 2, 256);
   const t = new THREE.CanvasTexture(c);
@@ -788,19 +863,20 @@ function skyGradient(): THREE.CanvasTexture {
 }
 
 /** The whole city, top down, once: minimap and full map both crop from it. */
-function drawCityMap(): HTMLCanvasElement {
+function drawCityMap(style: CityStyle): HTMLCanvasElement {
+  const m = style.map;
   const c = document.createElement('canvas');
   c.width = c.height = MAP_PX;
   const ctx = c.getContext('2d')!;
   const s = MAP_PX / (MAP_RANGE * 2);
   const X = (x: number) => (x + MAP_RANGE) * s;
-  ctx.fillStyle = '#0a0d16';
+  ctx.fillStyle = m.ground;
   ctx.fillRect(0, 0, MAP_PX, MAP_PX);
-  ctx.fillStyle = '#12314a';                          // water around both shores
+  ctx.fillStyle = m.water;                            // water around both shores
   ctx.fillRect(0, 0, MAP_PX, MAP_PX);
-  ctx.fillStyle = '#39415a';                          // every street and the ring
+  ctx.fillStyle = m.roads;                            // every street and the ring
   ctx.fillRect(X(-EDGE), X(-EDGE), (EDGE * 2) * s, (EDGE * 2) * s);
-  ctx.fillStyle = '#263849';                          // east island
+  ctx.fillStyle = m.island;                           // east island
   ctx.fillRect(X(EAST_ISLAND_X0), X(EAST_ISLAND_Z0),
     (EAST_ISLAND_X1 - EAST_ISLAND_X0) * s, (EAST_ISLAND_Z1 - EAST_ISLAND_Z0) * s);
   ctx.fillStyle = '#41495e';                          // bridge + long freeway
@@ -808,17 +884,15 @@ function drawCityMap(): HTMLCanvasElement {
     (EAST_ISLAND_X0 - EDGE) * s, BRIDGE_HALF * 2 * s);
   ctx.fillRect(X(EAST_ISLAND_X0), X(BRIDGE_Z - 11),
     (EAST_ISLAND_X1 - EAST_ISLAND_X0) * s, 22 * s);
-  const tint: Record<string, string> = {
-    downtown: '#241a3a', midtown: '#1a2030', market: '#2c1f24', harbour: '#1b2626', plaza: '#18322c'
-  };
+  const tint: Record<string, string> = m.blocks;
   for (const b of CITY_BLOCKS) {
     ctx.fillStyle = tint[b.district];
     ctx.fillRect(X(b.x0), X(b.z0), (b.x1 - b.x0) * s, (b.z1 - b.z0) * s);
   }
-  ctx.strokeStyle = '#22e6ff';                        // the expressway's rail
+  ctx.strokeStyle = m.rail;                           // the expressway's rail
   ctx.lineWidth = 2;
   ctx.strokeRect(X(-EDGE), X(-EDGE), EDGE * 2 * s, EDGE * 2 * s);
-  ctx.strokeStyle = 'rgba(255,46,154,0.55)';          // expressway centre
+  ctx.strokeStyle = m.centre;                         // expressway centre
   ctx.lineWidth = 1;
   const ring = HALF + STREET / 2 + (EDGE - HALF - STREET / 2) / 2;
   ctx.strokeRect(X(-ring), X(-ring), ring * 2 * s, ring * 2 * s);
@@ -842,13 +916,13 @@ function arrow(ctx: CanvasRenderingContext2D, x: number, y: number, angle: numbe
   ctx.restore();
 }
 
-function buildHud(mode: 'free' | 'taxi'): HTMLElement {
+function buildHud(mode: 'free' | 'taxi', city: string): HTMLElement {
   const hud = document.createElement('div');
   hud.id = 'city-hud';
   hud.innerHTML = `
     <div class="city-top">
       <div class="city-panel city-where">
-        <small>${mode === 'taxi' ? 'PASSENGER' : 'FREE ROAM'} · NEON CITY</small>
+        <small>${mode === 'taxi' ? 'PASSENGER' : 'FREE ROAM'} · ${city}</small>
         <strong id="city-district">DOWNTOWN</strong>
       </div>
       <div class="city-actions">
@@ -860,7 +934,9 @@ function buildHud(mode: 'free' | 'taxi'): HTMLElement {
       </div>
     </div>
     <div class="city-panel city-activity">
-      <div class="city-activity-kicker"><span>${mode === 'taxi' ? 'DISPATCH' : 'ACTIVITY RADAR'}</span><b id="city-activity-time"></b></div>
+      <button class="city-activity-kicker" id="city-activity-toggle" type="button" aria-expanded="true" aria-label="Show or hide the card">
+        <span>${mode === 'taxi' ? 'DISPATCH' : 'ACTIVITY RADAR'}</span><b id="city-activity-time"></b><i aria-hidden="true">▾</i>
+      </button>
       <strong id="city-activity-title">ACTIVITY RADAR</strong>
       <small id="city-activity-detail">Set a waypoint to find collectibles, races and rides.</small>
       <div class="city-activity-buttons">
@@ -875,7 +951,7 @@ function buildHud(mode: 'free' | 'taxi'): HTMLElement {
     <div id="city-toast" role="status" aria-live="polite"></div>
     <div id="city-pause" class="overlay hidden" role="dialog" aria-label="Paused">
       <div class="city-pause-card">
-        <small>NEON CITY</small>
+        <small>${city}</small>
         <strong>PAUSED</strong>
         <button class="city-btn big" id="city-resume" type="button">RESUME</button>
         <button class="city-btn" id="city-pause-radio" type="button">📻 RADIO</button>
@@ -886,7 +962,7 @@ function buildHud(mode: 'free' | 'taxi'): HTMLElement {
     <div id="city-wanted" hidden><b></b><small></small><span><i></i></span></div>
     <div id="city-bigmap" role="dialog" aria-label="City map">
       <div class="city-bigmap-card">
-        <div class="city-bigmap-head"><span>NEON CITY</span><small>TAP TO CLOSE</small></div>
+        <div class="city-bigmap-head"><span>${city}</span><small>TAP TO CLOSE</small></div>
         <canvas width="${MAP_PX}" height="${MAP_PX}"></canvas>
       </div>
     </div>`;

@@ -101,19 +101,19 @@ const DECK_EXTRAS: DeckExtra[] = [
   { id: 'daily', name: 'DAILY RUN', icon: '⚡', group: 'EVENT', accent: '#22e6ff', button: 'btn-daily',
     cta: 'RUN TODAY\'S CIRCUIT', pills: ['ONE CIRCUIT', 'EVERYONE', 'RESETS DAILY'],
     tagline: 'One circuit for everyone, today only. Post a score and climb the daily board.' },
-  { id: 'taxi', name: 'PASSENGER', icon: '🚕', group: 'NEON CITY', accent: '#fcd34d', button: 'btn-taxi',
+  { id: 'taxi', name: 'PASSENGER', icon: '🚕', group: 'OPEN CITY', accent: '#fcd34d', button: 'btn-taxi',
     cta: 'START A SHIFT', pills: ['OPEN CITY', 'FARES', 'GPS'],
-    tagline: 'Pick up fares across Neon City, deliver them against the clock, and get paid.' },
-  { id: 'free', name: 'FREE ROAM', icon: '🌆', group: 'NEON CITY', accent: '#a36bff', button: 'btn-city',
+    tagline: 'Pick up fares across the city, deliver them against the clock, and get paid.' },
+  { id: 'free', name: 'FREE ROAM', icon: '🌆', group: 'OPEN CITY', accent: '#a36bff', button: 'btn-city',
     cta: 'DRIVE THE CITY', pills: ['OPEN CITY', 'TOKENS', 'STREET RACES'],
-    tagline: 'Drive anywhere in Neon City. Find hidden tokens that unlock cars, and start street races.' }
+    tagline: 'Drive anywhere in the city. Find hidden tokens that unlock cars, and start street races.' }
 ];
 /**
  * Deck order, the way Gran Turismo leads with its world: the Neon City cards
  * first (Passenger opens the deck), then the race modes, then the events.
  */
-const DECK_CITY = DECK_EXTRAS.filter((x) => x.group === 'NEON CITY');
-const DECK_TAIL = DECK_EXTRAS.filter((x) => x.group !== 'NEON CITY');
+const DECK_CITY = DECK_EXTRAS.filter((x) => x.group === 'OPEN CITY');
+const DECK_TAIL = DECK_EXTRAS.filter((x) => x.group !== 'OPEN CITY');
 /** The card at a deck position: a race mode's index, or an extra. */
 const deckEntry = (pos: number): { mode: number } | { extra: DeckExtra } | null => {
   if (pos < DECK_CITY.length) return { extra: DECK_CITY[pos] };
@@ -125,7 +125,7 @@ const deckEntry = (pos: number): { mode: number } | { extra: DeckExtra } | null 
 const modeToDeck = (i: number): number => i + DECK_CITY.length;
 /** The deck's sections, and the first card of each, in deck order. */
 const DECK_GROUPS = [
-  { label: 'NEON CITY', first: () => 0 },
+  { label: 'OPEN CITY', first: () => 0 },
   { label: 'RACES', first: () => modeToDeck(0) },
   { label: 'EVENTS', first: () => modeToDeck(MODES.findIndex((m) => m.id === 'weekend')) }
 ];
@@ -737,6 +737,17 @@ export class UI {
       const num = c.querySelector('.slide-num');
       if (num) num.textContent = String(n + 1).padStart(2, '0');
     });
+    // the open-city cards' city chips: Kaduna unless the player picked Neon
+    const cityChips = [...document.querySelectorAll<HTMLButtonElement>('.city-chip')];
+    const pickCity = (id: string, sound = true) => {
+      for (const c of cityChips) c.classList.toggle('sel', c.dataset.city === id);
+      try { localStorage.setItem('minirush.opencity', id); } catch { /* this session */ }
+      if (sound) this.audio.play('select');
+    };
+    let savedCity = 'kaduna';
+    try { savedCity = localStorage.getItem('minirush.opencity') === 'neon' ? 'neon' : 'kaduna'; } catch { /* Kaduna */ }
+    pickCity(savedCity, false);
+    for (const c of cityChips) c.addEventListener('click', () => pickCity(c.dataset.city!));
     // section tabs: jump to the first card of a group
     const tabs = $('mode-tabs');
     DECK_GROUPS.forEach((g) => {
@@ -888,10 +899,13 @@ export class UI {
       go.classList.remove('locked');
       // events and the city set their own laps (or have none)
       $('lap-select').classList.add('locked');
-      $('lap-select').classList.toggle('gone', !!extra && extra.group === 'NEON CITY');
+      const city = !!extra && extra.group === 'OPEN CITY';
+      $('lap-select').classList.toggle('gone', city);
+      $('city-select').classList.toggle('hidden', !city);
       return;
     }
     $('lap-select').classList.remove('gone');
+    $('city-select').classList.add('hidden');
     const locked = modeLocked(m);
     const go = $('mode-go');
     go.textContent = locked && m.requiresClass

@@ -21,7 +21,7 @@ const SHOW_RADIUS = 360;      // metres from the car to a chunk's centre
 const BAY = 3;                // one window bay, metres
 const CELLS = 8;              // bays per texture repeat
 
-const rng = (seed: number) => () => {
+export const rng = (seed: number) => () => {
   seed = (seed + 0x6d2b79f5) | 0;
   let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
   t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
@@ -107,7 +107,7 @@ function asphaltTexture(): THREE.CanvasTexture {
 // --------------------------------------------------------------- geometry
 
 /** Non-indexed box soup with per-vertex colour and metre-scaled facade UVs. */
-class Solids {
+export class Solids {
   pos: number[] = []; nor: number[] = []; uv: number[] = []; col: number[] = [];
 
   /**

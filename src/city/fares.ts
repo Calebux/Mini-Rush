@@ -26,7 +26,13 @@ export interface FareStatus {
   timer: number;                // seconds left on the ride, 0 when not riding
 }
 
-const NAMES = ['MIKA', 'JUNO', 'RIO', 'KAI', 'ZARA', 'OBI', 'NOVA', 'TEX', 'AMARA', 'LEO'];
+const NAMES = {
+  neon: ['MIKA', 'JUNO', 'RIO', 'KAI', 'ZARA', 'OBI', 'NOVA', 'TEX', 'AMARA', 'LEO'],
+  kaduna: ['AISHA', 'MUSA', 'BALA', 'HAUWA', 'IBRAHIM', 'ZAINAB', 'EMEKA', 'BLESSING', 'YAKUBU', 'HALIMA', 'SANI', 'NGOZI']
+};
+/** Kaduna's names for the same twelve kerbs, in PLACES order. */
+const KADUNA_PLACES = ['KAWO MOTOR PARK', 'MURTALA SQUARE', 'HAMDALA HOTEL', 'KASUWA', 'BAKIN DOGO', 'RIVER BANK',
+  'KAKURI', 'BARNAWA', 'UNGWAN RIMI', 'TUDUN WADA', 'RAILWAY STATION', 'SABON TASHA'];
 
 /**
  * A spot on a street beside block (i, j)'s kerb, facing that block's `side`.
@@ -79,7 +85,14 @@ export class FareDispatch {
   completed = 0;
   earned = 0;
 
-  constructor(from: P) {
+  private places: Place[];
+  private names: string[];
+
+  constructor(from: P, city: 'neon' | 'kaduna' = 'neon') {
+    this.places = city === 'kaduna' ? PLACES.map((p, i) => ({ ...p, name: KADUNA_PLACES[i] ?? p.name })) : PLACES;
+    this.names = NAMES[city];
+    this.pickup = this.places[0];
+    this.dropoff = this.places[1];
     this.offer(from);
   }
 
@@ -87,11 +100,11 @@ export class FareDispatch {
   offer(from: P): void {
     const far = (a: P, b: P, min: number) => Math.hypot(a.x - b.x, a.z - b.z) > min;
     const pick = (list: Place[]) => list[Math.floor(this.rand() * list.length)];
-    const starts = PLACES.filter((p) => far(p, from, 160) && p.name !== 'FERRY TERMINAL');
-    this.pickup = pick(starts.length ? starts : PLACES);
-    const ends = PLACES.filter((p) => p !== this.pickup && far(p, this.pickup, 380));
-    this.dropoff = pick(ends.length ? ends : PLACES.filter((p) => p !== this.pickup));
-    this.name = NAMES[Math.floor(this.rand() * NAMES.length)];
+    const starts = this.places.filter((p, i) => far(p, from, 160) && i !== this.places.length - 1);
+    this.pickup = pick(starts.length ? starts : this.places);
+    const ends = this.places.filter((p) => p !== this.pickup && far(p, this.pickup, 380));
+    this.dropoff = pick(ends.length ? ends : this.places.filter((p) => p !== this.pickup));
+    this.name = this.names[Math.floor(this.rand() * this.names.length)];
     const metres = routeLength(route(this.pickup, this.dropoff));
     this.limit = Math.round(metres / CRUISE + GRACE);
     this.pay = Math.round((50 + metres * 0.12) / 5) * 5;

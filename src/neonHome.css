@@ -354,3 +354,6 @@ html, body { background: var(--nn-bg); }
 }
 .radio-next-hud.on { border-color: var(--nn-magenta) !important; box-shadow: 0 0 14px rgba(255,46,154,.4); }
 body.city-mode #btn-radio-hud { display: none; }
+#city-select { display: flex; align-items: center; justify-content: center; gap: 8px; }
+#city-select.hidden { display: none; }
+#modes .city-chip { width: auto; padding: 0 14px; border-radius: 999px; font-size: 10px; letter-spacing: 1.4px; }

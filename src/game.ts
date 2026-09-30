@@ -522,12 +522,14 @@ export class Game {
 
   /** Free roam in Neon City. The race world stays built behind the menu. */
   private startCity(mode: 'free' | 'taxi' = 'free'): void {
+    let city: 'kaduna' | 'neon' = 'kaduna';
+    try { if (localStorage.getItem('minirush.opencity') === 'neon') city = 'neon'; } catch { /* Kaduna */ }
     if (this.city || this.state !== 'menu') return;
     this.audio.play('start');
     this.ui.showCity();
     this.city = new CityMode({
       renderer: this.renderer, camera: this.camera, assets: this.assets, audio: this.audio,
-      input: this.input, spec: this.carSpec(this.carIndex), tier: this.quality, mode,
+      input: this.input, spec: this.carSpec(this.carIndex), tier: this.quality, mode, city,
       onExit: () => this.exitCity()
     });
     const cityRadio = document.getElementById('city-radio');
