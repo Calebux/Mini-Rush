@@ -193,6 +193,22 @@ export class AssetLibrary {
     return g;
   }
 
+  private extras = new Map<string, Promise<THREE.Group | null>>();
+
+  /**
+   * A model that only some modes need (the city police's truck and
+   * helicopter), loaded on first ask and kept. Scaled so its longest side
+   * is `size` metres, sitting on the ground.
+   */
+  loadExtra(file: string, size: number): Promise<THREE.Group | null> {
+    let job = this.extras.get(file);
+    if (!job) {
+      job = this.tryLoad(file, size);
+      this.extras.set(file, job);
+    }
+    return job;
+  }
+
   /**
    * The passenger keeps its animations and its own scale: tryLoad's wrapper
    * would drop the clips, and the clips' root motion is in the model's units.

@@ -345,3 +345,12 @@ html, body { background: var(--nn-bg); }
 #menu #vol-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
 #menu #vol-slider { min-width: 0; flex: 1 1 auto; }
 #menu .stat-stack { min-width: 0; }
+
+/* next-station button on the race HUD, under the camera button */
+#btn-radio-hud {
+  position: absolute; right: 14px; top: calc(max(12px, env(safe-area-inset-top)) + 168px);
+  font-family: var(--nn-display); font-weight: 800; font-size: 11px; letter-spacing: 1px; color: var(--nn-text);
+  background: rgba(11,13,28,.72); border: 1px solid var(--nn-line-hi); border-radius: 999px; padding: 8px 11px; cursor: pointer;
+}
+.radio-next-hud.on { border-color: var(--nn-magenta) !important; box-shadow: 0 0 14px rgba(255,46,154,.4); }
+body.city-mode #btn-radio-hud { display: none; }

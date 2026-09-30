@@ -135,6 +135,11 @@ export function route(from: P, to: P, heading?: P): P[] {
   return [from, ...best.map((id) => ({ x: nodes[id].x, z: nodes[id].z })), to];
 }
 
+/** Road junctions between `min` and `max` metres from a point: somewhere a car can appear. */
+export function junctionsNear(p: P, min: number, max: number): P[] {
+  return nodes.filter((n) => { const d = dist(n, p); return d >= min && d <= max; }).map((n) => ({ x: n.x, z: n.z }));
+}
+
 /** Total length of a route in metres. */
 export function routeLength(points: P[]): number {
   let total = 0;

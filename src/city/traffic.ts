@@ -59,7 +59,9 @@ export class CityTraffic {
     }
   }
 
-  update(dt: number, player: CityDrive): void {
+  /** Moves the traffic; returns how hard the player hit it this frame (0 = clean). */
+  update(dt: number, player: CityDrive): number {
+    let hit = 0;
     for (const car of this.cars) {
       const p = car.mesh.position;
       if (car.axis === 'x') p.x += car.direction * car.speed * dt;
@@ -78,12 +80,15 @@ export class CityTraffic {
       const distance = Math.hypot(dx, dz);
       if (distance < 4.0 && distance > 0.01 && car.cooldown <= 0) {
         const nx = dx / distance, nz = dz / distance;
+        const closing = Math.hypot(player.vel.x, player.vel.y);
+        hit = Math.max(hit, closing);
         player.bumpFromTraffic(-nx, -nz, Math.max(3, 13 - distance * 2));
         p.x += nx * 1.7;
         p.z += nz * 1.7;
         car.cooldown = 0.55;
       }
     }
+    return hit;
   }
 
   dispose(): void {

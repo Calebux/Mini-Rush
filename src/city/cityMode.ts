@@ -23,6 +23,8 @@ import {
   HALF, SPAWN, STREET
 } from './layout';
 import { CityTraffic } from './traffic';
+import { CityPolice } from './police';
+import { spend } from '../economy';
 import { CityWorld } from './world';
 import './city.css';
 
@@ -70,6 +72,7 @@ export class CityMode {
   private routeTimer = 0;
   private chevrons: THREE.Mesh[] = [];
   private traffic: CityTraffic;
+  private police: CityPolice;
   private passenger: PassengerSequence;
   private drive: CityDrive;
   private car: THREE.Group;
@@ -110,6 +113,7 @@ export class CityMode {
     this.fares = deps.mode === 'taxi' ? new FareDispatch({ x: SPAWN.x, z: SPAWN.z }) : null;
     this.buildChevrons();
     this.traffic = new CityTraffic(this.scene, deps.assets);
+    this.police = new CityPolice(this.scene, deps.assets, deps.audio);
     this.horizon = buildHorizon(theme);
     this.sky.add(this.horizon);
     this.scene.add(this.sky);
@@ -252,7 +256,13 @@ export class CityMode {
     }
     this.updateLamps();
     const d = this.drive;
-    this.traffic.update(dt, d);
+    // reckless driving: ramming traffic, and hitting walls hard, draws the police
+    const rammed = this.traffic.update(dt, d);
+    if (rammed > 12) this.police.crime(0.34);
+    else if (rammed > 6) this.police.crime(0.15);
+    if (d.impact > 13) this.police.crime(0.22);
+    this.police.update(dt, d);
+    for (let ev = this.police.consumeEvent(); ev; ev = this.police.consumeEvent()) this.policeEvent(ev);
     if (this.activities) {
       this.activities.update(dt, elapsed, d.x, d.z);
       for (let event = this.activities.consumeEvent(); event; event = this.activities.consumeEvent()) {
@@ -422,6 +432,38 @@ export class CityMode {
     }
   }
 
+  private policeEvent(ev: { type: 'wanted' | 'evaded' | 'busted'; stars: number }): void {
+    if (ev.type === 'wanted') {
+      this.deps.audio.play('crash', 0.4);
+      this.showToast(`${'★'.repeat(ev.stars)} WANTED · POLICE ARE COMING`, '#ff3b4a');
+    } else if (ev.type === 'evaded') {
+      this.deps.audio.play('finish');
+      this.showToast('YOU LOST THEM', '#22e6ff');
+    } else {
+      const fine = 40 * ev.stars;
+      const paid = spend(fine);
+      this.drive.vel.set(0, 0);
+      const lostFare = this.fares?.cancel({ x: this.drive.x, z: this.drive.z }) ?? false;
+      if (lostFare) this.passenger.stopWaiting();
+      this.deps.audio.play('crash');
+      this.showToast(`BUSTED${paid ? ` · FINE ⬤ ${fine}` : ''}${lostFare ? ' · FARE LOST' : ''}`, '#ff3b4a');
+    }
+  }
+
+  /** The wanted stars, and the bust / evade meter under them. */
+  private updateWanted(): void {
+    const el = this.hud.querySelector('#city-wanted') as HTMLElement;
+    const stars = this.police.stars;
+    el.hidden = stars === 0;
+    if (!stars) return;
+    (el.querySelector('b') as HTMLElement).textContent = '★'.repeat(stars) + '☆'.repeat(5 - stars);
+    const bust = this.police.bustProgress, evade = this.police.evadeProgress;
+    const bar = el.querySelector('i') as HTMLElement;
+    bar.style.width = `${Math.round((bust > 0.02 ? bust : evade) * 100)}%`;
+    bar.classList.toggle('bust', bust > 0.02);
+    (el.querySelector('small') as HTMLElement).textContent = bust > 0.02 ? 'STOPPED · BUSTED IN…' : evade > 0 ? 'OUT OF SIGHT · LOSING THEM' : 'EVADE THE POLICE';
+  }
+
   private emitSmoke(drifting: boolean, speed: number): void {
     const d = this.drive;
     const f = d.forward;
@@ -476,6 +518,7 @@ export class CityMode {
   }
 
   private updateHud(dt: number, speed: number): void {
+    this.updateWanted();
     const kmh = Math.round(Math.abs(speed) * 3.6);
     const speedEl = document.getElementById('hud-speed-v');
     if (speedEl) speedEl.textContent = String(kmh);
@@ -658,6 +701,7 @@ export class CityMode {
     }
     this.chevrons[0]?.geometry.dispose();
     this.traffic.dispose();
+    this.police.dispose();
     this.world.dispose();
     this.rain.dispose();
     disposeHorizon(this.horizon);
@@ -768,7 +812,8 @@ function buildHud(mode: 'free' | 'taxi'): HTMLElement {
         <strong id="city-district">DOWNTOWN</strong>
       </div>
       <div class="city-actions">
-        <button class="city-btn" id="city-radio" type="button" aria-label="NEON FM radio">📻</button>
+        <button class="city-btn" id="city-radio" data-compact="1" type="button" aria-label="NEON FM radio">📻</button>
+        <button class="city-btn radio-next-hud" id="city-radio-next" type="button" aria-label="Radio: next station">⏭</button>
         <button class="city-btn" id="city-cam-btn" type="button" aria-label="Change camera">CAM</button>
         <button class="city-btn" id="city-map-btn" type="button">MAP</button>
         <button class="city-btn" id="city-exit" type="button">EXIT</button>
@@ -788,6 +833,7 @@ function buildHud(mode: 'free' | 'taxi'): HTMLElement {
     <button id="city-nitro" type="button" aria-label="Nitro"><span>NITRO</span></button>
     <button id="city-drift" type="button" aria-label="Handbrake: hold to drift">DRIFT</button>
     <div id="city-toast" role="status" aria-live="polite"></div>
+    <div id="city-wanted" hidden><b></b><small></small><span><i></i></span></div>
     <div id="city-bigmap" role="dialog" aria-label="City map">
       <div class="city-bigmap-card">
         <div class="city-bigmap-head"><span>NEON CITY</span><small>TAP TO CLOSE</small></div>

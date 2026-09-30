@@ -139,6 +139,13 @@ export class FareDispatch {
     return this.paidFor;
   }
 
+  /** Busted mid-fare: the passenger walks off unpaid, and a new fare comes in. */
+  cancel(from: P): boolean {
+    if (this.stage === 'offer' || this.stage === 'paid') return false;
+    this.offer(from);
+    return true;
+  }
+
   tick(dt: number): void {
     if (this.stage === 'ride') this.timeLeft -= dt;
   }

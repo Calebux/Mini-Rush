@@ -338,8 +338,11 @@ export class Game {
       const b = document.getElementById(id);
       if (b) this.radioPanel.attach(b);
     }
+    // change station without stopping: HUD button, R, or Share on a pad
+    document.getElementById('btn-radio-hud')?.addEventListener('click', (e) => { e.stopPropagation(); this.radioNext(); });
 
     this.input = new InputManager(document.body);
+    this.input.onRadio = () => this.radioNext();
     // In the city a tap is a steering touch, Space/N fire nitro, Esc/P leave.
     this.input.onTap = () => { if (!this.city) this.onTap(); };
     this.input.onCamera = () => (this.city ? this.city.cycleCamera() : this.cycleCamera());
@@ -490,6 +493,24 @@ export class Game {
     this.city?.resize();
   }
 
+  /** Next station (or tune in), with the station named where you are looking. */
+  private radioNext(): void {
+    this.audio.unlock();
+    this.radio.next();
+    const say = () => {
+      const now = this.radio.current;
+      if (!now) return;
+      const text = `📻 ${now.band} · ${now.station || 'TUNING…'}`;
+      const toast = document.getElementById('city-toast');
+      if (this.city && toast) {
+        toast.textContent = text; toast.style.setProperty('--toast-color', '#ff2e9a');
+        toast.classList.remove('show'); void toast.offsetWidth; toast.classList.add('show');
+      } else this.ui.popText(text, '#ff2e9a');
+    };
+    say();
+    window.setTimeout(say, 2500); // once it has found a station that plays
+  }
+
   /** A screen of buttons rather than a car to drive: the pad navigates it. */
   private padInMenu(): boolean {
     if (this.city) return false; // the city has its own buttons: △ map, ○ close, Options exit
@@ -508,6 +529,7 @@ export class Game {
     });
     const cityRadio = document.getElementById('city-radio');
     if (cityRadio) this.radioPanel.attach(cityRadio);
+    document.getElementById('city-radio-next')?.addEventListener('click', (e) => { e.stopPropagation(); this.radioNext(); });
     void this.audio.playMusic('race');
   }
 

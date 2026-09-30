@@ -139,3 +139,31 @@ body.city-mode #race-mini { display: none !important; }
   border: 1px solid rgba(255,46,154,.55); background: rgba(10,14,28,.78);
 }
 #city-drift.on { background: linear-gradient(90deg, #ff2e9a, #a36bff); color: #fff; box-shadow: 0 0 18px rgba(255,46,154,.55); }
+
+/* wanted stars, top centre */
+#city-wanted {
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(max(22px, var(--safe-bottom, 0px)) + 112px);
+  display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 170px;
+  padding: 7px 14px 9px; border-radius: 12px; background: rgba(8,10,22,.82);
+  border: 1px solid rgba(255,59,74,.55); box-shadow: 0 0 22px rgba(255,59,74,.28);
+}
+#city-wanted[hidden] { display: none; }
+#city-wanted b { font-size: 18px; letter-spacing: 3px; color: #ffd24a; text-shadow: 0 0 10px rgba(255,210,74,.6); animation: city-wanted 0.9s steps(2) infinite; }
+@keyframes city-wanted { 50% { color: #ff3b4a; text-shadow: 0 0 10px rgba(255,59,74,.7); } }
+#city-wanted small { font-size: 8px; letter-spacing: 1.6px; color: #e9f1ff; opacity: .8; }
+#city-wanted span { display: block; width: 100%; height: 3px; border-radius: 3px; background: rgba(255,255,255,.1); overflow: hidden; }
+#city-wanted i { display: block; height: 100%; width: 0; background: #22e6ff; transition: width .15s linear; }
+#city-wanted i.bust { background: #ff3b4a; }
+
+/* a phone's top bar: five buttons and the district must fit on one row */
+@media (max-width: 480px) {
+  .city-top { gap: 6px; }
+  .city-where { min-width: 0; flex: 1 1 auto; padding: 7px 9px 8px; }
+  .city-where strong { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .city-where small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .city-actions { gap: 4px; flex: none; }
+  .city-actions .city-btn { padding: 9px 8px; font-size: 9px; letter-spacing: .08em; }
+  #city-wanted { min-width: 0; padding: 6px 12px 8px; left: auto; right: 12px; transform: none;
+    bottom: calc(max(24px, var(--safe-bottom, 0px)) + 196px); }
+  #city-wanted b { font-size: 15px; }
+}

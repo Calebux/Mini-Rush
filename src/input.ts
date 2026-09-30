@@ -28,6 +28,8 @@ export class InputManager {
   onPadMap: () => void = () => {};
   /** ○ on a controller. */
   onPadBack: () => void = () => {};
+  /** R, or Share / the touchpad on a pad: next radio station. */
+  onRadio: () => void = () => {};
   /** A controller appeared or went away. */
   onPadChange: (name: string | null) => void = () => {};
   /** D-pad or stick flicked a direction (for menus): dx, dy each -1, 0 or 1. Repeats while held. */
@@ -147,6 +149,7 @@ export class InputManager {
     if (edge(PAD.triangle)) this.onPadMap();
     if (edge(PAD.circle)) this.onPadBack();
     if (edge(PAD.options)) this.onPause();
+    if (edge(PAD.share) || edge(16) || edge(17)) this.onRadio();
     this.padPressed = pad.buttons.map((b) => b.pressed);
   }
 
@@ -225,6 +228,7 @@ export class InputManager {
       else if (key === 'arrowup' || key === 'w') this.gasHeld = true;
       else if (!e.repeat && key === 'c') this.onCamera();
       else if (!e.repeat && key === 'n') this.onNitroKey();
+      else if (!e.repeat && key === 'r') this.onRadio();
       else if (!e.repeat && (key === 'escape' || key === 'p')) this.onPause();
       else if (!e.repeat && (key === ' ' || key === 'enter')) this.onTap();
       this.heldSteer = (this.leftHeld ? -1 : 0) + (this.rightHeld ? 1 : 0);

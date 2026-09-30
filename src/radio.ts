@@ -91,6 +91,12 @@ export class Radio {
     this.play();
   }
 
+  /** From the wheel: tune in if off (the last band, or Night Drive), else next station. */
+  next(): void {
+    if (this.state === 'off' || this.state === 'failed' || !this.band) void this.tune(Radio.saved() ?? 'night');
+    else this.skip();
+  }
+
   /** Next station in the band. */
   skip(): void {
     const list = this.band ? this.lists.get(this.band) : null;
@@ -230,6 +236,10 @@ export class RadioPanel {
     $('radio-meta').textContent = now?.country ? now.country : '';
     this.el.querySelectorAll<HTMLButtonElement>('[data-band]').forEach((b) =>
       b.classList.toggle('on', b.dataset.band === this.radio.bandId));
+    for (const btn of document.querySelectorAll<HTMLElement>('.radio-next-hud')) {
+      btn.classList.toggle('on', s === 'playing' || s === 'tuning');
+      btn.title = now?.station ? `NEON FM · ${now.station} — tap for the next station` : 'Radio: tap to tune in';
+    }
     for (const tag of this.tags) {
       tag.classList.toggle('on', s === 'playing' || s === 'tuning');
       // Compact tags (the menu's volume row) only say whether it is on; the
