@@ -1,7 +1,7 @@
 # Weekly bounty
 
 A free-to-enter, skill-based prize (e.g. $20 in NIM) for the **fastest win** of
-the week's **HARDCORE** bounty race. There is no backend: entries are race
+the week's bounty race, the **CITY GP**. There is no backend: entries are race
 receipts written to the Nimiq blockchain from each winner's own wallet, and the
 organizer ranks them after entries close and pays the winner by hand.
 
@@ -14,20 +14,23 @@ builds (RUSH ONE) are out too, so every entrant drives the same car.
 
 ## The race
 
-- **HARDCORE**: 8 cars, no traffic, seven pro AI drivers, 2 laps of a 3 km lap.
+- **CITY GP** (`src/city/cityRace.ts`), from 2026-W40: raced in the open
+  free-roam Neon City itself, its full-width streets and expressway. One fixed
+  loop (Downtown → Midtown → the expressway → the harbour → back), 11 neon
+  gates to pass in order, 2 laps, 8 cars, seven pro AI drivers, no traffic, no
+  police. The loop never changes, so times compare week to week.
 - The free **VIPER GT** only. Every other car costs NIM, and RUSH ONE is a
-  workshop build, so neither can enter — though the AI field still drives the
-  fast shelf. Coin upgrades apply: they are earned by racing, not bought.
-- The race is always in Neon City (from 2026-W40); the circuit seed derives from
-  the ISO week (`src/bounty.ts`), so every
-  entrant races the same track all week. It is a different circuit from the
-  Weekly Cup.
+  workshop build, so neither can enter; the AI field drives the VIPER GT too.
+  Coin upgrades apply: they are earned by racing, not bought.
+- Earlier weeks (to 2026-W39) were a HARDCORE circuit whose seed changed
+  weekly. W40 switched mid-week; the one entry already on the W40 board, from
+  the old circuit, was removed so the week's board holds City GP times only.
 
 ## How it works
 
 1. The menu's **Bounty Board** card opens the board: this week's race, the prize
    when one is posted, the fastest wins, and the rules. **Race for the bounty**
-   goes straight to the garage in the free car.
+   drops the player on the City GP grid in the free car.
 2. **Only a win counts.** On a bounty race win, inside Nimiq Pay, the player
    taps **Enter the bounty**. Nimiq Pay asks them to confirm a 1 Luna
    transaction to the receipt address whose data field carries an `MR3` entry:

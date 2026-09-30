@@ -12,6 +12,7 @@ import {
 import { dailyMapIndex, dailySeed } from './daily';
 import { driverName } from './driver';
 import { deposit, owned, racePayout } from './economy';
+import { CityRaceStatus, LAP_METRES, LAPS } from './city/cityRace';
 import { Entities } from './entities';
 import { buildHorizon, buildReflectionSky, disposeHorizon, environmentTheme } from './environment';
 import {
@@ -329,6 +330,7 @@ export class Game {
     this.ui.onWeekendExit = () => this.exitWeekend();
     this.ui.onBounty = () => this.startBounty();
     this.ui.onBountyExit = () => this.exitBounty();
+    this.ui.onBountyCity = () => this.startCity('race', true);
 
     this.gun = new GunHud(document.getElementById('hud')!);
     // NEON FM: internet radio, opened from the menu, the pause card and the city
@@ -378,6 +380,7 @@ export class Game {
     };
     document.getElementById('btn-city')?.addEventListener('click', () => this.startCity('free'));
     document.getElementById('btn-taxi')?.addEventListener('click', () => this.startCity('taxi'));
+    document.getElementById('btn-citygp')?.addEventListener('click', () => this.startCity('race'));
     this.ui.onBrake = (down) => (this.input.uiBrake = down);
     this.ui.onGas = (down) => (this.input.uiGas = down);
     this.ui.onCamera = () => (this.city ? this.city.cycleCamera() : this.cycleCamera());
@@ -521,16 +524,18 @@ export class Game {
   }
 
   /** Free roam in Neon City. The race world stays built behind the menu. */
-  private startCity(mode: 'free' | 'taxi' = 'free'): void {
+  private startCity(mode: 'free' | 'taxi' | 'race' = 'free', bounty = false): void {
     let city: 'kaduna' | 'neon' = 'kaduna';
     try { if (localStorage.getItem('minirush.opencity') === 'neon') city = 'neon'; } catch { /* Kaduna */ }
+    if (mode === 'race') city = 'neon'; // the City GP runs on Neon City's streets
     if (this.city || this.state !== 'menu') return;
     this.audio.play('start');
     this.ui.showCity();
     this.city = new CityMode({
       renderer: this.renderer, camera: this.camera, assets: this.assets, audio: this.audio,
       input: this.input, spec: this.carSpec(this.carIndex), tier: this.quality, mode, city,
-      onExit: () => this.exitCity()
+      onExit: () => this.exitCity(),
+      onRaceFinish: bounty ? (r) => this.finishCityBounty(r) : undefined
     });
     const cityRadio = document.getElementById('city-radio');
     if (cityRadio) this.radioPanel.attach(cityRadio);
@@ -542,11 +547,33 @@ export class Game {
 
   private exitCity(): void {
     if (!this.city) return;
+    this.ui.cityBounty = false; // quit mid-race: nothing to post
     this.city.dispose();
     this.city = null;
     this.audio.play('back');
     this.ui.leaveCity();
     this.onResize(); // the camera's projection belongs to the menu again
+    void this.audio.playMusic('menu');
+  }
+
+  /**
+   * The City GP run as the bounty race: out of the city and onto the ordinary
+   * results screen, which posts a win to the bounty board and offers the
+   * on-chain entry exactly as the circuit bounty did.
+   */
+  private finishCityBounty(r: CityRaceStatus): void {
+    if (!this.city) return;
+    this.city.dispose();
+    this.city = null;
+    this.ui.leaveCity();
+    this.onResize();
+    const car = CARS[this.carIndex].name;
+    const coins = racePayout({ place: r.place, field: r.field, laps: LAPS });
+    deposit(coins);
+    const score = Math.round(placeBonus(r.place, r.field) + Math.max(0, ((LAPS * LAP_METRES) / 18 - r.time) * 4));
+    const standings = r.results.map((x) => ({ name: x.name, car: x.you ? car : 'VIPER GT', time: x.time, estimated: x.estimated, you: x.you }));
+    track('race');
+    this.ui.showResults(r.place, r.time, coins, score, LAPS, car, false, 0, false, false, 0, true, standings);
     void this.audio.playMusic('menu');
   }
 

@@ -180,6 +180,15 @@ body.city-mode #race-mini { display: none !important; }
 .city-pause-card .city-btn { width: 100%; padding: 13px; font-size: 11px; }
 .city-pause-card .city-btn.big { background: linear-gradient(100deg, #ff2e9a, #8b5cf6); border: 0; font-size: 13px; }
 .city-pause-card em { font-style: normal; font-size: 9px; letter-spacing: .08em; color: #9aa3c7; margin-top: 4px; }
+/* City GP results */
+.city-results-card #city-results-time { font-size: 15px; font-weight: 800; color: #fff; margin: -8px 0 2px; letter-spacing: .12em; }
+#city-results-list { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-direction: column; gap: 3px; max-height: 42vh; overflow-y: auto; }
+#city-results-list li { display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 9px;
+  background: rgba(255,255,255,.05); font-size: 11px; letter-spacing: .08em; text-align: left; }
+#city-results-list li b { color: #22e6ff; }
+#city-results-list li em { margin: 0; font-size: 11px; color: #cfd6f5; font-variant-numeric: tabular-nums; }
+#city-results-list li.you { background: linear-gradient(100deg, rgba(255,46,154,.35), rgba(139,92,246,.3)); }
+#city-results-list li.you b, #city-results-list li.you em { color: #fff; }
 
 /* with a controller connected, the card's buttons show which pad button presses them */
 #city-hud.has-pad [data-pad]::before {

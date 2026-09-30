@@ -29,6 +29,7 @@ import {
 } from './upgrades';
 import { track } from './usage';
 import { BADGES, earnedBadges, mintedReceipts, Wallet } from './wallet';
+import { LAP_METRES, LAPS } from './city/cityRace';
 import { Build, workshopSpec } from './workshop';
 import { WorkshopUI } from './workshopUI';
 
@@ -77,6 +78,11 @@ export interface Standing {
   estimated: boolean;
   you: boolean;
 }
+/**
+ * This phone's bounty board for a week. City GP wins keep their own board from
+ * W40, so an old-circuit time from earlier that week can't sit above them.
+ */
+const cityBountyKey = (week: string): string => `${week}.gp`;
 const activateOnEnter = (el: HTMLElement, fn: () => void): void => {
   el.addEventListener('click', fn);
   if (el.tagName === 'BUTTON') return;
@@ -106,7 +112,12 @@ const DECK_EXTRAS: DeckExtra[] = [
     tagline: 'Pick up fares across the city, deliver them against the clock, and get paid.' },
   { id: 'free', name: 'FREE ROAM', icon: '🌆', group: 'OPEN CITY', accent: '#a36bff', button: 'btn-city',
     cta: 'DRIVE THE CITY', pills: ['OPEN CITY', 'TOKENS', 'STREET RACES'],
-    tagline: 'Drive anywhere in the city. Find hidden tokens that unlock cars, and start street races.' }
+    tagline: 'Drive anywhere in the city. Find hidden tokens that unlock cars, and start street races.' },
+  // PREVIEW: the bounty's race on Neon City's own streets. Local dev only
+  // until it is approved; the live bounty is unchanged.
+  ...(import.meta.env.DEV ? [{ id: 'citygp', name: 'CITY GP', icon: '🏁', group: 'OPEN CITY', accent: '#ff2e9a',
+    button: 'btn-citygp', cta: 'RACE THE CITY', pills: ['PREVIEW', 'NEON CITY', '2 LAPS', '8 CARS'],
+    tagline: 'The bounty race on Neon City\'s real streets: through the gates in order, two laps, seven pro drivers.' }] : [])
 ];
 /**
  * Deck order, the way Gran Turismo leads with its world: the Neon City cards
@@ -218,6 +229,9 @@ export class UI {
   onChallenge: () => void = () => {};  // "challenge a friend" on the results screen
   onBounty: () => void = () => {};     // bounty race picked from the bounty board
   onBountyExit: () => void = () => {}; // backed out of / done with the bounty race
+  onBountyCity: () => void = () => {}; // the bounty race: the City GP in the open city
+  /** The results on screen (or the race running) are a City GP bounty race. */
+  cityBounty = false;
 
   private menu = $('menu');
   private results = $('results');
@@ -287,8 +301,9 @@ export class UI {
         (e.currentTarget as HTMLElement).blur();
         fn();
       });
-    on('btn-retry', () => this.onPlay());
-    on('btn-retry-same', () => this.onRetrySame());
+    // after a City GP bounty, racing again means the City GP again
+    on('btn-retry', () => (this.cityBounty ? this.startCityBounty() : this.onPlay()));
+    on('btn-retry-same', () => (this.cityBounty ? this.startCityBounty() : this.onRetrySame()));
     on('btn-pause', () => this.onPause());
     on('btn-how', () => {
       this.menu.classList.add('hidden');
@@ -331,6 +346,7 @@ export class UI {
     });
     on('btn-menu', () => {
       this.audio.play('back');
+      this.cityBounty = false;
       this.results.classList.add('hidden');
       this.menu.classList.remove('hidden');
       this.exitDaily();
@@ -899,7 +915,7 @@ export class UI {
       go.classList.remove('locked');
       // events and the city set their own laps (or have none)
       $('lap-select').classList.add('locked');
-      const city = !!extra && extra.group === 'OPEN CITY';
+      const city = !!extra && extra.group === 'OPEN CITY' && extra.id !== 'citygp';
       $('lap-select').classList.toggle('gone', city);
       $('city-select').classList.toggle('hidden', !city);
       return;
@@ -992,18 +1008,18 @@ export class UI {
    */
   private refreshBounty(): void {
     const m = MAPS[bountyMapIndex(MAPS.length)];
-    const best = this.board.bountyEntries(weekKey())[0];
+    const best = this.board.bountyEntries(cityBountyKey(weekKey()))[0];
     const live = bountyActive();
     const card = $('btn-bounty');
     card.classList.toggle('live', live);
     card.replaceChildren(
       textEl('span', 'ev-label', live ? '💰 BOUNTY BOARD · PRIZE POSTED' : '💰 BOUNTY BOARD'),
       textEl('strong', 'ev-title', live
-        ? `${bountyPrize()} · ${bountySplit() ? `top ${bountySplit()!.length} HARDCORE wins` : 'fastest HARDCORE win'}`
-        : 'Fastest HARDCORE win tops the board'),
-      textEl('small', 'ev-meta', `${m.flag} ${m.name} · ${best
+        ? `${bountyPrize()} · ${bountySplit() ? `top ${bountySplit()!.length} CITY GP wins` : 'fastest CITY GP win'}`
+        : 'Fastest CITY GP win tops the board'),
+      textEl('small', 'ev-meta', `${m.flag} ${m.name} streets · ${best
         ? `your fastest win ${raceClock(best.time)}`
-        : 'free car · 7 pro drivers · no traffic'}`)
+        : 'free car · 7 pro drivers · 2 laps'}`)
     );
   }
 
@@ -1027,7 +1043,6 @@ export class UI {
   /** Prize, race and status lines at the top of the bounty board. */
   private renderBountyHead(): void {
     const m = MAPS[bountyMapIndex(MAPS.length)];
-    const mode = MODES[BOUNTY_MODE];
     const live = bountyActive();
     $('bounty-prize').textContent = live ? bountyPrize() : 'NO PRIZE THIS WEEK';
     // a shared prize names each place, on the board and in the rules
@@ -1042,8 +1057,7 @@ export class UI {
         ? ' One prize per person; ties go to the earlier entry.'
         : ' Ties go to the earlier entry.')
     );
-    $('bounty-sub').textContent = `${m.flag} ${m.name} · ${mode.name} · ${mode.lapsLocked ?? 2} laps` +
-      ` · ${((mode.trackLength ?? 0) / 1000).toFixed(1)} km lap`;
+    $('bounty-sub').textContent = `${m.flag} ${m.name} · CITY GP · ${LAPS} laps · ${(LAP_METRES / 1000).toFixed(1)} km lap`;
     $('bounty-status').textContent = live
       ? `Prize posted. Win the race, then enter from the results screen in Nimiq Pay. Closes ${BOUNTY_CLOSES}.`
       : `Wins still rank on the board. No prize is posted for ${weekKey()} yet — when one is, this card lights up.`;
@@ -1071,7 +1085,7 @@ export class UI {
       });
     }
     list.appendChild(textEl('div', 'board-head', '📱 YOUR WINS · THIS PHONE'));
-    const mine = this.board.bountyEntries(week);
+    const mine = this.board.bountyEntries(cityBountyKey(week));
     if (mine.length === 0) {
       list.appendChild(textEl('div', 'board-empty', 'No wins yet. Finish 1st in the bounty race to post a time.'));
     }
@@ -1084,18 +1098,22 @@ export class UI {
     this.audio.play('click');
     this.exitDaily();
     this.exitWeekend();
-    this.bountyUi = true;
-    this.onBounty();
-    // free cars only: seat the player in one rather than in front of a locked START
+    // the bounty is raced in the free-roam city itself: the City GP (from 2026-W40)
+    this.startCityBounty();
+  }
+
+  /** Into the City GP as this week's bounty race, in a car the rules allow. */
+  private startCityBounty(): void {
     const mode = MODES[BOUNTY_MODE];
     if (!carFits(mode, CARS[this.carIndex])) {
       const fit = eligibleCars(mode)[0];
       if (fit !== undefined) this.selectCar(fit);
     }
-    $('lap-select').classList.add('locked');
     $('bounty').classList.add('hidden');
-    $('garage').classList.remove('hidden');
-    this.onPage('garage');
+    this.results.classList.add('hidden');
+    this.menu.classList.remove('hidden');
+    this.cityBounty = true;
+    this.onBountyCity();
   }
 
   /** Leaving the bounty race flow: unlock the lap picker and tell the game. */
@@ -2197,7 +2215,7 @@ export class UI {
     // the bounty board takes wins only, fastest first
     let rank: number;
     if (bounty) {
-      rank = won ? this.board.submitBounty(weekKey(), { score, place, time, laps, car }) : 0;
+      rank = won ? this.board.submitBounty(cityBountyKey(weekKey()), { score, place, time, laps, car }) : 0;
     } else if (weekend) {
       rank = this.board.submitWeekly(weekKey(), { score, place, time, laps, car });
     } else if (daily) {
@@ -2261,7 +2279,7 @@ export class UI {
     const mode = MODES[this.modeIndex];
     this.lastRun = {
       place, time, coins, score, style: Math.round(style), laps, car,
-      map: `${map.flag} ${map.name}`, mode: mode.name, daily, busted
+      map: this.cityBounty ? '🌃 NEON CITY' : `${map.flag} ${map.name}`, mode: this.cityBounty ? 'CITY GP' : mode.name, daily, busted
     };
     // minting is only offered on a finished run, inside Nimiq Pay, with a
     // receipt anchor configured

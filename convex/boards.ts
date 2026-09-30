@@ -4,7 +4,7 @@
 // from the phone, so they are arcade boards and a live view, never the thing a
 // prize is decided from. The bounty prize comes from on-chain MR3 entries.
 import { v } from 'convex/values';
-import { mutation, MutationCtx, query } from './_generated/server';
+import { internalMutation, mutation, MutationCtx, query } from './_generated/server';
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const WEEK = /^\d{4}-W\d{2}$/;
@@ -107,6 +107,26 @@ export const postBounty = mutation({
   handler: async (ctx, { week, ...r }) => {
     if (!WEEK.test(week)) return 0;
     if (r.place !== 1) return 0; // the bounty board takes wins only
+    // two laps of the City GP are ~5.8 km; nothing drives that in under 100 s
+    if (!(r.timeS >= 100)) return 0;
     return post(ctx, `bounty-${week}`, r, (fresh, kept) => fresh.timeS < kept.timeS, 'by_board_time', 'asc');
+  }
+});
+
+/**
+ * Take one device's row off a week's bounty board: an entry from a race the
+ * board no longer runs (W40 switched to the City GP mid-week). Internal only:
+ *   npx convex run --prod boards:dropBountyRun '{"week":"2026-W40","pid":"…"}'
+ */
+export const dropBountyRun = internalMutation({
+  args: { week: v.string(), pid: v.string() },
+  handler: async (ctx, { week, pid }) => {
+    const rows = await ctx.db
+      .query('boardRuns')
+      .withIndex('by_board_time', (q) => q.eq('board', `bounty-${week}`))
+      .collect();
+    const gone = rows.filter((r) => r.pid === pid);
+    for (const r of gone) await ctx.db.delete(r._id);
+    return gone.length;
   }
 });

@@ -23,6 +23,7 @@ import {
   HALF, SPAWN, STREET
 } from './layout';
 import { CityTraffic } from './traffic';
+import { CityRace, CityRaceStatus, LAPS } from './cityRace';
 import { CityPolice } from './police';
 import { spend } from '../economy';
 import { CityWorld } from './world';
@@ -62,11 +63,13 @@ export interface CityDeps {
   input: InputManager;
   spec: CarSpec;
   tier: QualityTier;
-  /** free roam (collectibles, street races) or passenger fares */
-  mode: 'free' | 'taxi';
+  /** free roam (collectibles, street races), passenger fares, or the City GP */
+  mode: 'free' | 'taxi' | 'race';
   onExit: () => void;
   /** which open city; Kaduna unless told otherwise */
   city?: OpenCity;
+  /** City GP as the bounty: the finish goes to the game's results screen */
+  onRaceFinish?: (result: CityRaceStatus) => void;
 }
 
 /**
@@ -102,7 +105,11 @@ export class CityMode {
   private routeFor = '';
   private routeTimer = 0;
   private chevrons: THREE.Mesh[] = [];
-  private traffic: CityTraffic;
+  private traffic: CityTraffic | null;
+  /** the City GP, when that is the mode */
+  private race: CityRace | null = null;
+  /** seconds from the line to handing the result over, when the game takes it */
+  private handoff = -1;
   private police: CityPolice;
   private passenger: PassengerSequence;
   private drive: CityDrive;
@@ -156,7 +163,7 @@ export class CityMode {
     this.activities = deps.mode === 'free' ? new CityActivities(this.scene) : null;
     this.fares = deps.mode === 'taxi' ? new FareDispatch({ x: SPAWN.x, z: SPAWN.z }, deps.city ?? 'kaduna') : null;
     this.buildChevrons();
-    this.traffic = new CityTraffic(this.scene, deps.assets);
+    this.traffic = deps.mode === 'race' ? null : new CityTraffic(this.scene, deps.assets);
     this.police = new CityPolice(this.scene, deps.assets, deps.audio);
     this.horizon = buildHorizon(theme);
     this.sky.add(this.horizon);
@@ -168,6 +175,7 @@ export class CityMode {
     this.drive.yaw = SPAWN.yaw;
     this.car = deps.assets.cloneCar(deps.spec);
     this.scene.add(this.car);
+    if (deps.mode === 'race') this.race = new CityRace(this.scene, deps.assets, this.drive, 'YOU');
     this.passenger = new PassengerSequence(this.scene, this.car, deps.spec.color, deps.assets.clonePassenger());
     this.addCarLights();
     // the player's car and the traffic reflect the city's neon, not a gradient
@@ -188,6 +196,8 @@ export class CityMode {
     this.mini = (this.hud.querySelector('#city-mini') as HTMLCanvasElement).getContext('2d')!;
     this.bigMap = this.hud.querySelector('#city-bigmap') as HTMLElement;
     this.hud.querySelector('#city-exit')!.addEventListener('click', () => deps.onExit());
+    this.hud.querySelector('#city-results-exit')?.addEventListener('click', () => deps.onExit());
+    this.hud.querySelector('#city-results-again')?.addEventListener('click', () => this.restartRace());
     this.hud.querySelector('#city-pause-btn')!.addEventListener('click', () => this.togglePause());
     this.hud.querySelector('#city-resume')!.addEventListener('click', () => this.togglePause(false));
     this.hud.querySelector('#city-nitro')!.addEventListener('click', () => this.nitro());
@@ -333,16 +343,20 @@ export class CityMode {
     const input = this.deps.input;
     const steer = THREE.MathUtils.clamp(input.keySteer + input.touchSteer, -1, 1);
     const passengerSequenceActive = this.passenger.isPlaying();
-    if (!passengerSequenceActive && !this.police.arresting) {
+    const gridded = this.race?.phase === 'countdown';
+    if (!passengerSequenceActive && !this.police.arresting && !gridded) {
       this.drive.update(dt, { steer, gas: input.gas, brake: input.braking, handbrake: input.handbrake });
     }
     this.updateLamps();
     const d = this.drive;
     // reckless driving: ramming traffic, and hitting walls hard, draws the police
-    const rammed = this.traffic.update(dt, d);
-    if (rammed > 12) this.police.crime(0.34);
-    else if (rammed > 6) this.police.crime(0.15);
-    if (d.impact > 13) this.police.crime(0.22);
+    const rammed = this.traffic?.update(dt, d) ?? 0;
+    if (this.race) this.updateRace(dt);
+    else {
+      if (rammed > 12) this.police.crime(0.34);
+      else if (rammed > 6) this.police.crime(0.15);
+      if (d.impact > 13) this.police.crime(0.22);
+    }
     this.police.update(dt, d);
     for (let ev = this.police.consumeEvent(); ev; ev = this.police.consumeEvent()) this.policeEvent(ev);
     if (this.activities) {
@@ -421,6 +435,10 @@ export class CityMode {
   /** The panel's button: accept a fare, take the next one, or the free-roam radar's action. */
   private panelAction(): void {
     const d = this.drive;
+    if (this.race) {
+      if (this.race.phase === 'finished') this.restartRace();
+      return;
+    }
     if (this.fares) {
       const status = this.fares.status();
       if (status.stage === 'offer') {
@@ -463,8 +481,48 @@ export class CityMode {
     }
   }
 
+  /** The City GP's countdown and gates, and the results when you cross the line. */
+  private updateRace(dt: number): void {
+    const race = this.race!;
+    race.update(dt);
+    if (this.handoff > 0) {
+      this.handoff -= dt;
+      if (this.handoff <= 0) this.deps.onRaceFinish?.(race.status());
+    }
+    for (let ev = race.consumeEvent(); ev; ev = race.consumeEvent()) {
+      if (ev === 'GO') { this.deps.audio.play('go'); this.showToast('GO!', '#9dff5a'); }
+      else if (ev === 'FINISH') {
+        this.deps.audio.play('finish');
+        const s = race.status();
+        if (this.deps.onRaceFinish) { this.handoff = 2.6; this.showToast(s.place === 1 ? 'YOU WIN!' : `FINISHED · P${s.place}`, '#ff2e9a'); }
+        else this.showResults();
+      }
+      else if (ev.startsWith('LAP')) { this.deps.audio.play('combo'); this.showToast(`FINAL LAP · ${ev}`, '#ff2e9a'); }
+      else { this.deps.audio.play('select'); this.showToast(ev, '#ffffff'); }
+    }
+  }
+
+  private showResults(): void {
+    const s = this.race!.status();
+    const fmt = (t: number) => `${Math.floor(t / 60)}:${(t % 60).toFixed(2).padStart(5, '0')}`;
+    const list = this.hud.querySelector('#city-results-list') as HTMLElement;
+    list.innerHTML = s.results.map((r, i) =>
+      `<li class="${r.you ? 'you' : ''}"><b>P${i + 1}</b><span>${r.name}</span><em>${fmt(r.time)}</em></li>`).join('');
+    (this.hud.querySelector('#city-results-title') as HTMLElement).textContent = s.place === 1 ? 'YOU WIN' : `P${s.place} OF ${s.field}`;
+    (this.hud.querySelector('#city-results-time') as HTMLElement).textContent = fmt(s.time);
+    this.hud.querySelector('#city-results')!.classList.remove('hidden');
+  }
+
+  private restartRace(): void {
+    this.hud.querySelector('#city-results')!.classList.add('hidden');
+    this.race?.dispose();
+    this.race = new CityRace(this.scene, this.deps.assets, this.drive, 'YOU');
+    this.deps.audio.play('start');
+  }
+
   /** Where the GPS is pointing, whichever mode is running. */
   private navTarget(): (P & { label: string; color: number }) | null {
+    if (this.race) return this.race.phase === 'finished' ? null : this.race.status().next;
     if (this.fares) return this.fares.status().target;
     return this.activities?.status(this.drive.x, this.drive.z).target ?? null;
   }
@@ -658,7 +716,16 @@ export class CityMode {
     const activityButton = this.hud.querySelector('#city-gps') as HTMLButtonElement;
     const skip = this.hud.querySelector('#city-skip') as HTMLButtonElement;
     const timer = this.hud.querySelector('#city-activity-time') as HTMLElement;
-    if (this.fares) {
+    if (this.race) {
+      const r = this.race.status();
+      activityTitle.textContent = r.phase === 'countdown' ? `GET READY · ${r.countdown}`
+        : r.phase === 'finished' ? `FINISHED · P${r.place}` : `P${r.place} / ${r.field} · LAP ${r.lap}/${LAPS}`;
+      activityDetail.textContent = r.phase === 'racing' ? `Next: ${r.next.label} — follow the pink gate` : 'Two laps of Neon City. Every gate, in order.';
+      activityButton.textContent = 'RACE AGAIN';
+      activityButton.hidden = r.phase !== 'finished';
+      skip.hidden = true;
+      timer.textContent = `${r.time.toFixed(1)}s`;
+    } else if (this.fares) {
       const fare = this.fares.status();
       activityTitle.textContent = fare.title;
       activityDetail.textContent = fare.detail;
@@ -762,6 +829,7 @@ export class CityMode {
         draw(point.x, point.z, point.color, point.kind === 'collectible' ? 3 : 4, 0.95);
       }
     }
+    if (this.race) for (const p of this.race.rivals()) draw(p.x, p.z, 0xffffff, 2.6, 0.9);
     if (this.fares?.stage === 'offer') {
       // preview the fare: where they are and where they are going
       draw(this.fares.pickup.x, this.fares.pickup.z, 0x8b5cf6, 5, 0.9);
@@ -815,7 +883,8 @@ export class CityMode {
       (mesh.material as THREE.Material).dispose();
     }
     this.chevrons[0]?.geometry.dispose();
-    this.traffic.dispose();
+    this.traffic?.dispose();
+    this.race?.dispose();
     this.police.dispose();
     this.world.dispose();
     this.rain.dispose();
@@ -916,13 +985,14 @@ function arrow(ctx: CanvasRenderingContext2D, x: number, y: number, angle: numbe
   ctx.restore();
 }
 
-function buildHud(mode: 'free' | 'taxi', city: string): HTMLElement {
+function buildHud(mode: 'free' | 'taxi' | 'race', city: string): HTMLElement {
+  const label = mode === 'taxi' ? 'PASSENGER' : mode === 'race' ? 'CITY GP' : 'FREE ROAM';
   const hud = document.createElement('div');
   hud.id = 'city-hud';
   hud.innerHTML = `
     <div class="city-top">
       <div class="city-panel city-where">
-        <small>${mode === 'taxi' ? 'PASSENGER' : 'FREE ROAM'} · ${city}</small>
+        <small>${label} · ${city}</small>
         <strong id="city-district">DOWNTOWN</strong>
       </div>
       <div class="city-actions">
@@ -935,7 +1005,7 @@ function buildHud(mode: 'free' | 'taxi', city: string): HTMLElement {
     </div>
     <div class="city-panel city-activity">
       <button class="city-activity-kicker" id="city-activity-toggle" type="button" aria-expanded="true" aria-label="Show or hide the card">
-        <span>${mode === 'taxi' ? 'DISPATCH' : 'ACTIVITY RADAR'}</span><b id="city-activity-time"></b><i aria-hidden="true">▾</i>
+        <span>${mode === 'taxi' ? 'DISPATCH' : mode === 'race' ? 'CITY GP' : 'ACTIVITY RADAR'}</span><b id="city-activity-time"></b><i aria-hidden="true">▾</i>
       </button>
       <strong id="city-activity-title">ACTIVITY RADAR</strong>
       <small id="city-activity-detail">Set a waypoint to find collectibles, races and rides.</small>
@@ -957,6 +1027,16 @@ function buildHud(mode: 'free' | 'taxi', city: string): HTMLElement {
         <button class="city-btn" id="city-pause-radio" type="button">📻 RADIO</button>
         <button class="city-btn" id="city-exit" type="button">EXIT TO MENU</button>
         <em>🎮 Options resumes · keyboard P / Esc</em>
+      </div>
+    </div>
+    <div id="city-results" class="overlay hidden" role="dialog" aria-label="Race results">
+      <div class="city-pause-card city-results-card">
+        <small>CITY GP · ${city}</small>
+        <strong id="city-results-title">FINISHED</strong>
+        <em id="city-results-time"></em>
+        <ol id="city-results-list"></ol>
+        <button class="city-btn big" id="city-results-again" type="button">RACE AGAIN</button>
+        <button class="city-btn" id="city-results-exit" type="button">EXIT TO MENU</button>
       </div>
     </div>
     <div id="city-wanted" hidden><b></b><small></small><span><i></i></span></div>
