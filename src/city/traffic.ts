@@ -13,6 +13,9 @@ interface CityTrafficCar {
   direction: number;
   speed: number;
   cooldown: number;
+  /** half its length and width: the box other cars can't drive into */
+  halfLen: number;
+  halfWid: number;
 }
 
 const LANES = [-3.5, 3.5];
@@ -39,8 +42,11 @@ export class CityTraffic {
       const lane = i % LANES.length;
       const line = streetAt(1 + (i * 3) % (BLOCKS - 1));
       const direction = this.rand() < 0.5 ? -1 : 1;
+      // measured facing +z, before place() turns it onto its street
+      const size = new THREE.Box3().setFromObject(mesh).getSize(new THREE.Vector3());
       const car: CityTrafficCar = {
-        mesh, axis, lane, line, direction, speed: 9 + this.rand() * 10, cooldown: 0
+        mesh, axis, lane, line, direction, speed: 9 + this.rand() * 10, cooldown: 0,
+        halfLen: THREE.MathUtils.clamp(size.z / 2, 1.8, 3.2), halfWid: THREE.MathUtils.clamp(size.x / 2, 0.8, 1.3)
       };
       this.cars.push(car);
       this.place(car, i);
@@ -57,6 +63,52 @@ export class CityTraffic {
       car.mesh.position.set(car.line + LANES[car.lane], 0, progress);
       car.mesh.rotation.y = car.direction > 0 ? 0 : Math.PI;
     }
+  }
+
+  /**
+   * Push a car (a police cruiser) out of every civilian car it overlaps —
+   * each one a solid box along its street, not a ghost — and bounce it off.
+   * Returns the hardest closing speed, and the way it was pushed.
+   */
+  block(drive: CityDrive, radius = 1.15): { hit: number; nx: number; nz: number } {
+    const out = { hit: 0, nx: 0, nz: 0 };
+    for (const car of this.cars) {
+      const p = car.mesh.position;
+      const dx = drive.x - p.x, dz = drive.z - p.z;
+      if (Math.abs(dx) > 6 || Math.abs(dz) > 6) continue;
+      const alongX = car.axis === 'x';
+      // in the car's frame: a along its street, c across it
+      const a = alongX ? dx : dz, c = alongX ? dz : dx;
+      let na = a - THREE.MathUtils.clamp(a, -car.halfLen, car.halfLen);
+      let nc = c - THREE.MathUtils.clamp(c, -car.halfWid, car.halfWid);
+      let dist = Math.hypot(na, nc);
+      if (dist >= radius) continue;
+      let depth: number;
+      if (dist > 1e-4) {
+        na /= dist; nc /= dist;
+        depth = radius - dist;
+      } else {
+        // centre inside the box: out through the nearer side
+        const endGap = car.halfLen - Math.abs(a), sideGap = car.halfWid - Math.abs(c);
+        if (endGap < sideGap) { na = Math.sign(a) || 1; nc = 0; depth = endGap + radius; }
+        else { na = 0; nc = Math.sign(c) || 1; depth = sideGap + radius; }
+      }
+      const nx = alongX ? na : nc, nz = alongX ? nc : na;
+      drive.x += nx * depth;
+      drive.z += nz * depth;
+      // bounce off the civilian's own motion along its street
+      const vx = alongX ? car.direction * car.speed : 0, vz = alongX ? 0 : car.direction * car.speed;
+      const into = -((drive.vel.x - vx) * nx + (drive.vel.y - vz) * nz);
+      if (into > 0) {
+        // how hard it drove in on its own: being rear-ended by a civilian is not ploughing into one
+        const own = -(drive.vel.x * nx + drive.vel.y * nz);
+        drive.vel.x += nx * into * 1.25;
+        drive.vel.y += nz * into * 1.25;
+        if (into > 3) drive.vel.multiplyScalar(0.8);
+        if (own > out.hit) { out.hit = own; out.nx = nx; out.nz = nz; }
+      }
+    }
+    return out;
   }
 
   /** Moves the traffic; returns how hard the player hit it this frame (0 = clean). */

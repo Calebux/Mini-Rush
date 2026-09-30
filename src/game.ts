@@ -519,7 +519,7 @@ export class Game {
 
   /** A screen of buttons rather than a car to drive: the pad navigates it. */
   private padInMenu(): boolean {
-    if (this.city) return this.city.paused; // the city's pause card takes the pad; otherwise it drives
+    if (this.city) return this.city.paused || this.city.resultsOpen; // its pause / results cards take the pad; otherwise it drives
     return this.paused || this.state === 'menu' || this.state === 'finished';
   }
 

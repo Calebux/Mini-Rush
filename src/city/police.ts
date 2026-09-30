@@ -51,7 +51,28 @@ interface Unit {
   lights: THREE.Mesh[];
   fails?: number;
   gone?: boolean;
+  /** half the car's height and width: where its middle sits upright and on its side */
+  half: number;
+  halfW: number;
+  /** flipped and out of the chase */
+  wreck?: Wreck;
 }
+
+/** A cruiser rolled by a hard hit: ballistic, then settled on its roof or side. */
+interface Wreck {
+  t: number;
+  y: number;         // height of the car's middle
+  vy: number;
+  roll: number;      // about the car's length: the barrel roll
+  rollV: number;
+  pitch: number;
+  pitchV: number;
+  yawV: number;
+}
+
+const GRAVITY = 22;
+const WRECK_TIME = 7;            // seconds a wreck lies there before it is cleared
+const FLIP_SPEED = 15;           // m/s of closing speed that rolls a cruiser (~55 km/h)
 
 export class CityPolice {
   /** 0..5; fractional between thresholds. */
@@ -71,7 +92,7 @@ export class CityPolice {
   private arrest: Arrest | null = null;
 
   constructor(private scene: THREE.Scene, private assets: AssetLibrary,
-    private audio: { startSiren(): void; siren(level: number): void; stopSiren(): void }) {
+    private audio: { startSiren(): void; siren(level: number): void; stopSiren(): void; play(name: 'crash', volume?: number): void }) {
     assets.loadExtra('armored_truck.glb', 6.4).then((m) => { this.truckModel = m; });
     assets.loadExtra('police_heli.glb', 11).then((m) => { this.heliModel = m; });
     assets.loadCharacter('police_officer.glb').then((m) => { this.officerModel = m; });
@@ -119,7 +140,7 @@ export class CityPolice {
     if (this.sirenOn) { this.audio.stopSiren(); this.sirenOn = false; }
   }
 
-  update(dt: number, player: CityDrive): void {
+  update(dt: number, player: CityDrive, traffic?: { block(d: CityDrive, radius?: number): { hit: number; nx: number; nz: number } } | null): void {
     this.time += dt;
     if (this.arrest) {
       this.updateArrest(dt, player);
@@ -131,11 +152,38 @@ export class CityPolice {
     // drive the units along the roads to the player
     let nearest = Infinity;
     for (const u of this.units) {
+      if (u.wreck) {
+        this.tumble(u, dt);
+        // a wreck is still a car-sized lump of steel in the road
+        const wx = player.x - u.drive.x, wz = player.z - u.drive.z, wd = Math.hypot(wx, wz);
+        if (wd < 3.2 && wd > 0.01) player.bumpFromTraffic(wx / wd, wz / wd, 2.5);
+        continue;
+      }
       const dx = player.x - u.drive.x, dz = player.z - u.drive.z;
       const dist = Math.hypot(dx, dz);
       nearest = Math.min(nearest, dist);
       this.driveUnit(u, player, dist, dt);
       if (u.gone) continue;
+      // civilians are solid: a cruiser bounces off them, and one that ploughs
+      // into them flat out rolls over
+      const blocked = traffic?.block(u.drive, u.kind === 'truck' ? 1.7 : 1.15);
+      if (blocked && u.kind === 'car' && blocked.hit > 22) {
+        this.flip(u, blocked.nx, blocked.nz, blocked.hit, null);
+        continue;
+      }
+      // a hard hit rolls a cruiser: the player driving into it, or its own
+      // crash. A cruiser ramming a slow player is not the player's hit.
+      const playerInto = dist > 0.01 ? -(player.vel.x * dx + player.vel.y * dz) / dist : 0;
+      if (u.kind === 'car' && dist < 3.8 && dist > 0.01 && playerInto > FLIP_SPEED) {
+        const closing = Math.hypot(player.vel.x - u.drive.vel.x, player.vel.y - u.drive.vel.y);
+        this.flip(u, -dx / dist, -dz / dist, closing, player);
+        continue;
+      }
+      if (u.kind === 'car' && u.drive.impact > 17) {
+        const f = u.drive.forward;
+        this.flip(u, -f.x, -f.y, u.drive.impact, null);
+        continue;
+      }
       // contact: shove the player; ramming a cruiser is a crime of its own
       if (dist < (u.kind === 'truck' ? 4.4 : 3.6) && dist > 0.01 && Math.abs(u.drive.speed) > 6) {
         const nx = dx / dist, nz = dz / dist;
@@ -149,6 +197,17 @@ export class CityPolice {
       // flashing light bar
       const on = Math.floor(this.time * 7) % 2 === 0;
       u.lights.forEach((l, i) => { l.visible = (i === 0) === on; });
+    }
+
+    // police cars can't pass through each other
+    for (let i = 0; i < this.units.length; i++) for (let j = i + 1; j < this.units.length; j++) {
+      const a = this.units[i], b = this.units[j];
+      const ra = a.kind === 'truck' ? 1.7 : 1.15, rb = b.kind === 'truck' ? 1.7 : 1.15;
+      const dx = b.drive.x - a.drive.x, dz = b.drive.z - a.drive.z, d = Math.hypot(dx, dz);
+      if (d < 0.01 || d >= ra + rb) continue;
+      const push = (ra + rb - d) / 2, nx = dx / d, nz = dz / d;
+      a.drive.x -= nx * push; a.drive.z -= nz * push;
+      b.drive.x += nx * push; b.drive.z += nz * push;
     }
 
     // hopelessly stuck units leave; spawn() sends replacements from the road
@@ -187,7 +246,7 @@ export class CityPolice {
       }
       // busted: stopped with a unit on you
       const slow = Math.hypot(player.vel.x, player.vel.y) < 4;
-      const unitNear = this.units.some((u) => Math.hypot(u.drive.x - player.x, u.drive.z - player.z) < 11);
+      const unitNear = this.units.some((u) => !u.wreck && Math.hypot(u.drive.x - player.x, u.drive.z - player.z) < 11);
       if (slow && unitNear) this.bust += dt;
       else this.bust = Math.max(0, this.bust - dt * 1.5);
       if (this.bust >= BUST_TIME) {
@@ -196,7 +255,7 @@ export class CityPolice {
       }
     } else {
       // no stars: a little heat cools off on its own
-      this.heat = Math.max(0, this.heat - dt * 0.05);
+      this.heat = Math.max(0, this.heat - dt * 0.02);
     }
 
     const siren = stars > 0 ? Math.min(1, 0.4 + (1 - Math.min(1, nearest / 140)) * 0.6) : 0;
@@ -243,7 +302,9 @@ export class CityPolice {
     });
     mesh.position.set(x, 0, z);
     this.scene.add(mesh);
-    this.units.push({ kind, mesh, drive, path: [], replan: 0, stuck: 0, reverse: 0, lights });
+    // the body's half height, and half a car's width (the box also holds the wide ground glow)
+    this.units.push({ kind, mesh, drive, path: [], replan: 0, stuck: 0, reverse: 0, lights,
+      half: Math.max(0.5, (top - 0.05) / 2), halfW: 0.95 });
   }
 
   private addHeli(player: CityDrive): void {
@@ -296,11 +357,79 @@ export class CityPolice {
     u.mesh.rotation.set(0, d.yaw, 0);
   }
 
+  /**
+   * Roll a cruiser: thrown up and away along (nx, nz), barrel-rolling. The
+   * player's hit also shoves them back and counts as a serious crime.
+   */
+  private flip(u: Unit, nx: number, nz: number, force: number, player: CityDrive | null): void {
+    const d = u.drive;
+    const k = Math.min(1.6, force / FLIP_SPEED);
+    // which way it rolls: the side it was hit on
+    const side = Math.sign(nx * Math.cos(d.yaw) - nz * Math.sin(d.yaw)) || 1;
+    u.wreck = {
+      t: 0, y: u.half, vy: 5.5 + k * 3.5,
+      roll: 0, rollV: side * (7 + k * 3), pitch: 0, pitchV: (Math.random() - 0.5) * 3, yawV: (Math.random() - 0.5) * 4
+    };
+    d.vel.set(d.vel.x * 0.4 + nx * force * 0.55, d.vel.y * 0.4 + nz * force * 0.55);
+    for (const l of u.lights) l.visible = false;
+    this.audio.play('crash', 1);
+    if (player) {
+      player.vel.multiplyScalar(0.55);
+      player.impact = Math.max(player.impact, 12);
+      this.crime(0.6);
+    }
+  }
+
+  /** A wreck in the air, bouncing, then lying still until it is cleared. */
+  private tumble(u: Unit, dt: number): void {
+    const w = u.wreck!, d = u.drive;
+    w.t += dt;
+    w.vy -= GRAVITY * dt;
+    w.y += w.vy * dt;
+    w.roll += w.rollV * dt;
+    w.pitch += w.pitchV * dt;
+    d.yaw += w.yawV * dt;
+    // the middle sits higher on its side than on its wheels or roof
+    const floor = u.half + (u.halfW - u.half) * Math.abs(Math.sin(w.roll));
+    // only a car coming down lands: one still rising rolls on up over the floor
+    const grounded = w.y <= floor && w.vy <= 0;
+    if (w.y < floor && w.vy > 0) w.y = floor;
+    if (grounded) {
+      w.y = floor;
+      if (w.vy < -3) {
+        // a bounce: most of the spin and the slide go into the road
+        w.vy *= -0.3;
+        w.rollV *= 0.55;
+        w.pitchV *= 0.4;
+        w.yawV *= 0.5;
+        d.vel.multiplyScalar(0.7);
+      } else {
+        w.vy = 0;
+        // come to rest on the nearest face: wheels, side or roof
+        if (Math.abs(w.rollV) < 4) {
+          w.rollV = 0;
+          const rest = Math.round(w.roll / (Math.PI / 2)) * (Math.PI / 2);
+          w.roll += (rest - w.roll) * Math.min(1, dt * 7);
+        }
+        w.pitchV = 0;
+        w.pitch *= Math.exp(-dt * 8);
+        w.yawV *= Math.exp(-dt * 4);
+      }
+    }
+    d.coast(dt, grounded ? 2.6 : 0.2);
+    // turn about the car's middle, not the ground under its wheels
+    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(w.pitch, d.yaw, w.roll, 'YXZ'));
+    const middle = new THREE.Vector3(0, u.half, 0).applyQuaternion(q);
+    u.mesh.quaternion.copy(q);
+    u.mesh.position.set(d.x - middle.x, w.y - middle.y, d.z - middle.z);
+    if (w.t > WRECK_TIME) u.gone = true;
+  }
+
   /** Busted: the nearest cruiser's officer gets out and walks to the window. */
   private startArrest(player: CityDrive, stars: number): void {
     player.vel.set(0, 0);
     const src = this.officerModel;
-    const cruiser = this.units.filter((u) => u.kind === 'car')
+    const cruiser = this.units.filter((u) => u.kind === 'car' && !u.wreck)
       .sort((a, b) => Math.hypot(a.drive.x - player.x, a.drive.z - player.z) - Math.hypot(b.drive.x - player.x, b.drive.z - player.z))[0];
     if (!src || !cruiser) {
       // no officer to send (the model is still loading): the bust lands at once
@@ -347,7 +476,7 @@ export class CityPolice {
     a.mixer?.update(dt);
     // the light bars keep flashing and the helicopter keeps circling
     const on = Math.floor(this.time * 7) % 2 === 0;
-    for (const u of this.units) u.lights.forEach((l, i) => { l.visible = (i === 0) === on; });
+    for (const u of this.units) if (!u.wreck) u.lights.forEach((l, i) => { l.visible = (i === 0) === on; });
     for (const r of this.heliRotors) r.rotation[r.userData.axis as 'x' | 'y' | 'z'] += dt * 38;
     if (a.phase === 'walk') {
       const toGo = a.target.clone().sub(a.body.position);

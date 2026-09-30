@@ -2310,6 +2310,7 @@ export class UI {
 
     this.hud.classList.remove('visible');
     this.speedlines.classList.remove('on');
+    this.menu.classList.add('hidden'); // a city race comes back through the menu
     this.results.classList.remove('hidden');
     this.refreshBest();
     this.refreshBank();

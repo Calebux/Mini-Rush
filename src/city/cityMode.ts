@@ -353,11 +353,17 @@ export class CityMode {
     const rammed = this.traffic?.update(dt, d) ?? 0;
     if (this.race) this.updateRace(dt);
     else {
-      if (rammed > 12) this.police.crime(0.34);
-      else if (rammed > 6) this.police.crime(0.15);
-      if (d.impact > 13) this.police.crime(0.22);
+      // Measured on real driving: a swerve into the buildings at speed hits
+      // 4–9, a straight-on crash 13–23, so a star is two or three proper
+      // crashes, a couple of rammed cars, or a long reckless drift.
+      if (rammed > 12) this.police.crime(0.55);
+      else if (rammed > 4) this.police.crime(0.35);
+      if (d.impact > 18) this.police.crime(0.6);
+      else if (d.impact > 11) this.police.crime(0.4);
+      else if (d.impact > 6) this.police.crime(0.2);
+      if (Math.abs(d.slip) > 5 && Math.abs(d.speed) > 14) this.police.crime(dt * 0.06);
     }
-    this.police.update(dt, d);
+    this.police.update(dt, d, this.traffic);
     for (let ev = this.police.consumeEvent(); ev; ev = this.police.consumeEvent()) this.policeEvent(ev);
     if (this.activities) {
       this.activities.update(dt, elapsed, d.x, d.z);
@@ -418,6 +424,11 @@ export class CityMode {
 
     if (this.postfx) this.postfx.composer.render();
     else this.deps.renderer.render(this.scene, this.deps.camera);
+  }
+
+  /** The City GP results card is up: the pad works its buttons. */
+  get resultsOpen(): boolean {
+    return !this.hud.querySelector('#city-results')!.classList.contains('hidden');
   }
 
   /** ○ on a pad: the card's button. */

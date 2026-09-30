@@ -128,6 +128,15 @@ export class CityDrive {
     this.collide();
   }
 
+  /** No driver: a wreck sliding and tumbling across the road, still stopped by the walls. */
+  coast(dt: number, friction: number): void {
+    this.impact = 0;
+    this.vel.multiplyScalar(Math.exp(-friction * dt));
+    this.x += this.vel.x * dt;
+    this.z += this.vel.y * dt;
+    this.collide();
+  }
+
   /** A civilian car can shove the player without reaching into wall physics. */
   bumpFromTraffic(nx: number, nz: number, force: number): void {
     this.x += nx * 0.35;

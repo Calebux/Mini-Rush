@@ -38,7 +38,9 @@ export class PadMenu {
   /** The overlay the controller is working in: the last visible one. */
   private layer(): ParentNode {
     const open = [...document.querySelectorAll<HTMLElement>('.overlay')]
-      .filter((el) => !el.classList.contains('hidden') && el.offsetParent !== null);
+      // not offsetParent: it is null for position: fixed, which every overlay is
+      .filter((el) => !el.classList.contains('hidden') && el.getClientRects().length > 0
+        && getComputedStyle(el).visibility !== 'hidden');
     return open[open.length - 1] ?? document;
   }
 
