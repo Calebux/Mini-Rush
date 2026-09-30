@@ -93,6 +93,34 @@ export function localBuilding(id: string, kit: EnvironmentKit, rand: () => numbe
     return g;
   }
 
+  if (id === 'kaduna') {
+    // Kaduna: one or two storeys of painted plaster, barred windows, a parapet
+    // with the black water tank on top, or a rusty zinc roof.
+    const floors = tall ? 2 + Math.floor(rand() * 2) : 1 + Math.floor(rand() * 2);
+    const h = floors * 3.1, w = 9 + rand() * 3, d = 7.5;
+    box(0, h / 2, 0, w, h, d, wall);
+    for (const side of [-1, 1]) {
+      for (let f = 0; f < floors; f++) {
+        for (const x of [-w * 0.3, 0, w * 0.3]) {
+          box(x, f * 3.1 + 1.7, side * (d / 2 + 0.03), 1.4, 1.5, 0.08, 0x2c3a40);
+          for (let b = -3; b <= 3; b++) box(x + b * 0.2, f * 3.1 + 1.7, side * (d / 2 + 0.09), 0.04, 1.5, 0.05, 0x6c6f73);
+        }
+      }
+      box(0, 2.6, side * (d / 2 + 0.95), w * 0.7, 0.12, 1.9, rand() < 0.5 ? 0x8b8f94 : 0x9a5a36);   // zinc awning
+    }
+    if (rand() < 0.6) {
+      box(0, h + 0.3, 0, w + 0.2, 0.6, d + 0.2, wall);                          // parapet
+      const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 1.6, 12), kit.material(0x1b1c1f));
+      tank.position.set(w * 0.2, h + 1.4, 0); g.add(tank);
+    } else {
+      for (const side of [-1, 1]) {
+        const roof = box(side * w / 4, h + 0.6, 0, w / 2 + 0.3, 0.14, d + 0.6, rand() < 0.5 ? 0x9a5a36 : 0x8b8f94);
+        roof.rotation.x = 0; roof.rotation.z = -side * 0.18;
+      }
+    }
+    return g;
+  }
+
   if (id === 'accra' || id === 'nairobi' || id === 'cairo') {
     const floors = id === 'cairo' ? 2 + Math.floor(rand() * 2) : tall ? 4 : 2;
     const h = floors * 3.2, w = 10, d = 7;
@@ -152,6 +180,19 @@ export function localLandmark(id: string, kit: EnvironmentKit): THREE.Group | nu
   g.name = `landmark-${id}`;
   const box = (x: number, y: number, z: number, w: number, h: number, d: number,
     color = t.pavement, glow = false) => kit.box(g, x, y, z, w, h, d, color, glow);
+  if (id === 'kaduna') {
+    // the Central Mosque: white hall, green dome, two minarets
+    box(0, 5, 0, 22, 10, 16, 0xf6f3ea);
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(6.5, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), kit.material(0x1d8a5a));
+    dome.position.y = 10; g.add(dome);
+    for (const sx of [-1, 1]) {
+      box(sx * 13, 13, -6, 1.8, 26, 1.8, 0xf6f3ea);
+      box(sx * 13, 21, -6, 2.6, 0.8, 2.6, 0xe0dbcf);
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(1.2, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), kit.material(0x1d8a5a));
+      cap.position.set(sx * 13, 26, -6); g.add(cap);
+    }
+    return g;
+  }
   if (id === 'london') {
     box(0, 13, 0, 5, 26, 5, 0xc9af84);
     for (const y of [1, 17, 23, 26]) box(0, y, 0, 6, 0.6, 6, 0xe0d1ad);

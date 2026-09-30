@@ -156,6 +156,11 @@ export class Scenery {
         switch (flavor) {
           case 'towers': {
             obj = building();
+            if (map.id === 'kaduna' && rand() < 0.14) {
+              obj = kit.akara(rand);            // an akara seller at the roadside
+              dist = ROAD_HALF_WIDTH + 3.2;
+              gap = 6 + rand() * 4;
+            }
             break;
           }
           case 'palms':
@@ -188,7 +193,11 @@ export class Scenery {
             }
             break;
           case 'market':
-            if (rand() < 0.7) {
+            if (map.id === 'kaduna' && rand() < 0.35) {
+              obj = kit.akara(rand);            // Kasuwa: akara frying between the stalls
+              dist = ROAD_HALF_WIDTH + 3.2;
+              gap = 9 + rand() * 6;
+            } else if (rand() < 0.7) {
               obj = kit.stall(rand);
               dist = 10;
               gap = 10 + rand() * 8;

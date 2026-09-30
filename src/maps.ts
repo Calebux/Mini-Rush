@@ -55,6 +55,17 @@ export interface MapSpec {
 
 export const MAPS: MapSpec[] = [
   {
+    id: 'kaduna', name: 'KADUNA', flag: '🇳🇬',
+    blurb: 'Wide, rough roads through harmattan haze — Ahmadu Bello Way, Kasuwa, and akara frying at the kerb.',
+    ctlMin: 11, ctlVar: 3, rMin: 0.65, rVar: 0.6, fogNear: 70, fogFar: 260,
+    layout: 'city-grid',
+    districts: [
+      { label: 'Ahmadu Bello Way', flavor: 'towers', accent: 0x1d8a5a, dust: 0xb07a50 },
+      { label: 'Kasuwa', flavor: 'market', accent: 0xe8a60a, dust: 0xb4633a },
+      { label: 'Kaduna River', flavor: 'park', accent: 0x9fb07f, dust: 0xa88a5e }
+    ]
+  },
+  {
     id: 'lagos', name: 'LAGOS', flag: '🇳🇬',
     blurb: 'Flowing sweepers from the Island to the market — golden hour, all hour.',
     ctlMin: 10, ctlVar: 3, rMin: 0.7, rVar: 0.5, fogNear: 85, fogFar: 290,

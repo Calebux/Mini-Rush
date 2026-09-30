@@ -32,6 +32,10 @@ const THEMES: Record<string, Partial<EnvironmentTheme>> = {
     facade: [0xd5c9ad, 0xb6c6c1, 0xddd8c6, 0xacae99], accent: 0x306d63 },
   beijing: { sky: 0x849fae, horizon: 0xedcfae, fog: 0xb7ada0,
     facade: [0xaaa296, 0xc3b7a0, 0x8b9595], accent: 0xa34234, pavement: 0xb4afa3 },
+  // Kaduna: harmattan haze over red laterite, painted plaster, rusty zinc
+  kaduna: { sky: 0x93b3c8, horizon: 0xe9d6b0, fog: 0xd8c7a6, ground: 0xb07a50,
+    pavement: 0xc9b89c, facade: [0xe9dcc0, 0xd8e6ef, 0xcfe2c7, 0xefc9c4, 0xe6c07c, 0xf0ead9], accent: 0x1d8a5a,
+    foliage: 0x3f6b35 },
   mumbai: { coast: true, sky: 0x79b4c7, facade: [0xd7b28a, 0xe0c9a1, 0xbb9c8e, 0xa5b6a7], accent: 0x3d7f80 },
   // Lit by its own signs: a near-black sky with the city's magenta haze on the
   // horizon, dark facades, and windows in more than one colour.
@@ -407,6 +411,42 @@ export class EnvironmentKit {
     return g;
   }
 
+  /**
+   * Akara stand: a black pot of oil on three stones over a live fire, a
+   * table of finished akara, a basin, a stool, an umbrella over it all.
+   */
+  akara(rand: () => number): THREE.Group {
+    const g = new THREE.Group();
+    const cyl = (r: number, h: number, x: number, y: number, z: number, color: number, glow = false, top = r) => {
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(top, r, h, 12), this.material(color, glow));
+      m.position.set(x, y, z); g.add(m); return m;
+    };
+    for (let k = 0; k < 3; k++) {
+      const a = k * 2.1;
+      const stone = new THREE.Mesh(this.rockGeo, this.material(0x6d655c));
+      stone.position.set(Math.cos(a) * 0.42, 0.14, Math.sin(a) * 0.42); stone.scale.setScalar(0.2); g.add(stone);
+    }
+    cyl(0.32, 0.34, 0, 0.5, 0, 0x141414, false, 0.52);            // the pot
+    cyl(0.47, 0.02, 0, 0.66, 0, 0xc58a1e);                         // hot oil
+    for (let k = 0; k < 5; k++) {
+      const ball = new THREE.Mesh(this.rockGeo, this.material(0xb8661c));
+      ball.position.set((rand() - 0.5) * 0.5, 0.69, (rand() - 0.5) * 0.5); ball.scale.setScalar(0.07); g.add(ball);
+    }
+    cyl(0.3, 0.25, 0, 0.18, 0, 0xff7a1a, true);                    // the fire under it
+    this.box(g, 1.3, 0.39, 0, 1.1, 0.78, 0.8, 0x7a5234);           // table
+    cyl(0.36, 0.04, 1.3, 0.82, 0, 0xd9d2c2);                       // tray
+    for (let k = 0; k < 6; k++) {
+      const ball = new THREE.Mesh(this.rockGeo, this.material(0xa9581a));
+      ball.position.set(1.3 + (rand() - 0.5) * 0.4, 0.87, (rand() - 0.5) * 0.4); ball.scale.setScalar(0.07); g.add(ball);
+    }
+    cyl(0.34, 0.32, -1, 0.16, 0, 0x2f7de1);                        // basin
+    cyl(0.22, 0.4, 0, 0.2, 0.9, 0xe0433a);                         // stool
+    cyl(0.04, 2.4, 0.6, 1.2, 0, 0xdedede);                         // umbrella
+    const canopy = new THREE.Mesh(this.coneGeo, this.material([0xe8a60a, 0x1d6fb8, 0xd6342b][Math.floor(rand() * 3)]));
+    canopy.position.set(0.6, 2.55, 0); canopy.scale.set(1.6, 0.5, 1.6); g.add(canopy);
+    return g;
+  }
+
   /** Street stall: timber counter under a striped awning in the local accent. */
   stall(rand: () => number): THREE.Group {
     const g = new THREE.Group(), t = this.theme;
@@ -673,7 +713,7 @@ export function buildHorizon(theme: EnvironmentTheme): THREE.Group {
       const r = layer === 0 ? 224 : 193;
       const mountain = theme.landscape === 'mountains' || theme.landscape === 'desert';
       const cityHeight = theme.id === 'neon' || theme.id === 'seoul' ? 65 :
-        theme.id === 'london' || theme.id === 'accra' ? 24 : 42;
+        theme.id === 'london' || theme.id === 'accra' || theme.id === 'kaduna' ? 24 : 42;
       const h = mountain ? 16 + rand() * 35 : theme.landscape === 'forest' ? 6 + rand() * 13 :
         theme.landscape === 'stadium' ? 3 + rand() * 8 : 7 + rand() * rand() * cityHeight;
       const w = mountain ? 28 + rand() * 30 : 4 + rand() * 9;

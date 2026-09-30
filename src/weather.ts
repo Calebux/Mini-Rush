@@ -38,6 +38,7 @@ const SPECS: Record<WeatherType, WeatherSpec> = {
 
 // Which weather types each map can roll (besides clear, which is always possible)
 const MAP_POOL: Record<string, WeatherType[]> = {
+  kaduna:  ['clear', 'clear', 'clear', 'sandstorm'],  // the harmattan
   lagos:   ['clear', 'clear', 'rain'],
   beijing: ['clear', 'clear', 'rain', 'night'],
   mumbai:  ['clear', 'clear', 'rain'],
