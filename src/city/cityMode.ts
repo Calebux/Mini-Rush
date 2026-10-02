@@ -69,6 +69,8 @@ export interface CityDeps {
   onExit: () => void;
   /** which open city; Kaduna unless told otherwise */
   city?: OpenCity;
+  /** the race HUD's dashboard, raised for the DRIVER camera */
+  dash?: { show(on: boolean): void; update(kmh: number, nitroTanks: number, boosting: boolean): void };
   /** City GP as the bounty: the finish goes to the game's results screen */
   onRaceFinish?: (result: CityRaceStatus) => void;
 }
@@ -83,6 +85,8 @@ const CITY_CAMS = [
   { name: 'CHASE', back: 8.2, h: 3.9, ahead: 6, lookH: 1.3, fov: 66, lag: 6, attached: false, pull: 0.035, zoom: 0.18 },
   { name: 'FAR CHASE', back: 13.5, h: 6.4, ahead: 8, lookH: 1.2, fov: 60, lag: 5, attached: false, pull: 0.035, zoom: 0.14 },
   { name: 'LOW', back: 5.2, h: 1.55, ahead: 10, lookH: 1.1, fov: 70, lag: 10, attached: false, pull: 0, zoom: 0.08 },
+  // the driver's seat, as in the races: the body comes off and the dashboard goes up
+  { name: 'DRIVER', back: -0.25, h: 1.2, ahead: 17, lookH: 1.05, fov: 78, lag: 0, attached: true, pull: 0, zoom: 0.16, driver: true },
   { name: 'HOOD', back: -1.1, h: 1.45, ahead: 20, lookH: 1.05, fov: 72, lag: 0, attached: true, pull: 0, zoom: 0.16 },
   { name: 'BUMPER', back: -2.3, h: 0.62, ahead: 20, lookH: 0.6, fov: 76, lag: 0, attached: true, pull: 0, zoom: 0.16 },
   { name: 'TOP DOWN', back: 3, h: 34, ahead: 4, lookH: 0, fov: 55, lag: 4, attached: false, pull: 0, zoom: 0 }
@@ -125,6 +129,8 @@ export class CityMode {
   private camLook = new THREE.Vector3();
   private shake = 0;
   private camMode = 0;
+  /** in the driver's seat: the body hidden, the dashboard up */
+  private driverView = false;
   // the camera and its target, kept as offsets from the car so speed never adds lag
   private camOffset = new THREE.Vector3(0, 4.5, -9);
   private lookOffset = new THREE.Vector3(0, 1.2, 6);
@@ -434,6 +440,13 @@ export class CityMode {
     return !this.hud.querySelector('#city-results')!.classList.contains('hidden');
   }
 
+  private setDriverView(on: boolean): void {
+    this.car.visible = !on;
+    if (on === this.driverView) return;
+    this.driverView = on;
+    this.deps.dash?.show(on);
+  }
+
   /** ○ on a pad: the card's button. */
   padAction(): void {
     const button = this.hud.querySelector('#city-gps') as HTMLButtonElement;
@@ -680,6 +693,8 @@ export class CityMode {
       want = shot.position;
       look = shot.look;
     }
+    // the driver's seat; a cut-away shot (a passenger, an arrest) shows the car again
+    this.setDriverView('driver' in mode && !shot);
     const rigid = mode.attached && !shot;
     const k = rigid ? 1 : 1 - Math.exp(-dt * (shot ? 2.2 : mode.lag));
     // Smooth the camera's offset from the car, not its place in the world:
@@ -707,6 +722,7 @@ export class CityMode {
     this.updateWanted();
     this.hud.classList.toggle('has-pad', !!this.deps.input.padName);
     const kmh = Math.round(Math.abs(speed) * 3.6);
+    if (this.driverView) this.deps.dash?.update(kmh, this.drive.nitro >= 0.999 ? 1 : 0, this.drive.boosting);
     const speedEl = document.getElementById('hud-speed-v');
     if (speedEl) speedEl.textContent = String(kmh);
     const fill = document.getElementById('speed-fill');
@@ -881,6 +897,7 @@ export class CityMode {
 
   dispose(): void {
     this.deps.audio.stopEngine();
+    this.deps.dash?.show(false);
     this.deps.input.uiHandbrake = false;
     this.hud.remove();
     this.scene.remove(this.car);

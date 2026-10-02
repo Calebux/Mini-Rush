@@ -2057,6 +2057,11 @@ export class UI {
    * the revs riding up each band and dropping on the change. It is invented,
    * but it moves the way a real one does, which is the whole point of the view.
    */
+  /** The open city's DRIVER camera reads out on the same dashboard. */
+  cityDash(kmh: number, nitroTanks: number, nitroActive: boolean): void {
+    this.updateDash(kmh, nitroTanks, nitroActive);
+  }
+
   private updateDash(kmh: number, nitroTanks: number, nitroActive: boolean): void {
     if (!this.dashOn) return; // the dials are not on screen; don't touch them
     const gear = Math.max(1, Math.min(6, 1 + Math.floor(kmh / 40)));

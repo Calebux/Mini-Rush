@@ -543,6 +543,7 @@ export class Game {
       renderer: this.renderer, camera: this.camera, assets: this.assets, audio: this.audio,
       input: this.input, spec: this.carSpec(this.carIndex), tier: this.quality, mode, city,
       onExit: () => this.exitCity(),
+      dash: { show: (on) => this.ui.setDriverDash(on), update: (kmh, tanks, boost) => this.ui.cityDash(kmh, tanks, boost) },
       onRaceFinish: bounty ? (r) => this.finishCityBounty(r) : undefined
     });
     const cityRadio = document.getElementById('city-radio');

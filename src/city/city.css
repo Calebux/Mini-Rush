@@ -6,7 +6,6 @@ body.city-mode #style-ui,
 body.city-mode #nitro-ui,
 body.city-mode #btn-pause,
 body.city-mode #btn-cam,
-body.city-mode #dash,
 body.city-mode #drift-ui,
 body.city-mode #key-hints,
 body.city-mode #race-mini { display: none !important; }
@@ -215,4 +214,10 @@ body.city-mode #race-mini { display: none !important; }
   .city-actions .city-btn { padding: 7px 7px; font-size: 8px; min-width: 30px; }
   .city-activity { top: max(56px, calc(46px + env(safe-area-inset-top))); left: 8px; padding: 7px 9px 8px; }
   .city-activity strong { font-size: 13px; }
+}
+
+/* DRIVER camera on a phone: the dashboard's dials fill the bottom, so the
+   minimap rides above them instead of sitting on the left one */
+@media (max-width: 899px) {
+  body:has(#hud.driver) #city-mini { bottom: calc(max(24px, var(--safe-bottom, 0px)) + 212px); }
 }
