@@ -1723,16 +1723,32 @@
       <div class="tally-row total" data-row="score"><span class="k">SCORE</span><span class="v" id="r-score">0</span></div>
     </div>
     <div class="hint" id="r-coin-note"></div>
-    <button class="btn" id="btn-retry" type="button">RACE AGAIN</button>
-    <div class="result-actions">
-      <button class="btn ghost" id="btn-retry-same" type="button" aria-label="Retry the same track">SAME TRACK</button>
-      <button class="btn ghost" id="btn-share" type="button" aria-label="Share this run">SHARE</button>
-      <button class="btn ghost" id="btn-challenge" type="button" aria-label="Challenge a friend to beat this time">CHALLENGE</button>
-      <button class="btn ghost" id="btn-menu" type="button">MENU</button>
+    <!-- one hero action, a pair of ways on, then the optional extras -->
+    <div class="result-dock">
+      <button class="btn ghost hidden" id="btn-mint" type="button" aria-label="Write this run on-chain">MINT RECEIPT</button>
+      <div class="hint" id="mint-status"></div>
+      <button class="dock-hero" id="btn-retry" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></svg>RACE AGAIN
+      </button>
+      <div class="result-actions">
+        <button class="dock-btn" id="btn-retry-same" type="button" aria-label="Retry the same track">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4h-4"/></svg>SAME TRACK
+        </button>
+        <button class="dock-btn" id="btn-menu" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11 12 4.5 20 11M6.5 9.5V19h11V9.5"/></svg>MENU
+        </button>
+      </div>
+      <div class="result-social">
+        <button class="dock-link" id="btn-share" type="button" aria-label="Share this run">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M5 13v6h14v-6"/></svg>SHARE
+        </button>
+        <span class="dock-sep" aria-hidden="true"></span>
+        <button class="dock-link" id="btn-challenge" type="button" aria-label="Challenge a friend to beat this time">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V4.5M5 5h11l-2.5 4L16 13H5"/></svg>CHALLENGE A FRIEND
+        </button>
+      </div>
+      <div class="hint" id="challenge-status"></div>
     </div>
-    <button class="btn ghost hidden" id="btn-mint" type="button" aria-label="Write this run on-chain">MINT RECEIPT</button>
-    <div class="hint" id="mint-status"></div>
-    <div class="hint" id="challenge-status"></div>
     <button class="bounty-link hidden" id="btn-bounty-results" type="button">How the bounty works</button>
   </div>
 
