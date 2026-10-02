@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { AssetLibrary, disposeCarInstance } from '../assets';
 import { glow } from '../neonCity';
 import { CityDrive } from './drive';
-import { EDGE } from './layout';
+import { blockAt, EDGE } from './layout';
 import { junctionsNear, P, route } from './roads';
 
 /**
@@ -52,6 +52,17 @@ interface Unit {
   fails?: number;
   gone?: boolean;
   /** half the car's height and width: where its middle sits upright and on its side */
+  /**
+   * Its job in the chase. Chasers sit on the player's tail, cutoffs take the
+   * streets round and come at them from ahead, and a roadblock (3+ stars)
+   * parks across the junction the player is heading for.
+   */
+  role: 'chase' | 'cutoff' | 'block';
+  /** a roadblock in place: parked broadside, waiting */
+  parked?: boolean;
+  parkedFor?: number;
+  /** the junction a roadblock is heading for, held until the player passes it */
+  blockSpot?: P | null;
   half: number;
   halfW: number;
   /** flipped and out of the chase */
@@ -98,7 +109,14 @@ export class CityPolice {
   constructor(private scene: THREE.Scene, private assets: AssetLibrary,
     private audio: { startSiren(): void; siren(level: number): void; stopSiren(): void; play(name: 'crash', volume?: number): void }) {
     assets.loadExtra('armored_truck.glb', 6.4).then((m) => { this.truckModel = m; });
-    assets.loadExtra('police_heli.glb', 11).then((m) => { this.heliModel = m; });
+    assets.loadExtra('police_heli.glb', 11).then((m) => {
+      // the model file carries a stray ground quad ("Plane") from its scene,
+      // scaled up hundreds of times: the odd rectangle under the helicopter
+      const stray: THREE.Object3D[] = [];
+      m?.traverse((o) => { if ((o as THREE.Mesh).isMesh && /^plane/i.test(o.name)) stray.push(o); });
+      for (const o of stray) o.removeFromParent();
+      this.heliModel = m;
+    });
     assets.loadCharacter('police_officer.glb').then((m) => { this.officerModel = m; });
   }
 
@@ -173,9 +191,15 @@ export class CityPolice {
       // civilians are solid: a cruiser bounces off them, and one that ploughs
       // into them flat out rolls over
       const blocked = traffic?.block(u.drive, u.kind === 'truck' ? 1.7 : 1.15);
-      if (blocked && u.kind === 'car' && blocked.hit > 22) {
+      if (blocked && u.kind === 'car' && blocked.hit > 26) {
         this.flip(u, blocked.nx, blocked.nz, blocked.hit, null);
         continue;
+      }
+      // police cars are solid: the player can't drive through one, parked or not
+      if (dist < 3.1 && dist > 0.01) {
+        const push = 3.1 - dist;
+        player.x += (dx / dist) * push;
+        player.z += (dz / dist) * push;
       }
       // a hard hit rolls a cruiser: the player driving into it, or its own
       // crash. A cruiser ramming a slow player is not the player's hit.
@@ -183,11 +207,6 @@ export class CityPolice {
       if (u.kind === 'car' && dist < 3.8 && dist > 0.01 && playerInto > FLIP_SPEED) {
         const closing = Math.hypot(player.vel.x - u.drive.vel.x, player.vel.y - u.drive.vel.y);
         this.flip(u, -dx / dist, -dz / dist, closing, player);
-        continue;
-      }
-      if (u.kind === 'car' && u.drive.impact > 17) {
-        const f = u.drive.forward;
-        this.flip(u, -f.x, -f.y, u.drive.impact, null);
         continue;
       }
       // contact: shove the player; ramming a cruiser is a crime of its own
@@ -299,10 +318,22 @@ export class CityPolice {
   private addUnit(kind: Unit['kind'], player: CityDrive): void {
     const mesh = kind === 'truck' ? this.truckModel!.clone(true) : this.assets.clonePolice();
     if (!mesh) return;
-    // arrive on a road junction a block or two away, preferring behind the player
+    // its job first: it decides where the unit comes from
+    const cars = this.units.filter((v) => v.kind === 'car' && !v.wreck);
+    const role: Unit['role'] = kind === 'truck' ? 'chase'
+      : this.stars >= 3 && !cars.some((v) => v.role === 'block') ? 'block'
+      : cars.filter((v) => v.role === 'cutoff').length < cars.filter((v) => v.role === 'chase').length ? 'cutoff' : 'chase';
+    // chasers arrive on a junction behind the player; a cutoff or a roadblock
+    // comes in from the streets ahead of them, where it can actually get in front
     const f = player.forward;
-    const spots = junctionsNear({ x: player.x, z: player.z }, 70, 150);
-    spots.sort((a, b) => ((a.x - player.x) * f.x + (a.z - player.z) * f.y) - ((b.x - player.x) * f.x + (b.z - player.z) * f.y));
+    const ahead = (q: P) => (q.x - player.x) * f.x + (q.z - player.z) * f.y;
+    const front = role !== 'chase';
+    let spots = junctionsNear({ x: player.x, z: player.z }, front ? 110 : 70, front ? 230 : 150);
+    if (front) {
+      const forward = spots.filter((q) => ahead(q) > 60);
+      if (forward.length) spots = forward;
+    }
+    spots.sort((a, b) => (front ? ahead(b) - ahead(a) : ahead(a) - ahead(b)));
     const spot = spots[Math.floor(Math.random() * Math.min(4, spots.length))]
       ?? { x: THREE.MathUtils.clamp(player.x - f.x * 90, -EDGE + 10, EDGE - 10), z: THREE.MathUtils.clamp(player.z - f.y * 90, -EDGE + 10, EDGE - 10) };
     const { x, z } = spot;
@@ -325,7 +356,7 @@ export class CityPolice {
     mesh.position.set(x, 0, z);
     this.scene.add(mesh);
     // the body's half height, and half a car's width (the box also holds the wide ground glow)
-    this.units.push({ kind, mesh, drive, path: [], replan: 0, stuck: 0, reverse: 0, lights,
+    this.units.push({ kind, mesh, drive, path: [], replan: 0, stuck: 0, reverse: 0, lights, role,
       half: Math.max(0.5, (top - 0.05) / 2), halfW: 0.95 });
   }
 
@@ -338,7 +369,7 @@ export class CityPolice {
     });
     // nav lights on the belly and tail: sprites, so they face the camera
     const size = new THREE.Box3().setFromObject(heli).getSize(new THREE.Vector3());
-    this.heliLights = [[0xff2a3a, 0, -size.y * 0.35, 0, 5], [0xffffff, 0, size.y * 0.1, -size.z * 0.45, 3.5]].map(([color, x, y, z, s]) => {
+    this.heliLights = [[0xff2a3a, 0, -size.y * 0.35, 0, 2.2], [0xffffff, 0, size.y * 0.1, -size.z * 0.45, 1.8]].map(([color, x, y, z, s]) => {
       const light = new THREE.Sprite(new THREE.SpriteMaterial({ map: glow(), color: new THREE.Color(color).multiplyScalar(2),
         transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
       light.position.set(x, y, z);
@@ -359,20 +390,63 @@ export class CityPolice {
 
   private driveUnit(u: Unit, player: CityDrive, dist: number, dt: number): void {
     const d = u.drive;
-    // follow the road graph; the last stretch is straight at the player
+    const speedP = Math.hypot(player.vel.x, player.vel.y);
+    // a roadblock in place: parked across the road until the player is past it
+    if (u.parked) {
+      d.vel.set(0, 0);
+      u.parkedFor = (u.parkedFor ?? 0) + dt;
+      const away = (player.x - d.x) * player.vel.x + (player.z - d.z) * player.vel.y > 0; // player heading away from it
+      if ((away && dist > 40) || dist > 200 || u.parkedFor > 14) { u.parked = false; u.role = 'chase'; }
+      u.mesh.position.set(d.x, 0, d.z);
+      u.mesh.rotation.set(0, d.yaw, 0);
+      return;
+    }
+    // where this unit is going, by its job
+    const heading = speedP > 3 ? { x: player.vel.x / speedP, z: player.vel.y / speedP } : { x: Math.sin(player.yaw), z: Math.cos(player.yaw) };
+    const clampCity = (p: P): P => ({ x: THREE.MathUtils.clamp(p.x, -EDGE + 8, EDGE - 8), z: THREE.MathUtils.clamp(p.z, -EDGE + 8, EDGE - 8) });
+    let goal: P = { x: player.x, z: player.z };
+    let blockSpot: P | null = null;
+    if (u.role === 'cutoff' && dist > 35 && speedP > 8) {
+      goal = clampCity({ x: player.x + heading.x * 70, z: player.z + heading.z * 70 });
+    } else if (u.role === 'block' && speedP > 8) {
+      // pick a junction ahead of the player and hold it, rather than chasing
+      // one that slides forward as they drive
+      const aheadOf = (j: P) => (j.x - player.x) * heading.x + (j.z - player.z) * heading.z;
+      if (!u.blockSpot || aheadOf(u.blockSpot) < 25) {
+        const ahead = clampCity({ x: player.x + heading.x * 110, z: player.z + heading.z * 110 });
+        u.blockSpot = junctionsNear(ahead, 0, 70)
+          .filter((j) => aheadOf(j) > 50)
+          .sort((p1, p2) => Math.hypot(p1.x - ahead.x, p1.z - ahead.z) - Math.hypot(p2.x - ahead.x, p2.z - ahead.z))[0] ?? null;
+        u.replan = 0;
+      }
+      blockSpot = u.blockSpot;
+      if (blockSpot) goal = blockSpot;
+    }
     u.replan -= dt;
     if (u.replan <= 0) {
-      u.path = dist < 45 ? [{ x: player.x, z: player.z }] : route({ x: d.x, z: d.z }, { x: player.x, z: player.z }).slice(1);
+      u.path = route({ x: d.x, z: d.z }, goal, d.forward.x || d.forward.y ? { x: d.forward.x, z: d.forward.y } : undefined).slice(1);
       u.replan = 0.7;
     }
     while (u.path.length > 1 && Math.hypot(u.path[0].x - d.x, u.path[0].z - d.z) < 9) u.path.shift();
-    // close in: aim where the player is going, not where they are, and cut them off
+    // in at the kill: straight at where the player is going, but only with
+    // open road between — never through a building
     const lead = Math.min(1.1, dist / 30);
-    const aim = dist < 45
-      ? { x: player.x + player.vel.x * lead, z: player.z + player.vel.y * lead }
-      : u.path[0] ?? { x: player.x, z: player.z };
+    const leadPoint = { x: player.x + player.vel.x * lead, z: player.z + player.vel.y * lead };
+    const close = u.role !== 'block' && dist < 32 && this.clearLine(d, leadPoint);
+    const aim = close ? leadPoint : u.path[0] ?? goal;
     const want = Math.atan2(aim.x - d.x, aim.z - d.z);
     const diff = Math.atan2(Math.sin(want - d.yaw), Math.cos(want - d.yaw));
+    // a roadblock arriving: pull up broadside across the road and wait
+    if (blockSpot && Math.hypot(blockSpot.x - d.x, blockSpot.z - d.z) < 8 && d.speed < 16) {
+      u.parked = true;
+      u.parkedFor = 0;
+      d.vel.set(0, 0);
+      d.x = blockSpot.x; d.z = blockSpot.z;
+      d.yaw = Math.atan2(heading.x, heading.z) + Math.PI / 2;
+      return;
+    }
+    // left hopelessly behind: withdrawn, and spawn() sends one in from nearer
+    if (dist > 320) { u.gone = true; return; }
     // stuck against a kerb: back out for a moment
     if (Math.abs(d.speed) < 2 && dist > 12) u.stuck += dt; else u.stuck = 0;
     if (u.stuck > 1.2) { u.reverse = 1; u.stuck = 0; u.fails = (u.fails ?? 0) + 1; }
@@ -381,18 +455,44 @@ export class CityPolice {
       u.reverse -= dt;
       d.update(dt, { steer: Math.sign(diff), gas: false, brake: true });
     } else {
-      const sharp = Math.abs(diff) > 1.1 && d.speed > 16;
-      // far behind on a straight: nitro to close the gap
-      if (dist > 70 && Math.abs(diff) < 0.15) d.fireNitro();
+      // brake for the corner coming up, like a driver, instead of meeting the wall
+      let cornerBrake = false;
+      if (!close && u.path.length > 1) {
+        const c = u.path[0], n = u.path[1];
+        const inA = Math.atan2(c.x - d.x, c.z - d.z), outA = Math.atan2(n.x - c.x, n.z - c.z);
+        const turn = Math.abs(Math.atan2(Math.sin(outA - inA), Math.cos(outA - inA)));
+        if (turn > 0.5) {
+          const toCorner = Math.hypot(c.x - d.x, c.z - d.z);
+          const cornerSpeed = turn > 2 ? 9 : 15;
+          cornerBrake = d.speed > Math.sqrt(cornerSpeed * cornerSpeed + 2 * 20 * Math.max(0, toCorner - 8));
+        }
+      }
+      const sharp = Math.abs(diff) > 0.9 && d.speed > 14;
+      // nitro only down a long clear straight, far behind
+      const straight = u.path.length > 0 && Math.hypot(u.path[0].x - d.x, u.path[0].z - d.z) > 90;
+      if (dist > 80 && straight && Math.abs(diff) < 0.1 && !cornerBrake) d.fireNitro();
       // close in, then pull up beside the player rather than ramming them;
       // a player still moving fast gets chased at full speed
-      const playerFast = Math.hypot(player.vel.x, player.vel.y) > 8;
-      const arriving = dist < 16 && !playerFast;
+      const arriving = dist < 16 && speedP <= 8;
       const tooFast = arriving && d.speed > Math.max(3, (dist - 6) * 1.4);
-      d.update(dt, { steer: THREE.MathUtils.clamp(-diff * 2.4, -1, 1), gas: !sharp && !tooFast && !(arriving && dist < 7), brake: sharp || tooFast });
+      // a roadblock eases in to its junction so it can stop there
+      const toSpot = blockSpot ? Math.hypot(blockSpot.x - d.x, blockSpot.z - d.z) : Infinity;
+      const settling = toSpot < 45 && d.speed > Math.max(5, (toSpot - 3) * 0.9);
+      const brake = sharp || tooFast || cornerBrake || settling;
+      d.update(dt, { steer: THREE.MathUtils.clamp(-diff * 2.4, -1, 1), gas: !brake && !(arriving && dist < 7), brake });
     }
     u.mesh.position.set(d.x, 0, d.z);
     u.mesh.rotation.set(0, d.yaw, 0);
+  }
+
+  /** Open road from a car to a point: no block's kerb in the way. */
+  private clearLine(from: { x: number; z: number }, to: P): boolean {
+    for (let i = 1; i <= 8; i++) {
+      const t = i / 8, x = from.x + (to.x - from.x) * t, z = from.z + (to.z - from.z) * t;
+      const b = blockAt(x, z);
+      if (b && x > b.x0 - 1 && x < b.x1 + 1 && z > b.z0 - 1 && z < b.z1 + 1) return false;
+    }
+    return true;
   }
 
   /**
