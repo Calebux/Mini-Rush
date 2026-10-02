@@ -117,7 +117,8 @@ export class CityDrive {
     const braking = input.brake && fwd > 0.5;
     side *= Math.exp(-(drifting ? DRIFT_GRIP : braking ? BRAKING_GRIP : GRIP) * dt);
     // the handbrake scrubs a little speed; the drift carries the rest round
-    if (handbrake) fwd = Math.max(0, fwd - HANDBRAKE * dt);
+    // only rolling forward: the handbrake must never cancel reverse (L1 sits on top of L2)
+    if (handbrake && fwd > 0) fwd = Math.max(0, fwd - HANDBRAKE * dt);
     this.braking = braking || (handbrake && fwd > 0.5) || (input.gas && fwd < -0.5);
     this.reversing = input.brake && fwd < -0.5;
     this.slip = side;
