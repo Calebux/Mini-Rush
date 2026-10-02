@@ -187,6 +187,7 @@ export class RadioPanel {
   constructor(private radio: Radio) {
     this.el = document.createElement('div');
     this.el.id = 'radio-panel';
+    this.el.dataset.padLayer = '';   // a controller works this panel while it is open
     this.el.hidden = true;
     this.el.innerHTML = `
       <div class="radio-card" role="dialog" aria-label="NEON FM radio">
@@ -217,6 +218,10 @@ export class RadioPanel {
 
   close(): void {
     this.el.hidden = true;
+  }
+
+  get isOpen(): boolean {
+    return !this.el.hidden;
   }
 
   /** A button elsewhere that opens the panel and shows what is on. */

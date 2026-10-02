@@ -342,6 +342,8 @@ html, body { background: var(--nn-bg); }
 
 /* the menu's radio button sits in the volume row: it never grows */
 #btn-radio { flex: none; max-width: 76px; padding: 7px 10px; }
+#btn-fullscreen { flex: none; padding: 7px 10px; }
+.fs-btn[hidden] { display: none !important; }
 #menu #vol-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
 #menu #vol-slider { min-width: 0; flex: 1 1 auto; }
 #menu .stat-stack { min-width: 0; }
@@ -357,3 +359,11 @@ body.city-mode #btn-radio-hud { display: none; }
 #city-select { display: flex; align-items: center; justify-content: center; gap: 8px; }
 #city-select.hidden { display: none; }
 #modes .city-chip { width: auto; padding: 0 14px; border-radius: 999px; font-size: 10px; letter-spacing: 1.4px; }
+
+/* results: the four small buttons never run off the screen (a pad can reach
+   every one without the page sliding sideways) — 2×2 on phones, a row of 4 wider */
+#results .result-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: min(92vw, 420px); }
+#results .result-actions .btn { width: 100%; min-width: 0; padding: 11px 8px; white-space: nowrap; }
+@media (min-width: 700px) {
+  #results .result-actions { grid-template-columns: repeat(4, minmax(0, 1fr)); width: min(92vw, 640px); }
+}

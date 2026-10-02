@@ -23,6 +23,7 @@ import {
   HALF, SPAWN, STREET
 } from './layout';
 import { CityTraffic } from './traffic';
+import { bindFullscreenButton } from '../fullscreen';
 import { CityRace, CityRaceStatus, LAPS } from './cityRace';
 import { CityPolice } from './police';
 import { spend } from '../economy';
@@ -165,6 +166,7 @@ export class CityMode {
     this.buildChevrons();
     this.traffic = deps.mode === 'race' ? null : new CityTraffic(this.scene, deps.assets);
     this.police = new CityPolice(this.scene, deps.assets, deps.audio);
+    this.police.daylight = !style.night;
     this.horizon = buildHorizon(theme);
     this.sky.add(this.horizon);
     this.scene.add(this.sky);
@@ -199,6 +201,7 @@ export class CityMode {
     this.hud.querySelector('#city-results-exit')?.addEventListener('click', () => deps.onExit());
     this.hud.querySelector('#city-results-again')?.addEventListener('click', () => this.restartRace());
     this.hud.querySelector('#city-pause-btn')!.addEventListener('click', () => this.togglePause());
+    bindFullscreenButton(this.hud.querySelector('#city-pause-fs')!, { on: '⛶ FULLSCREEN', off: '⛶ EXIT FULLSCREEN' });
     this.hud.querySelector('#city-resume')!.addEventListener('click', () => this.togglePause(false));
     this.hud.querySelector('#city-nitro')!.addEventListener('click', () => this.nitro());
     this.hud.querySelector('#city-gps')!.addEventListener('click', () => this.panelAction());
@@ -1036,6 +1039,7 @@ function buildHud(mode: 'free' | 'taxi' | 'race', city: string): HTMLElement {
         <strong>PAUSED</strong>
         <button class="city-btn big" id="city-resume" type="button">RESUME</button>
         <button class="city-btn" id="city-pause-radio" type="button">📻 RADIO</button>
+        <button class="city-btn fs-btn" id="city-pause-fs" type="button" hidden>⛶ FULLSCREEN</button>
         <button class="city-btn" id="city-exit" type="button">EXIT TO MENU</button>
         <em>🎮 Options resumes · keyboard P / Esc</em>
       </div>

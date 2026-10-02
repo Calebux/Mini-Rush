@@ -21,7 +21,7 @@ const MAX_STARS = 5;
 const EVADE_RADIUS = 105;        // no unit this close: you are out of sight
 const EVADE_TIME = 9;            // seconds out of sight to lose the stars
 const BUST_TIME = 3;             // seconds stopped beside a cruiser
-const HELI_HEIGHT = 34;
+const HELI_HEIGHT = 14;          // low enough to sit in the top of the chase camera's view
 const OFFICER_HEIGHT = 1.62;     // the officer as played, metres
 const ARGUE_TIME = 3.6;          // seconds at the window before the fine
 
@@ -77,8 +77,12 @@ const FLIP_SPEED = 15;           // m/s of closing speed that rolls a cruiser (~
 export class CityPolice {
   /** 0..5; fractional between thresholds. */
   heat = 0;
+  /** set by the city: in daylight the helicopter keeps its searchlight off */
+  daylight = false;
   private units: Unit[] = [];
   private heli: THREE.Group | null = null;
+  /** the helicopter's lights: a slow red beacon and a white strobe, so it reads at night */
+  private heliLights: THREE.Sprite[] = [];
   private heliRotors: THREE.Object3D[] = [];
   private beam: THREE.Mesh | null = null;
   private evade = 0;
@@ -137,6 +141,8 @@ export class CityPolice {
     for (const u of this.units) this.removeUnit(u);
     this.units = [];
     if (this.heli) { this.scene.remove(this.heli); this.heli = null; this.heliRotors = []; }
+    for (const l of this.heliLights) l.material.dispose();
+    this.heliLights = [];
     if (this.sirenOn) { this.audio.stopSiren(); this.sirenOn = false; }
   }
 
@@ -187,7 +193,7 @@ export class CityPolice {
       // contact: shove the player; ramming a cruiser is a crime of its own
       if (dist < (u.kind === 'truck' ? 4.4 : 3.6) && dist > 0.01 && Math.abs(u.drive.speed) > 6) {
         const nx = dx / dist, nz = dz / dist;
-        const force = u.kind === 'truck' ? 9 : 5;
+        const force = u.kind === 'truck' ? 12 : 8;
         player.bumpFromTraffic(nx, nz, force);
         u.drive.x -= nx * 0.5;
         u.drive.z -= nz * 0.5;
@@ -216,11 +222,25 @@ export class CityPolice {
 
     // the helicopter hangs over the player with its searchlight on them
     if (this.heli) {
-      const target = new THREE.Vector3(player.x - 10, HELI_HEIGHT, player.z - 14);
-      this.heli.position.lerp(target, 1 - Math.exp(-dt * 0.9));
+      // out ahead of the player and a little to one side, where the chase
+      // camera looks: it hunts you from the front, searchlight back on you
+      const moving = Math.hypot(player.vel.x, player.vel.y) > 3;
+      const hx = moving ? player.vel.x / Math.hypot(player.vel.x, player.vel.y) : Math.sin(player.yaw);
+      const hz = moving ? player.vel.y / Math.hypot(player.vel.x, player.vel.y) : Math.cos(player.yaw);
+      // on the right of the view: the activity card covers the top left
+      const target = new THREE.Vector3(player.x + hx * 36 - hz * 10, HELI_HEIGHT, player.z + hz * 36 + hx * 10);
+      // it flies at the player's speed, so it holds its place ahead instead of trailing
+      this.heli.position.x += player.vel.x * dt;
+      this.heli.position.z += player.vel.y * dt;
+      this.heli.position.lerp(target, 1 - Math.exp(-dt * 1.3));
       this.heli.lookAt(player.x, HELI_HEIGHT - 6, player.z);
       for (const r of this.heliRotors) r.rotation[r.userData.axis as 'x' | 'y' | 'z'] += dt * 38;
-      if (this.beam) {
+      // red beacon once a second, white strobe a quick double flash
+      const [beacon, strobe] = this.heliLights;
+      if (beacon) beacon.visible = this.time % 1 < 0.5;
+      if (strobe) { const s = this.time % 1.4; strobe.visible = s < 0.06 || (s > 0.16 && s < 0.22); }
+      if (this.beam) this.beam.visible = !this.daylight;
+      if (this.beam && !this.daylight) {
         const from = this.heli.position;
         const to = new THREE.Vector3(player.x, 0.2, player.z);
         const mid = from.clone().add(to).multiplyScalar(0.5);
@@ -243,6 +263,8 @@ export class CityPolice {
         }
       } else {
         this.evade = Math.max(0, this.evade - dt * 2);
+        // still in sight: the chase escalates, a star about every 50 s
+        this.crime(dt * 0.02);
       }
       // busted: stopped with a unit on you
       const slow = Math.hypot(player.vel.x, player.vel.y) < 4;
@@ -266,7 +288,7 @@ export class CityPolice {
 
   /** Bring the force up to what the stars call for. */
   private spawn(stars: number, player: CityDrive): void {
-    const cars = [0, 1, 2, 3, 3, 4][stars];
+    const cars = [0, 2, 3, 4, 4, 5][stars];
     const trucks = stars >= 4 ? 1 : 0;
     const have = (k: Unit['kind']) => this.units.filter((u) => u.kind === k).length;
     if (have('car') < cars) this.addUnit('car', player);
@@ -284,7 +306,7 @@ export class CityPolice {
     const spot = spots[Math.floor(Math.random() * Math.min(4, spots.length))]
       ?? { x: THREE.MathUtils.clamp(player.x - f.x * 90, -EDGE + 10, EDGE - 10), z: THREE.MathUtils.clamp(player.z - f.y * 90, -EDGE + 10, EDGE - 10) };
     const { x, z } = spot;
-    const drive = new CityDrive(kind === 'truck' ? 30 : 38 + this.stars * 1.5, kind === 'truck' ? 0.8 : 1.15);
+    const drive = new CityDrive(kind === 'truck' ? 32 : 40 + this.stars * 2, kind === 'truck' ? 0.8 : 1.15);
     drive.x = x; drive.z = z;
     drive.yaw = Math.atan2(player.x - x, player.z - z);
     // two lamps on the roof, red and blue, taking turns
@@ -314,11 +336,21 @@ export class CityPolice {
       if (/main\s*rotor/i.test(o.name)) { o.userData.axis = 'y'; this.heliRotors.push(o); }
       else if (/tail\s*rotor/i.test(o.name)) { o.userData.axis = 'x'; this.heliRotors.push(o); }
     });
+    // nav lights on the belly and tail: sprites, so they face the camera
+    const size = new THREE.Box3().setFromObject(heli).getSize(new THREE.Vector3());
+    this.heliLights = [[0xff2a3a, 0, -size.y * 0.35, 0, 5], [0xffffff, 0, size.y * 0.1, -size.z * 0.45, 3.5]].map(([color, x, y, z, s]) => {
+      const light = new THREE.Sprite(new THREE.SpriteMaterial({ map: glow(), color: new THREE.Color(color).multiplyScalar(2),
+        transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
+      light.position.set(x, y, z);
+      light.scale.setScalar(s);
+      heli.add(light);
+      return light;
+    });
     this.scene.add(heli);
     this.heli = heli;
     if (!this.beam) {
-      const cone = new THREE.CylinderGeometry(0.4, 4.2, 1, 24, 1, true);
-      this.beam = new THREE.Mesh(cone, new THREE.MeshBasicMaterial({ color: new THREE.Color(0xdfe8ff).multiplyScalar(0.18),
+      const cone = new THREE.CylinderGeometry(0.3, 3.4, 1, 24, 1, true);
+      this.beam = new THREE.Mesh(cone, new THREE.MeshBasicMaterial({ color: new THREE.Color(0xdfe8ff).multiplyScalar(0.06),
         transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false }));
       this.beam.renderOrder = 3;
     }
@@ -334,7 +366,11 @@ export class CityPolice {
       u.replan = 0.7;
     }
     while (u.path.length > 1 && Math.hypot(u.path[0].x - d.x, u.path[0].z - d.z) < 9) u.path.shift();
-    const aim = u.path[0] ?? { x: player.x, z: player.z };
+    // close in: aim where the player is going, not where they are, and cut them off
+    const lead = Math.min(1.1, dist / 30);
+    const aim = dist < 45
+      ? { x: player.x + player.vel.x * lead, z: player.z + player.vel.y * lead }
+      : u.path[0] ?? { x: player.x, z: player.z };
     const want = Math.atan2(aim.x - d.x, aim.z - d.z);
     const diff = Math.atan2(Math.sin(want - d.yaw), Math.cos(want - d.yaw));
     // stuck against a kerb: back out for a moment
@@ -346,6 +382,8 @@ export class CityPolice {
       d.update(dt, { steer: Math.sign(diff), gas: false, brake: true });
     } else {
       const sharp = Math.abs(diff) > 1.1 && d.speed > 16;
+      // far behind on a straight: nitro to close the gap
+      if (dist > 70 && Math.abs(diff) < 0.15) d.fireNitro();
       // close in, then pull up beside the player rather than ramming them;
       // a player still moving fast gets chased at full speed
       const playerFast = Math.hypot(player.vel.x, player.vel.y) > 8;

@@ -32,6 +32,7 @@ export class InputManager {
   onPadAlt: () => void = () => {};
   /** R, or Share / the touchpad on a pad: next radio station. */
   onRadio: () => void = () => {};
+  onFullscreen: () => void = () => {};
   /** A controller appeared or went away. */
   onPadChange: (name: string | null) => void = () => {};
   /** D-pad or stick flicked a direction (for menus): dx, dy each -1, 0 or 1. Repeats while held. */
@@ -232,6 +233,7 @@ export class InputManager {
       else if (!e.repeat && key === 'c') this.onCamera();
       else if (!e.repeat && key === 'n') this.onNitroKey();
       else if (!e.repeat && key === 'r') this.onRadio();
+      else if (!e.repeat && key === 'f') this.onFullscreen();
       else if (!e.repeat && (key === 'escape' || key === 'p')) this.onPause();
       else if (!e.repeat && (key === ' ' || key === 'enter')) this.onTap();
       this.heldSteer = (this.leftHeld ? -1 : 0) + (this.rightHeld ? 1 : 0);

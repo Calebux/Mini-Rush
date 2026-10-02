@@ -37,9 +37,10 @@ export class PadMenu {
 
   /** The overlay the controller is working in: the last visible one. */
   private layer(): ParentNode {
-    const open = [...document.querySelectorAll<HTMLElement>('.overlay')]
+    // overlays, and pop-ups that mark themselves as a layer (the radio panel)
+    const open = [...document.querySelectorAll<HTMLElement>('.overlay, [data-pad-layer]')]
       // not offsetParent: it is null for position: fixed, which every overlay is
-      .filter((el) => !el.classList.contains('hidden') && el.getClientRects().length > 0
+      .filter((el) => !el.classList.contains('hidden') && !el.hidden && el.getClientRects().length > 0
         && getComputedStyle(el).visibility !== 'hidden');
     return open[open.length - 1] ?? document;
   }
@@ -82,8 +83,13 @@ export class PadMenu {
       const x = r.left + r.width / 2 - fx, y = r.top + r.height / 2 - fy;
       const along = x * dx + y * dy;              // how far in the pressed direction
       if (along <= 4) continue;
-      const across = Math.abs(x * dy) + Math.abs(y * dx); // how far off that line
-      const score = along + across * 1.1;
+      // a button in the same row (for ←/→) or column (for ↑/↓) wins over one
+      // that is nearer but off to the side: → from a 2×2 grid goes across, not up
+      const lined = dx
+        ? r.bottom > from.top + 2 && r.top < from.bottom - 2
+        : r.right > from.left + 2 && r.left < from.right - 2;
+      const across = lined ? 0 : Math.abs(x * dy) + Math.abs(y * dx);
+      const score = along + across * 2.5 + (lined ? 0 : 60);
       if (score < bestScore) { bestScore = score; best = el; }
     }
     if (best) this.focus(best);

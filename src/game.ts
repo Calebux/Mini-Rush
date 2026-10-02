@@ -35,6 +35,7 @@ import { createPostFX, LookId, PostFX, savedLook } from './postfx';
 import { Rain } from './rain';
 import { RaceMinimap } from './raceMap';
 import { PadMenu } from './padMenu';
+import { bindFullscreenButton, toggleFullscreen } from './fullscreen';
 import { Radio, RadioPanel } from './radio';
 import { carReflection, lightCars, mapEnvironment } from './lighting';
 import { CityMode } from './city/cityMode';
@@ -345,6 +346,12 @@ export class Game {
 
     this.input = new InputManager(document.body);
     this.input.onRadio = () => this.radioNext();
+    // web only: F, and the buttons on the home screen and the pause menu
+    this.input.onFullscreen = () => toggleFullscreen();
+    for (const [id, labels] of [['btn-fullscreen', { on: '⛶', off: '⛶' }], ['btn-fullscreen-pause', { on: '⛶ FULLSCREEN', off: '⛶ EXIT FULLSCREEN' }]] as const) {
+      const button = document.getElementById(id);
+      if (button) bindFullscreenButton(button, labels);
+    }
     // In the city a tap is a steering touch, Space/N fire nitro, Esc/P leave.
     this.input.onTap = () => { if (!this.city) this.onTap(); };
     this.input.onCamera = () => (this.city ? this.city.cycleCamera() : this.cycleCamera());
@@ -519,6 +526,7 @@ export class Game {
 
   /** A screen of buttons rather than a car to drive: the pad navigates it. */
   private padInMenu(): boolean {
+    if (this.radioPanel?.isOpen) return true; // the radio takes the pad, even mid-drive
     if (this.city) return this.city.paused || this.city.resultsOpen; // its pause / results cards take the pad; otherwise it drives
     return this.paused || this.state === 'menu' || this.state === 'finished';
   }
