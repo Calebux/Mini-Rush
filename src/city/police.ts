@@ -21,6 +21,8 @@ const MAX_STARS = 5;
 const EVADE_RADIUS = 105;        // no unit this close: you are out of sight
 const EVADE_TIME = 9;            // seconds out of sight to lose the stars
 const BUST_TIME = 3;             // seconds stopped beside a cruiser
+/** The police helicopter is off for now: cars only. Flip back to bring it in at 3★. */
+const HELICOPTER = false;
 const HELI_HEIGHT = 14;          // low enough to sit in the top of the chase camera's view
 const OFFICER_HEIGHT = 1.62;     // the officer as played, metres
 const ARGUE_TIME = 3.6;          // seconds at the window before the fine
@@ -109,7 +111,7 @@ export class CityPolice {
   constructor(private scene: THREE.Scene, private assets: AssetLibrary,
     private audio: { startSiren(): void; siren(level: number): void; stopSiren(): void; play(name: 'crash', volume?: number): void }) {
     assets.loadExtra('armored_truck.glb', 6.4).then((m) => { this.truckModel = m; });
-    assets.loadExtra('police_heli.glb', 11).then((m) => {
+    if (HELICOPTER) assets.loadExtra('police_heli.glb', 11).then((m) => {
       // the model file carries a stray ground quad ("Plane") from its scene,
       // scaled up hundreds of times: the odd rectangle under the helicopter
       const stray: THREE.Object3D[] = [];
@@ -312,7 +314,7 @@ export class CityPolice {
     const have = (k: Unit['kind']) => this.units.filter((u) => u.kind === k).length;
     if (have('car') < cars) this.addUnit('car', player);
     else if (have('truck') < trucks && this.truckModel) this.addUnit('truck', player);
-    if (stars >= 3 && !this.heli && this.heliModel) this.addHeli(player);
+    if (HELICOPTER && stars >= 3 && !this.heli && this.heliModel) this.addHeli(player);
   }
 
   private addUnit(kind: Unit['kind'], player: CityDrive): void {
