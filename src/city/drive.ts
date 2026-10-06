@@ -77,7 +77,7 @@ export class CityDrive {
 
   update(dt: number, input: DriveInput): void {
     this.impact = 0;
-    this.steer += (input.steer - this.steer) * Math.min(1, dt * 7);
+    this.steer += (input.steer - this.steer) * Math.min(1, dt * 12);
     if (this.nitroT > 0) this.nitroT = Math.max(0, this.nitroT - dt);
     else this.nitro = Math.min(1, this.nitro + dt / NITRO_RECHARGE);
 
