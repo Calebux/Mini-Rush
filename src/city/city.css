@@ -24,7 +24,7 @@ body.city-mode #race-mini { display: none !important; }
 .city-panel, .city-btn, .city-bigmap-card {
   background: linear-gradient(180deg, rgba(14,18,34,.78), rgba(8,10,22,.72));
   border: 1px solid rgba(34,230,255,.35);
-  box-shadow: 0 0 0 1px rgba(255,46,154,.12) inset, 0 8px 24px rgba(0,0,0,.35);
+  box-shadow: 0 0 0 1px rgba(47,107,255,.12) inset, 0 8px 24px rgba(0,0,0,.35);
   backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
   border-radius: 4px;
 }
@@ -34,13 +34,13 @@ body.city-mode #race-mini { display: none !important; }
 .city-activity {
   position: absolute; top: max(84px, calc(56px + env(safe-area-inset-top))); left: 12px;
   width: min(290px, calc(100vw - 24px)); padding: 9px 11px 10px;
-  border-color: rgba(255,46,154,.35);
+  border-color: rgba(47,107,255,.35);
 }
 .city-activity-kicker { display: flex; justify-content: space-between; color: #22e6ff; font-size: 9px; }
 .city-activity-kicker b { color: #fcff52; font-variant-numeric: tabular-nums; }
 .city-activity strong { display: block; color: #fff; font-size: 15px; margin-top: 4px; }
 .city-activity small { display: block; opacity: .72; font-size: 10px; line-height: 1.25; margin: 4px 0 8px; letter-spacing: .02em; }
-.city-activity .city-btn { padding: 7px 10px; font-size: 9px; border-color: rgba(255,46,154,.55); }
+.city-activity .city-btn { padding: 7px 10px; font-size: 9px; border-color: rgba(47,107,255,.55); }
 .city-activity .city-btn.is-route { color: #fcff52; border-color: rgba(252,255,82,.5); }
 .city-activity .city-btn:disabled { opacity: .65; cursor: default; }
 #city-toast {
@@ -59,7 +59,7 @@ body.city-mode #race-mini { display: none !important; }
 }
 #city-district.flash { animation: city-flash .9s ease-out; }
 @keyframes city-flash {
-  0% { color: #ff2e9a; text-shadow: 0 0 14px #ff2e9a; }
+  0% { color: #2f6bff; text-shadow: 0 0 14px #2f6bff; }
   100% { color: #e9f1ff; text-shadow: none; }
 }
 .city-actions { display: flex; gap: 8px; }
@@ -89,7 +89,7 @@ body.city-mode #race-mini { display: none !important; }
     linear-gradient(90deg, rgba(34,230,255,.34) var(--fill), rgba(10,14,28,.8) var(--fill));
 }
 #city-nitro.ready { box-shadow: 0 0 18px rgba(34,230,255,.55); color: #fff; }
-#city-nitro.on { background: linear-gradient(90deg, #ff2e9a, #22e6ff); color: #fff; }
+#city-nitro.on { background: linear-gradient(90deg, #2f6bff, #22e6ff); color: #fff; }
 
 #city-bigmap {
   position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
@@ -99,7 +99,7 @@ body.city-mode #race-mini { display: none !important; }
 .city-bigmap-card { padding: 12px; width: min(92vw, 92vh, 640px); }
 .city-bigmap-head {
   display: flex; justify-content: space-between; align-items: baseline;
-  font-size: 13px; font-weight: 800; margin-bottom: 8px; color: #ff2e9a;
+  font-size: 13px; font-weight: 800; margin-bottom: 8px; color: #2f6bff;
 }
 .city-bigmap-head small { font-size: 9px; color: #22e6ff; opacity: .8; }
 .city-bigmap-card canvas { display: block; width: 100%; height: auto; border-radius: 2px; }
@@ -133,11 +133,11 @@ body.city-mode #race-mini { display: none !important; }
 #city-drift {
   position: absolute; left: 50%; transform: translateX(-50%);
   bottom: calc(max(22px, var(--safe-bottom, 0px)) + 60px);
-  font: inherit; font-size: 10px; font-weight: 800; letter-spacing: .2em; color: #ffd2e8;
+  font: inherit; font-size: 10px; font-weight: 800; letter-spacing: .2em; color: #d6e2ff;
   padding: 9px 22px; border-radius: 999px; cursor: pointer; touch-action: none;
-  border: 1px solid rgba(255,46,154,.55); background: rgba(10,14,28,.78);
+  border: 1px solid rgba(47,107,255,.55); background: rgba(10,14,28,.78);
 }
-#city-drift.on { background: linear-gradient(90deg, #ff2e9a, #a36bff); color: #fff; box-shadow: 0 0 18px rgba(255,46,154,.55); }
+#city-drift.on { background: linear-gradient(90deg, #2f6bff, #a36bff); color: #fff; box-shadow: 0 0 18px rgba(47,107,255,.55); }
 
 /* wanted stars, top centre */
 #city-wanted {
@@ -173,11 +173,11 @@ body.city-mode #race-mini { display: none !important; }
 #city-pause.hidden { display: none; }
 .city-pause-card { width: min(100%, 320px); display: flex; flex-direction: column; gap: 10px; padding: 20px; border-radius: 18px; text-align: center;
   background: linear-gradient(180deg, rgba(20,22,44,.96), rgba(9,10,24,.96)); border: 1px solid rgba(34,230,255,.55);
-  box-shadow: 0 0 40px -10px #ff2e9a, 0 20px 60px rgba(0,0,0,.6); }
+  box-shadow: 0 0 40px -10px #2f6bff, 0 20px 60px rgba(0,0,0,.6); }
 .city-pause-card small { font-size: 9px; letter-spacing: .3em; color: #22e6ff; }
 .city-pause-card strong { font-size: 26px; font-weight: 900; letter-spacing: .1em; margin-bottom: 6px; }
 .city-pause-card .city-btn { width: 100%; padding: 13px; font-size: 11px; }
-.city-pause-card .city-btn.big { background: linear-gradient(100deg, #ff2e9a, #8b5cf6); border: 0; font-size: 13px; }
+.city-pause-card .city-btn.big { background: linear-gradient(100deg, #2f6bff, #8b5cf6); border: 0; font-size: 13px; }
 .city-pause-card em { font-style: normal; font-size: 9px; letter-spacing: .08em; color: #9aa3c7; margin-top: 4px; }
 /* City GP results */
 .city-results-card #city-results-time { font-size: 15px; font-weight: 800; color: #fff; margin: -8px 0 2px; letter-spacing: .12em; }
@@ -186,7 +186,7 @@ body.city-mode #race-mini { display: none !important; }
   background: rgba(255,255,255,.05); font-size: 11px; letter-spacing: .08em; text-align: left; }
 #city-results-list li b { color: #22e6ff; }
 #city-results-list li em { margin: 0; font-size: 11px; color: #cfd6f5; font-variant-numeric: tabular-nums; }
-#city-results-list li.you { background: linear-gradient(100deg, rgba(255,46,154,.35), rgba(139,92,246,.3)); }
+#city-results-list li.you { background: linear-gradient(100deg, rgba(47,107,255,.35), rgba(139,92,246,.3)); }
 #city-results-list li.you b, #city-results-list li.you em { color: #fff; }
 
 /* with a controller connected, the card's buttons show which pad button presses them */
@@ -205,7 +205,7 @@ body.city-mode #race-mini { display: none !important; }
 .city-activity.collapsed #city-activity-title { font-size: 11px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .city-activity.collapsed .city-activity-kicker i { transform: rotate(-90deg); }
 
-/* phones, and Nimiq Pay's webview above all: a slimmer top bar */
+/* phones, and in-app webviews above all: a slimmer top bar */
 @media (max-width: 480px) {
   .city-top { top: max(8px, env(safe-area-inset-top)); left: 8px; right: 8px; }
   .city-where { padding: 5px 8px 6px; }

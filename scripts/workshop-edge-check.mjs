@@ -4,9 +4,9 @@ const browser = await chromium.launch({ channel: 'chrome', headless: true });
 const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
 const errors = []; page.on('pageerror', e => errors.push(e.message));
 try {
+  await page.addInitScript(() => localStorage.setItem('minirush.welcomed', '1')); // not a first-open run
   await page.goto(`${process.argv[2] || 'http://127.0.0.1:5174'}/?q=0`, { waitUntil: 'networkidle' });
   await page.waitForFunction(() => window.__game?.state === 'menu');
-  console.log('NIM CONFIG:', await page.evaluate(() => ({ configured: window.__game.ui.wallet.marketReady, nativeHost: window.__game.ui.wallet.available })));
   const checks = await page.evaluate(async () => {
     const w = await import('/src/workshop.ts'); const failures = [];
     const check = (ok, label) => { if (!ok) failures.push(label); };
@@ -30,29 +30,25 @@ try {
     return failures;
   });
   assert.deepEqual(checks, []);
-  await page.click('#wallet-chip'); assert.equal(await page.locator('#profile').isVisible(), true); await page.click('#btn-profile-close');
+  // the chip offers a username first, then the driver card
+  await page.click('#driver-chip'); assert.equal(await page.locator('#username').isVisible(), true);
+  await page.click('#btn-username-skip'); assert.equal(await page.locator('#profile').isVisible(), true); await page.click('#btn-profile-close');
   await page.click('#btn-market-home');
-  assert.equal(await page.locator('#btn-market-nim').isDisabled(), true);
-  // UI-only wallet stub: no provider, account, network payment or real funds involved.
-  await page.evaluate(() => {
-    const g = window.__game; const wallet = g.ui.wallet;
-    Object.defineProperty(wallet, 'available', { get: () => true });
-    Object.defineProperty(wallet, 'marketReady', { get: () => true });
-    window.testPayments = 0;
-    wallet.buyMarketCar = () => { window.testPayments++; return new Promise(resolve => { window.resolveTestPayment = resolve; }); };
-    g.ui.renderCar();
+  assert.equal(await page.locator('#btn-buy-car').isDisabled(), true);
+  // coins buy cars: the bank covers it, the car unlocks once, a second tap charges nothing
+  const purchase = await page.evaluate(async () => {
+    const { CARS } = await import('/src/cars.ts');
+    const car = CARS[window.__game.carIndex];
+    localStorage.setItem('minirush.bank', String(car.price + 100));
+    window.__game.ui.renderCar();
+    return { id: car.id, price: car.price };
   });
-  await page.click('#btn-market-nim'); await page.click('#car-next');
-  assert.equal(await page.locator('#btn-market-nim').isDisabled(), true);
-  await page.evaluate(() => { void window.__game.ui.buyMarketCar(); window.resolveTestPayment(null); });
-  await page.waitForTimeout(50);
-  assert.equal(await page.evaluate(() => window.testPayments), 1);
-  assert.equal(await page.evaluate(() => localStorage.getItem('minirush.owned')), null);
-  await page.click('#btn-market-nim');
-  const purchaseId = await page.evaluate(async () => (await import('/src/cars.ts')).CARS[window.__game.carIndex].id);
-  await page.click('#car-next'); await page.evaluate(() => window.resolveTestPayment('test-only-reference'));
-  await page.waitForTimeout(50);
-  assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('minirush.owned'))), [purchaseId]);
+  assert.equal(await page.locator('#btn-buy-car').isDisabled(), false);
+  await page.click('#btn-buy-car');
+  assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('minirush.owned'))), [purchase.id]);
+  assert.equal(await page.evaluate(() => localStorage.getItem('minirush.bank')), '100');
+  await page.evaluate(() => window.__game.ui.buyGarageCar());
+  assert.equal(await page.evaluate(() => localStorage.getItem('minirush.bank')), '100');
   await page.click('#btn-workshop-garage');
   await page.click('[data-part="street"]'); await page.waitForTimeout(100);
   const before = await page.evaluate(() => window.__game.renderer.info.memory.geometries);
@@ -61,5 +57,5 @@ try {
   const after = await page.evaluate(() => window.__game.renderer.info.memory.geometries);
   assert.ok(after <= before + 4, `Preview geometry grew: ${before} -> ${after}`);
   assert.deepEqual(errors, []);
-  console.log('PASS: corrupt storage, invalid IDs/slots, unowned save, interrupted-purchase recovery, duplicate charge prevention, local profile, native-only market, mocked payment rejection/concurrency/car identity, preview cleanup.', { before, after });
+  console.log('PASS: corrupt storage, invalid IDs/slots, unowned save, interrupted-purchase recovery, duplicate charge prevention, local profile, coin market (unaffordable, purchase, no double charge), preview cleanup.', { before, after });
 } finally { await browser.close(); }

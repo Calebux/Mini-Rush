@@ -33,7 +33,7 @@
 #menu .menu-actions { grid-template-columns: 1fr auto; }
 .home-links { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
 .home-links button { background: none; border: 0; color: var(--muted); font: 700 9px sans-serif; padding: 7px 0; min-height: 30px; cursor: pointer; }
-#menu .wallet-chip { display: block; font-size: 9px; border-radius: 30px; padding: 10px; background: #0f3d2e99; }
+#menu .driver-chip { display: block; font-size: 9px; border-radius: 30px; padding: 10px; background: #0f3d2e99; }
 #menu #btn-play { transform: none; border-radius: 10px; color: var(--gold-ink); background: linear-gradient(135deg,var(--gold-hi),var(--gold)); box-shadow: none; padding: 14px; font-size: 22px; }
 #menu #btn-play span { transform: none; }
 #menu #btn-garage-menu { border-radius: 10px; }
@@ -103,7 +103,7 @@
   .workshop-panel { align-self: center; padding: 22px; }
 }
 /* A phone's home card can outgrow the screen once the bottom inset is honoured
-   (Nimiq Pay on Android keeps 56px clear), so it scrolls instead of hiding its
+   (Android WebViews keep 56px clear), so it scrolls instead of hiding its
    last row under the navigation bar. */
 @media(max-width: 849px) {
   #menu { overflow-y: auto; }

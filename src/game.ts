@@ -50,7 +50,6 @@ import { Track } from './track';
 import { bakedPath, loadTrackPaths } from './trackPaths';
 import { Standing, UI } from './ui';
 import { track } from './usage';
-import { Wallet } from './wallet';
 import { Build, workshopSpec } from './workshop';
 import { Showroom } from './showroom';
 import { rollWeather, WeatherSpec } from './weather';
@@ -126,7 +125,6 @@ export class Game {
   private traffic!: TrafficManager;
   private assets = new AssetLibrary();
   private audio = new AudioManager();
-  private wallet = new Wallet();
   private ui: UI;
   private input: InputManager;
 
@@ -259,7 +257,7 @@ export class Game {
     if (!carFits(restored, CARS[this.carIndex])) {
       const have = owned();
       const fit = CARS.findIndex((c) => carFits(restored, c)
-        && (c.nim === 0 || have.has(c.id)));
+        && (c.price === 0 || have.has(c.id)));
       if (fit >= 0) this.carIndex = fit;
       else this.modeIndex = 0; // nothing on the shelf — back to Grand Prix
     }
@@ -306,7 +304,7 @@ export class Game {
     this.smoke = new SmokePool(this.scene);
     this.postfx = createPostFX(this.renderer, this.scene, this.camera, this.quality);
 
-    this.ui = new UI(this.wallet, this.audio);
+    this.ui = new UI(this.audio);
     this.ui.setLaps(this.laps);
     this.ui.setCar(this.carIndex);
     this.ui.setMap(this.mapIndex);
@@ -516,9 +514,9 @@ export class Game {
       const text = `📻 ${now.band} · ${now.station || 'TUNING…'}`;
       const toast = document.getElementById('city-toast');
       if (this.city && toast) {
-        toast.textContent = text; toast.style.setProperty('--toast-color', '#ff2e9a');
+        toast.textContent = text; toast.style.setProperty('--toast-color', '#5b8cff');
         toast.classList.remove('show'); void toast.offsetWidth; toast.classList.add('show');
-      } else this.ui.popText(text, '#ff2e9a');
+      } else this.ui.popText(text, '#5b8cff');
     };
     say();
     window.setTimeout(say, 2500); // once it has found a station that plays
@@ -567,8 +565,8 @@ export class Game {
 
   /**
    * The City GP run as the bounty race: out of the city and onto the ordinary
-   * results screen, which posts a win to the bounty board and offers the
-   * on-chain entry exactly as the circuit bounty did.
+   * results screen, which posts a win to the bounty board exactly as the
+   * circuit bounty did.
    */
   private finishCityBounty(r: CityRaceStatus): void {
     if (!this.city) return;
@@ -1299,9 +1297,7 @@ export class Game {
       }, 3000);
     }
 
-    // The run itself is banked locally and pushed to the daily board by the UI.
-    // Writing it on-chain costs the player a native Nimiq Pay confirmation, so
-    // it stays opt-in behind the results screen's mint button — never automatic.
+    // The run itself is banked locally and pushed to the boards by the UI.
 
     if (!this.busted && this.ghostRec) {
       const run = this.ghostRec.data(this.carIndex, this.playerTime, this.score());
@@ -2075,7 +2071,7 @@ export class Game {
     const len = Math.hypot(b.x - a.x, b.z - a.z) || 1;
     this.raceMap.draw(this.player.mesh.position, { x: (b.x - a.x) / len, z: (b.z - a.z) / len },
       this.rivals.rivals.map((r) => ({ x: r.mesh.position.x, z: r.mesh.position.z,
-        colour: r.finishTime >= 0 ? 'rgba(233,241,255,0.4)' : '#ff2e9a' })));
+        colour: r.finishTime >= 0 ? 'rgba(233,241,255,0.4)' : '#5b8cff' })));
   }
 
   private updateHud(): void {

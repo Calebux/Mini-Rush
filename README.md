@@ -2,13 +2,13 @@
 
 🔗 **Play now:** [minirush.site](https://minirush.site/) · [mini-rush.vercel.app](https://mini-rush.vercel.app/)
 
-A mobile-first 3D racing game built as a **Nimiq Pay Mini App**.
+A mobile-first 3D racing game for the web.
 Race three AI rivals point-to-point through zombie-infested streets: drag to
 steer, tap to fire nitro, splat everything green for combo points, and grab
 coins along the way.
 
-Built with Three.js + Vite + TypeScript. No frameworks, targets 60 fps inside
-the Nimiq Pay WebView.
+Built with Three.js + Vite + TypeScript. No frameworks, targets 60 fps on a
+phone browser.
 
 ## Play it
 
@@ -107,44 +107,17 @@ node scripts/smoke.mjs [shotsDir]  # Playwright: full race → results → retry
 Exits non-zero on console errors or if the results screen never appears.
 Screenshots (menu, countdown, mid-race, results) land in `shotsDir`.
 
-## Nimiq Pay integration
+## Coins
 
-`src/wallet.ts` talks to the provider Nimiq Pay injects into the Mini App's
-WebView, via [`@nimiq/mini-app-sdk`](https://www.npmjs.com/package/@nimiq/mini-app-sdk).
-
-- **Auto-connect** — the account is read on load, so nobody taps "connect":
-  the menu chip fills in with the driver name and, if `VITE_NIMIQ_RPC_URL` is
-  set, the NIM balance. The provider can land a moment after the page script,
-  so the read waits up to 5s for it rather than checking `window.nimiq` once.
-  If the read is refused the chip goes back to offering an explicit connect;
-  outside Nimiq Pay it just wears the generated driver name and opens the
-  driver card, and the game plays exactly the same.
-- **Garage market** — hyper-class cars can be bought outright for NIM via
-  `sendBasicTransaction`, instead of grinding coins. Off unless
-  `VITE_MARKET_RECEIVER` is configured.
-- **Race receipts** — the results screen offers a one-tap **⛓ Mint receipt**
-  that writes the finished run into a transaction's data field
-  (`sendBasicTransactionWithData`), making the run verifiable independently of
-  this game's own leaderboard. The payload is `MR1` + score/place/map/mode as
-  fixed-width hex — 19 bytes, inside Nimiq's 64-byte data field.
-
-Nimiq Pay puts a native confirmation in front of every sensitive action, which
-the Mini App can't bypass — so nothing is ever written on the player's behalf.
-That's why scores, badges and the daily board live off-chain (local storage +
-the Supabase board) and only payments and opt-in receipts touch the chain.
-
-Every call fails soft: no provider, a declined dialog, or an unconfigured
-receiver leaves the game fully playable.
-
-**Testing inside Nimiq Pay:** run `npm run dev`, expose it with a tunnel
-(e.g. `ngrok http 5173`), then open the tunnel URL as a Mini App —
-`https://nimpay.app/miniapps/open/<your-host>` or the
-`nimiqpay://miniapp?url=<your-host>` deeplink.
+Everything in the game is bought with coins earned by racing: cars in the
+garage, upgrades, paint and workshop parts. Coins are banked on the device
+(`src/economy.ts`) and have no cash value. The driver chip on the menu opens
+the driver card, where a player can pick the username the boards show.
 
 ## Legacy Celo contracts
 
 [`contracts/`](contracts/) still holds the Foundry project for **MiniRushTracker**,
-the Celo tracker the game used before moving to Nimiq Pay. Nothing in `src/`
+the Celo tracker the game used earlier. Nothing in `src/`
 references it any more; it is kept for history and is not part of the build.
 
 ## Art & sound

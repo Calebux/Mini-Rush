@@ -1,7 +1,7 @@
 /**
- * Fullscreen for the web version. Inside Nimiq Pay the game already fills the
- * screen, and iPhone Safari only lets videos go fullscreen (it reports
- * fullscreenEnabled = false), so the buttons hide themselves in both.
+ * Fullscreen for the web version. iPhone Safari only lets videos go
+ * fullscreen (it reports fullscreenEnabled = false), so the buttons hide
+ * themselves there.
  */
 
 type FsDocument = Document & {
@@ -13,10 +13,8 @@ type FsElement = HTMLElement & { webkitRequestFullscreen?: () => Promise<void> |
 
 const doc = document as FsDocument;
 
-const inNimiqPay = (): boolean => 'nimiq' in window || 'nimiqPay' in window;
-
 export function fullscreenAvailable(): boolean {
-  return !inNimiqPay() && !!(doc.fullscreenEnabled || doc.webkitFullscreenEnabled);
+  return !!(doc.fullscreenEnabled || doc.webkitFullscreenEnabled);
 }
 
 export function isFullscreen(): boolean {
@@ -50,6 +48,4 @@ export function bindFullscreenButton(button: HTMLElement, labels = { on: '⛶', 
   document.addEventListener('fullscreenchange', refresh);
   document.addEventListener('webkitfullscreenchange', refresh);
   refresh();
-  // Nimiq Pay may inject its provider a moment after load
-  window.setTimeout(refresh, 1500);
 }

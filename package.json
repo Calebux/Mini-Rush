@@ -1,7 +1,7 @@
 {
   "name": "minirush",
   "version": "0.1.0",
-  "description": "MiniRush Outbreak GP — mobile-first zombie racing Mini App for Nimiq Pay",
+  "description": "MiniRush Outbreak GP — mobile-first zombie racing for the web",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -14,7 +14,6 @@
     "stress": "node scripts/stress.mjs"
   },
   "dependencies": {
-    "@nimiq/mini-app-sdk": "^0.1.0",
     "@types/three": "^0.185.1",
     "three": "^0.185.1",
     "typescript": "^7.0.2",

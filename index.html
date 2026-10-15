@@ -10,11 +10,10 @@
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <title>MiniRush: Outbreak GP</title>
   <script>
-    // On Android, Nimiq Pay's WebView can reach behind the system navigation
+    // On Android, an in-app WebView can reach behind the system navigation
     // bar while env(safe-area-inset-bottom) reports it wrong (WebViews before
     // 140 often say 0), which left the pedals and the nitro pill under the bar.
-    // Tag in-app Android WebViews so --safe-bottom keeps a floor. The host
-    // object can land a moment after this runs, so look again once the page is up.
+    // Tag in-app Android WebViews so --safe-bottom keeps a floor.
     (function () {
       var ua = navigator.userAgent;
       if (!/Android/i.test(ua)) return;
@@ -23,14 +22,12 @@
       // be tapped. In-app WebViews keep the taller floor.
       document.documentElement.classList.add('android');
       var tag = function () {
-        if (/; wv\)/.test(ua) || window.nimiqPay || window.nimiq) {
+        if (/; wv\)/.test(ua)) {
           document.documentElement.classList.add('android-inapp');
         }
       };
       tag();
-      document.addEventListener('DOMContentLoaded', tag);
-      setTimeout(tag, 1500);
-      // src/host.ts keeps watching for the host object after this.
+      // src/host.ts also tags a page laid out edge to edge.
     })();
   </script>
   <style>
@@ -204,16 +201,16 @@
     @keyframes race-pulse {
       50% { box-shadow: 0 8px 44px rgba(252,255,82,.75), inset 0 -3px 0 rgba(0,0,0,.18); }
     }
-    #wallet-chip {
+    #driver-chip {
       appearance: none; cursor: pointer; font-family: inherit;
       font-size: 12px; font-weight: 600; color: #fff; opacity: .55;
       background: transparent; border: 1px solid transparent; border-radius: 999px;
       padding: 5px 10px; transition: all .15s ease;
     }
-    #wallet-chip:empty { display: none; }
-    #wallet-chip:hover { opacity: 1; border-color: rgba(255,255,255,.3); background: rgba(255,255,255,.08); }
-    #wallet-chip:active { transform: scale(.96); }
-    #wallet-chip.connectable {
+    #driver-chip:empty { display: none; }
+    #driver-chip:hover { opacity: 1; border-color: rgba(255,255,255,.3); background: rgba(255,255,255,.08); }
+    #driver-chip:active { transform: scale(.96); }
+    #driver-chip.connectable {
       opacity: 1; color: #fcff52; font-weight: 800; letter-spacing: 1px;
       border-color: rgba(252,255,82,.55); background: rgba(252,255,82,.1);
     }
@@ -265,7 +262,6 @@
     }
     .pstamp.got:nth-child(even) { transform: rotate(5deg); }
     .pstamp:not(.got) { filter: grayscale(1); opacity: .4; }
-    #profile-chain-note { font-size: 10.5px; opacity: .55; text-align: left; min-height: 13px; }
     @media (max-height: 800px) {
       #profile .logo { font-size: 24px; }
       #profile .profile-card { gap: 9px; padding: 13px 15px 15px; }
@@ -924,21 +920,13 @@
     .upg:disabled { opacity: .38; pointer-events: none; }
     .upg.maxed { border-color: rgba(252,255,82,.6); }
 
-    /* Buying a car is a NIM payment, and it lives in the garage footer where
+    /* Buying a car costs coins, and it lives in the garage footer where
        it is in view without scrolling the specs card. */
     .garage-footer-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
     #market-status { font-size: 9.5px; line-height: 1.25; opacity: .7; max-width: 30ch; }
-    #btn-market-nim.hidden, #btn-garage-done.hidden { display: none; }
-    #btn-market-nim:disabled { opacity: .45; pointer-events: none; cursor: not-allowed; }
-    #btn-mint.hidden { display: none; }
-    #btn-mint:disabled { opacity: .45; pointer-events: none; cursor: not-allowed; }
-    #mint-status { font-size: 10.5px; opacity: .65; min-height: 13px; }
+    #btn-buy-car.hidden, #btn-garage-done.hidden { display: none; }
+    #btn-buy-car:disabled { opacity: .45; pointer-events: none; cursor: not-allowed; }
     /* ---------- weekly bounty ---------- */
-    #btn-mint.bounty {
-      border: 0; color: #1a1300; font-weight: 900;
-      background: linear-gradient(135deg, #ffe46b, #ffb700);
-      box-shadow: 0 10px 28px rgba(255,183,0,.35);
-    }
     /* the bounty board card: black and gold, on the menu every week */
     #btn-bounty {
       appearance: none; cursor: pointer; font-family: inherit; width: 100%; min-width: 0;
@@ -1337,7 +1325,7 @@
     #result-place em { font-style: normal; font-size: 26px; vertical-align: super; }
 
     .hint { font-size: 12px; opacity: .55; max-width: 280px; }
-    .wallet-chip { font-size: 13px; font-weight: 600; }
+    .driver-chip { font-size: 13px; font-weight: 600; }
 
     /* ---------- home: the race mode card — the deck is one obvious tap away ---------- */
     .mode-home {
@@ -1539,7 +1527,7 @@
           <div class="coin-item"><strong>+20 / +14 / +8 / +2</strong><span>Placement reward for 1st through 4th.</span></div>
           <div class="coin-item"><strong>+5 EXTRA LAP</strong><span>Each lap after the first pays more. Track pickups add directly.</span></div>
         </div>
-        <div class="pause-note">Coins buy upgrades, paint and workshop parts. Cars are bought with NIM. Score controls leaderboard rank.</div>
+        <div class="pause-note">Coins buy cars, upgrades, paint and workshop parts. Score controls leaderboard rank.</div>
       </div>
       <div class="pause-actions">
         <button class="btn" id="btn-resume" type="button">RESUME</button>
@@ -1556,7 +1544,7 @@
     <div class="logo" style="font-size:44px">Mini<em>Rush</em></div>
     <div id="welcome-card">
       <strong>Arcade racing in 19 cities.</strong>
-      <p>Two laps, seven rivals, one tap to go. Win the weekly bounty race and the prize is paid in real NIM.</p>
+      <p>Two laps, seven rivals, one tap to go. Win the weekly bounty race and top the board.</p>
       <button class="btn" id="btn-welcome-race" type="button">RACE&nbsp;NOW&nbsp;▸</button>
       <button class="btn ghost" id="btn-welcome-menu" type="button">Look around first</button>
     </div>
@@ -1574,7 +1562,7 @@
           <div class="menu-track-head"><span>LIVE</span><span>TRACK</span></div>
           <canvas id="menu-map-canvas" width="188" height="112"></canvas>
         </div>
-        <button class="wallet-chip" id="wallet-chip"></button>
+        <button class="driver-chip" id="driver-chip"></button>
       </div>
     </div>
     <div id="home-car-stage" tabindex="0" role="img" aria-label="Your selected car in the showroom. Drag or use left and right arrow keys to rotate.">
@@ -1628,7 +1616,7 @@
           <input type="range" id="vol-slider" min="0" max="100" aria-label="Volume" />
         </div>
       </div>
-      <nav class="home-links" aria-label="More options"><button id="btn-board" type="button">BOARD</button><button id="btn-market-home" type="button">NIM MARKET ↗</button><button id="btn-how" type="button">HOW TO PLAY</button></nav>
+      <nav class="home-links" aria-label="More options"><button id="btn-board" type="button">BOARD</button><button id="btn-market-home" type="button">CAR MARKET ↗</button><button id="btn-how" type="button">HOW TO PLAY</button></nav>
     </div>
   </div>
 
@@ -1697,7 +1685,7 @@
         <div id="market-status"></div>
       </div>
       <button class="btn stage-cta" id="btn-garage-done" type="button">START&nbsp;RACE</button>
-      <button class="btn stage-cta buy hidden" id="btn-market-nim" type="button">BUY&nbsp;·&nbsp;2,600&nbsp;NIM</button>
+      <button class="btn stage-cta buy hidden" id="btn-buy-car" type="button">BUY&nbsp;·&nbsp;2,600&nbsp;COINS</button>
     </div>
   </div>
 
@@ -1725,8 +1713,6 @@
     <div class="hint" id="r-coin-note"></div>
     <!-- one hero action, a pair of ways on, then the optional extras -->
     <div class="result-dock">
-      <button class="btn ghost hidden" id="btn-mint" type="button" aria-label="Write this run on-chain">MINT RECEIPT</button>
-      <div class="hint" id="mint-status"></div>
       <button class="dock-hero" id="btn-retry" type="button">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></svg>RACE AGAIN
       </button>
@@ -1755,7 +1741,7 @@
   <div class="overlay hidden" id="bounty" aria-label="Bounty board">
     <div class="logo" style="font-size:30px">Bounty<em>Board</em></div>
     <div class="bounty-card">
-      <div class="bounty-prize" id="bounty-prize">$20 in NIM</div>
+      <div class="bounty-prize" id="bounty-prize">PRIZE POSTED</div>
       <div class="bounty-split" id="bounty-split"></div>
       <div class="bounty-sub" id="bounty-sub">This week's bounty race</div>
       <div class="bounty-status" id="bounty-status"></div>
@@ -1764,14 +1750,13 @@
       <details class="bounty-how" id="bounty-how">
         <summary>How the bounty works</summary>
         <ol class="bounty-rules">
-          <li><strong>Free to enter.</strong> Entering writes a 1&nbsp;Luna (0.00001&nbsp;NIM) receipt transaction. It timestamps your run; it is not a payment for a chance to win.</li>
-          <li>Race the <strong>CITY GP</strong> on Neon City's own streets: the same 2-lap loop for everyone, through every gate in order, against seven pro drivers in the same car, no traffic or police, in the <strong>free VIPER GT</strong> — cars bought with NIM and workshop builds stay out, so the prize is won on driving alone.</li>
-          <li><strong>Only a win counts.</strong> Finish 1st, then tap <strong>Enter the bounty</strong> on the results screen inside <strong>Nimiq Pay</strong>. Win faster and enter again: your fastest win counts.</li>
+          <li><strong>Free to enter.</strong> No payment, no sign-up.</li>
+          <li>Race the <strong>CITY GP</strong> on Neon City's own streets: the same 2-lap loop for everyone, through every gate in order, against seven pro drivers in the same car, no traffic or police, in the <strong>free VIPER GT</strong> — cars bought with coins and workshop builds stay out, so the prize is won on driving alone.</li>
+          <li><strong>Only a win counts.</strong> Finish 1st and your time goes on the board under your driver name. Win faster to beat it: your fastest win counts.</li>
           <li>Entries close <strong>Sunday 23:59 UTC</strong>.</li>
           <li id="bounty-rule-prize"><strong>The fastest winning time takes the prize.</strong> Ties go to the earlier entry.</li>
-          <li>The prize is sent in NIM to the wallet that made the winning entry, after entries close.</li>
-          <li>The top entry is checked before payout, and the winner may be asked to show the run is repeatable. Tampered, impossible or multi-wallet entries are disqualified. One prize per person.</li>
-          <li>Entering publishes your winning time and wallet address on the Nimiq blockchain. The board above is a live view; the prize is decided from those on-chain entries.</li>
+          <li>The top entry is checked before payout, and the winner may be asked to show the run is repeatable. Tampered, impossible or multi-account entries are disqualified. One prize per person.</li>
+          <li>Your driver name and winning time are shown publicly on the board.</li>
         </ol>
       </details>
     </div>
@@ -1798,7 +1783,7 @@
         <div class="profile-wallet">
           <div class="profile-name-row">
             <strong id="profile-name">DRIVER</strong>
-            <button class="name-edit hidden" id="btn-profile-name" type="button">EDIT</button>
+            <button class="name-edit" id="btn-profile-name" type="button">EDIT</button>
           </div>
           <div id="profile-addr"></div>
           <div id="profile-balance"></div>
@@ -1821,12 +1806,6 @@
       </div>
       <div class="profile-head">🎖 BADGES</div>
       <div class="profile-badges" id="profile-badges"></div>
-      <div class="profile-head">⛓ ON-CHAIN · NIMIQ</div>
-      <div class="profile-grid two">
-        <div class="pstat"><span class="v" id="p-receipts">—</span><span class="k">Receipts minted</span></div>
-        <div class="pstat"><span class="v" id="p-block">—</span><span class="k">Block height</span></div>
-      </div>
-      <div id="profile-chain-note"></div>
       <details id="audio-credits">
         <summary>Music &amp; sound credits</summary>
         <div style="max-height:150px;overflow-y:auto;touch-action:pan-y;font-size:11px;line-height:1.6;text-align:left;overflow-wrap:anywhere">
@@ -1844,7 +1823,7 @@
 
   <div class="overlay hidden" id="username" role="dialog" aria-modal="true" aria-labelledby="username-title">
     <div class="username-card">
-      <div class="pause-kicker">SIGNED IN WITH NIMIQ</div>
+      <div class="pause-kicker">YOUR DRIVER NAME</div>
       <h2 id="username-title">PICK YOUR USERNAME</h2>
       <p>It goes on the boards, in race results, next to your bounty wins and on the public stats page. 3–16 letters, numbers or spaces.</p>
       <input id="username-input" maxlength="16" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="done" aria-label="Username" aria-describedby="username-error" />
@@ -1904,7 +1883,7 @@
       <div id="workshop-parts" aria-label="Compatible parts"></div>
       <p id="workshop-status" role="status" aria-live="polite"></p>
       <div class="workshop-actions"><button id="workshop-buy" type="button">PART OWNED</button><button id="workshop-save" type="button">SAVE & EQUIP</button></div>
-      <p class="workshop-note">Earn coins by racing. Parts unlock across all 3 builds. Saved on this device. Coins have no cash value. NIM car purchases remain in Garage → Hypercars.</p>
+      <p class="workshop-note">Earn coins by racing. Parts unlock across all 3 builds. Saved on this device. Coins have no cash value. Cars are bought with coins in the Garage.</p>
     </section>
   </div>
   <script type="module" src="/src/main.ts"></script>

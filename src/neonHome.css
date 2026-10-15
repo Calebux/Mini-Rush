@@ -1,9 +1,9 @@
 /* ─────────────────────────────────────────────────────────────────────────
    NEON NIGHT — the front end's look, loaded last so it wins.
 
-   One palette with the game's own nights: near-black navy, MAGENTA for the
+   One palette with the game's own nights: near-black navy, ELECTRIC BLUE for the
    one thing to press, CYAN for information and hairlines, and YELLOW kept
-   for money (NIM and coins) so a prize is the only warm thing on screen.
+   for money (coins) so a prize is the only warm thing on screen.
    The old green-and-gold tokens are redefined here, so every screen built
    on them (garage, workshop, driver card) follows without being rewritten.
    ───────────────────────────────────────────────────────────────────────── */
@@ -19,13 +19,13 @@
   --nn-bg: #060712;
   --nn-glass: rgba(11, 13, 28, .82);
   --nn-glass-hi: rgba(20, 22, 44, .9);
-  --nn-magenta: #ff2e9a;
-  --nn-magenta-hi: #ff6fbd;
+  --nn-accent: #2f6bff;
+  --nn-accent-hi: #6f9bff;
   --nn-cyan: #22e6ff;
   --nn-violet: #8b5cf6;
   --nn-money: #fcd34d;
   --nn-text: #eef2ff;
-  --nn-muted: #9aa3c7;
+  --nn-muted: #c6cdea;
   --nn-line: rgba(34, 230, 255, .22);
   --nn-line-hi: rgba(34, 230, 255, .55);
   --nn-display: 'Orbitron', 'Eurostile', 'Arial Black', -apple-system, sans-serif;
@@ -34,8 +34,8 @@
   --rg-deep: #14163a;
   --rg-deep-2: #0c0e24;
   --rg-glass: var(--nn-glass);
-  --gold: var(--nn-magenta);
-  --gold-hi: var(--nn-magenta-hi);
+  --gold: var(--nn-accent);
+  --gold-hi: var(--nn-accent-hi);
   --gold-ink: #ffffff;
   --cream: var(--nn-text);
   --muted: var(--nn-muted);
@@ -54,18 +54,18 @@ html, body { background: var(--nn-bg); }
 #menu .logo {
   font-family: var(--nn-display); font-style: normal; font-weight: 900;
   font-size: clamp(26px, 8vw, 38px); letter-spacing: 1px; transform: none;
-  text-shadow: 0 0 22px rgba(255,46,154,.35);
+  text-shadow: 0 0 22px rgba(47,107,255,.35);
 }
 #menu .logo em {
   font-style: normal;
-  background: linear-gradient(90deg, var(--nn-magenta), var(--nn-cyan));
+  background: linear-gradient(90deg, var(--nn-accent), var(--nn-cyan));
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
 #menu .sub-logo {
   font-family: var(--nn-display); font-style: normal; font-weight: 600;
   font-size: 8px; letter-spacing: 3.2px; color: var(--nn-cyan);
 }
-#menu .wallet-chip, #menu #wallet-chip.connectable {
+#menu .driver-chip, #menu #driver-chip.connectable {
   font-family: var(--nn-display); font-weight: 800; font-size: 9px; letter-spacing: 1.4px;
   color: var(--nn-text); border: 1px solid var(--nn-line-hi); border-radius: 999px;
   background: rgba(11,13,28,.7); padding: 9px 13px;
@@ -88,7 +88,7 @@ html, body { background: var(--nn-bg); }
 /* the panel: glass, a hairline, one accent */
 #menu .menu-panel {
   background: var(--nn-glass); border: 1px solid var(--nn-line); border-radius: 16px;
-  box-shadow: 0 0 0 1px rgba(255,46,154,.06) inset, 0 20px 60px rgba(0,0,0,.55);
+  box-shadow: 0 0 0 1px rgba(47,107,255,.06) inset, 0 20px 60px rgba(0,0,0,.55);
   backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
   gap: 10px; padding: 14px;
 }
@@ -128,8 +128,8 @@ html, body { background: var(--nn-bg); }
 #menu #btn-play {
   font-family: var(--nn-display); font-style: normal; font-weight: 900; font-size: 20px; letter-spacing: 3px;
   color: #fff; border: 0; border-radius: 12px; padding: 16px;
-  background: linear-gradient(100deg, var(--nn-magenta) 0%, #d62bd8 55%, var(--nn-violet) 100%);
-  box-shadow: 0 0 0 1px rgba(255,255,255,.12) inset, 0 10px 34px rgba(255,46,154,.45);
+  background: linear-gradient(100deg, var(--nn-accent) 0%, #4a5bff 55%, var(--nn-violet) 100%);
+  box-shadow: 0 0 0 1px rgba(255,255,255,.12) inset, 0 10px 34px rgba(47,107,255,.45);
 }
 #menu #btn-play:active { transform: scale(.98); }
 #menu #btn-garage-menu {
@@ -233,7 +233,7 @@ html, body { background: var(--nn-bg); }
 
 /* ── the mode deck ───────────────────────────────────────────────────── */
 
-#modes { background: radial-gradient(90% 55% at 50% 46%, var(--accent-soft, rgba(255,46,154,.2)), transparent 72%), rgba(6,7,18,.86); }
+#modes { background: radial-gradient(90% 55% at 50% 46%, var(--accent-soft, rgba(47,107,255,.2)), transparent 72%), rgba(6,7,18,.86); }
 #modes .mode-eyebrow {
   font-family: var(--nn-display); font-weight: 700; font-size: 9px; letter-spacing: 3px; color: var(--nn-cyan);
 }
@@ -250,7 +250,7 @@ html, body { background: var(--nn-bg); }
   color: var(--nn-muted); background: rgba(11,13,28,.6); border: 1px solid var(--nn-line);
   border-radius: 999px; padding: 8px 13px; cursor: pointer;
 }
-.mode-tab.on { color: #fff; border-color: var(--accent, var(--nn-magenta)); box-shadow: 0 0 16px var(--accent-soft, rgba(255,46,154,.3)); }
+.mode-tab.on { color: #fff; border-color: var(--accent, var(--nn-accent)); box-shadow: 0 0 16px var(--accent-soft, rgba(47,107,255,.3)); }
 
 /* the card: glass, the mode's own colour on the edge, the icon in a badge */
 #modes .mode-slide {
@@ -289,7 +289,7 @@ html, body { background: var(--nn-bg); }
 #modes .slide-meter span { font-family: var(--nn-display); font-size: 8px; letter-spacing: 2px; color: var(--nn-muted); }
 #modes .slide-meter i { background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 50%, #fff)); }
 
-/* the footer: cyan laps, magenta go */
+/* the footer: cyan laps, blue go */
 #modes .lap-label { font-family: var(--nn-display); color: var(--nn-muted); letter-spacing: 2px; }
 #modes .lap-chip {
   font-family: var(--nn-display); font-weight: 800; color: var(--nn-text);
@@ -301,8 +301,8 @@ html, body { background: var(--nn-bg); }
 #modes .mode-dots i.on { background: var(--accent); }
 #modes .mode-cta {
   font-family: var(--nn-display); font-style: normal; font-weight: 900; letter-spacing: 2px; color: #fff;
-  background: linear-gradient(100deg, var(--nn-magenta) 0%, #d62bd8 55%, var(--nn-violet) 100%);
-  border: 0; box-shadow: 0 10px 34px rgba(255,46,154,.4); transform: none;
+  background: linear-gradient(100deg, var(--nn-accent) 0%, #4a5bff 55%, var(--nn-violet) 100%);
+  border: 0; box-shadow: 0 10px 34px rgba(47,107,255,.4); transform: none;
 }
 #modes .mode-cta.locked { background: rgba(255,255,255,.08); color: var(--nn-muted); box-shadow: none; }
 #modes .deck-arrow { border: 1px solid var(--nn-line-hi); background: rgba(11,13,28,.7); color: var(--nn-text); }
@@ -313,8 +313,8 @@ html, body { background: var(--nn-bg); }
   background: rgba(11,13,28,.7); border: 1px solid var(--nn-line-hi); border-radius: 999px;
   padding: 7px 11px; cursor: pointer; white-space: nowrap; max-width: 190px; overflow: hidden; text-overflow: ellipsis;
 }
-.radio-tag.on { border-color: var(--nn-magenta); color: #fff; box-shadow: 0 0 14px rgba(255,46,154,.35); }
-#city-radio.on { border-color: var(--nn-magenta); box-shadow: 0 0 14px rgba(255,46,154,.35); }
+.radio-tag.on { border-color: var(--nn-accent); color: #fff; box-shadow: 0 0 14px rgba(47,107,255,.35); }
+#city-radio.on { border-color: var(--nn-accent); box-shadow: 0 0 14px rgba(47,107,255,.35); }
 #radio-panel {
   position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-end; justify-content: center;
   background: rgba(3,4,10,.55); padding: 16px 16px max(16px, var(--safe-bottom, 0px));
@@ -323,11 +323,11 @@ html, body { background: var(--nn-bg); }
 .radio-card {
   width: min(100%, 420px); padding: 16px; border-radius: 18px; color: var(--nn-text);
   background: linear-gradient(180deg, rgba(20,22,44,.97), rgba(9,10,24,.97));
-  border: 1px solid var(--nn-line-hi); box-shadow: 0 0 40px -10px var(--nn-magenta), 0 20px 60px rgba(0,0,0,.6);
+  border: 1px solid var(--nn-line-hi); box-shadow: 0 0 40px -10px var(--nn-accent), 0 20px 60px rgba(0,0,0,.6);
   font-family: var(--nn-display);
 }
 .radio-head { display: flex; justify-content: space-between; align-items: center; }
-.radio-head strong { font-size: 14px; font-weight: 900; letter-spacing: 2px; color: var(--nn-magenta); }
+.radio-head strong { font-size: 14px; font-weight: 900; letter-spacing: 2px; color: var(--nn-accent); }
 .radio-x { background: none; border: 1px solid var(--nn-line); color: var(--nn-text); border-radius: 999px; width: 30px; height: 30px; cursor: pointer; }
 .radio-now { margin: 12px 0; padding: 12px; border-radius: 12px; background: rgba(255,255,255,.04); border: 1px solid var(--nn-line); }
 .radio-now small { display: block; font-size: 8px; letter-spacing: 2.4px; color: var(--nn-cyan); }
@@ -338,9 +338,9 @@ html, body { background: var(--nn-bg); }
   font-family: var(--nn-display); font-weight: 800; font-size: 9px; letter-spacing: 1.4px; color: var(--nn-text);
   background: rgba(255,255,255,.04); border: 1px solid var(--nn-line); border-radius: 10px; padding: 10px 8px; cursor: pointer;
 }
-.radio-bands button.on { border-color: var(--nn-magenta); background: rgba(255,46,154,.16); color: #fff; }
+.radio-bands button.on { border-color: var(--nn-accent); background: rgba(47,107,255,.16); color: #fff; }
 .radio-actions { display: grid; grid-template-columns: 1fr auto; gap: 6px; margin-top: 10px; }
-.radio-actions .radio-next { background: linear-gradient(100deg, var(--nn-magenta), var(--nn-violet)); border: 0; color: #fff; }
+.radio-actions .radio-next { background: linear-gradient(100deg, var(--nn-accent), var(--nn-violet)); border: 0; color: #fff; }
 .radio-note { margin: 10px 0 0; font-family: -apple-system, sans-serif; font-size: 9.5px; line-height: 1.35; color: var(--nn-muted); }
 
 /* the menu's radio button sits in the volume row: it never grows */
@@ -357,7 +357,7 @@ html, body { background: var(--nn-bg); }
   font-family: var(--nn-display); font-weight: 800; font-size: 11px; letter-spacing: 1px; color: var(--nn-text);
   background: rgba(11,13,28,.72); border: 1px solid var(--nn-line-hi); border-radius: 999px; padding: 8px 11px; cursor: pointer;
 }
-.radio-next-hud.on { border-color: var(--nn-magenta) !important; box-shadow: 0 0 14px rgba(255,46,154,.4); }
+.radio-next-hud.on { border-color: var(--nn-accent) !important; box-shadow: 0 0 14px rgba(47,107,255,.4); }
 body.city-mode #btn-radio-hud { display: none; }
 #city-select { display: flex; align-items: center; justify-content: center; gap: 8px; }
 #city-select.hidden { display: none; }
@@ -375,12 +375,12 @@ body.city-mode #btn-radio-hud { display: none; }
   display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; height: 58px;
   font-family: var(--nn-display); font-weight: 900; font-size: 18px; letter-spacing: 3px; color: #fff;
   border: 0; border-radius: 14px; cursor: pointer;
-  background: linear-gradient(100deg, var(--nn-magenta) 0%, #d62bd8 55%, var(--nn-violet) 100%);
-  box-shadow: 0 0 0 1px rgba(255,255,255,.14) inset, 0 12px 34px rgba(255,46,154,.42);
+  background: linear-gradient(100deg, var(--nn-accent) 0%, #4a5bff 55%, var(--nn-violet) 100%);
+  box-shadow: 0 0 0 1px rgba(255,255,255,.14) inset, 0 12px 34px rgba(47,107,255,.42);
   transition: transform .08s ease, box-shadow .2s ease;
 }
 #results .dock-hero svg { width: 18px; height: 18px; stroke: none; }
-#results .dock-hero:hover { box-shadow: 0 0 0 1px rgba(255,255,255,.22) inset, 0 14px 40px rgba(255,46,154,.6); }
+#results .dock-hero:hover { box-shadow: 0 0 0 1px rgba(255,255,255,.22) inset, 0 14px 40px rgba(47,107,255,.6); }
 #results .dock-hero:active { transform: scale(.98); }
 
 #results .result-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
@@ -405,11 +405,7 @@ body.city-mode #btn-radio-hud { display: none; }
 #results .dock-link:hover { color: var(--nn-text); }
 #results .dock-sep { width: 3px; height: 3px; border-radius: 50%; background: var(--nn-muted); opacity: .5; }
 
-/* a bounty win: entering it is the point, so it leads, in gold */
-#results #btn-mint { width: 100%; height: 52px; padding: 0 16px; border-radius: 14px; font-family: var(--nn-display);
-  font-weight: 800; font-size: 12px; letter-spacing: 1.5px; }
-#results #btn-mint.bounty { font-size: 14px; letter-spacing: 2px; }
-#results #mint-status:empty, #results #challenge-status:empty { display: none; }
-#results #mint-status, #results #challenge-status { margin-top: -4px; text-align: center; }
+#results #challenge-status:empty { display: none; }
+#results #challenge-status { margin-top: -4px; text-align: center; }
 /* one column: standings, tally and dock share their edges */
 #results .tally { width: min(88vw, 360px); }

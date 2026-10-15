@@ -1,8 +1,8 @@
 /**
  * "Beat my time" links. Finishing a race can publish it as a challenge
  * (convex/challenges.ts): the circuit it was set on plus the packed lap line.
- * The link is an ordinary game URL with `?c=<code>`, so opening it in Nimiq Pay
- * or any browser drops the challenger on that exact track with the setter's car
+ * The link is an ordinary game URL with `?c=<code>`, so opening it in any
+ * browser drops the challenger on that exact track with the setter's car
  * running as a ghost beside them.
  *
  * Like every other network call in the game this one fails quietly: a dead or

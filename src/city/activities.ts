@@ -205,7 +205,7 @@ export class CityActivities {
     this.raceCheckpoint = 0;
     this.raceTime = 0;
     this.setGps(point.id);
-    this.events.push({ type: 'race-start', text: `${point.label} · GO`, color: '#ff2e9a' });
+    this.events.push({ type: 'race-start', text: `${point.label} · GO`, color: '#5b8cff' });
     return true;
   }
 

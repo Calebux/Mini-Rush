@@ -7,19 +7,13 @@ interface Day {
   players: number;
   newPlayers: number;
   returned: number;
-  nimiq: number;
-  newNimiq: number;
   opens: number;
   races: number;
-  wallets: number;
-  receipts: number;
-  bountyEntries: number;
   purchases: number;
 }
 
 interface Driver {
   name: string | null; // null until the player's first ping that carries a name
-  platform: 'nimiq' | 'web';
   races: number;
   days: number;
   lastDay: string;
@@ -29,13 +23,9 @@ interface Stats {
   since: string | null;
   totals: {
     players: number;
-    nimiqPlayers: number;
     returned: number;
     opens: number;
     races: number;
-    wallets: number;
-    receipts: number;
-    bountyEntries: number;
     purchases: number;
   };
   days: Day[];
@@ -79,10 +69,7 @@ function driverRow(d: Driver, today: string, yesterday: string): HTMLTableRowEle
   const name = document.createElement('b');
   name.textContent = d.name ?? 'Unnamed driver';
   if (!d.name) name.className = 'unnamed';
-  const tag = document.createElement('span');
-  tag.className = `tag ${d.platform}`;
-  tag.textContent = d.platform === 'nimiq' ? 'Nimiq Pay' : 'Web';
-  who.append(name, tag);
+  who.append(name);
 
   const last = d.lastDay === today ? 'Today' : d.lastDay === yesterday ? 'Yesterday' : shortDay(d.lastDay);
   const tr = document.createElement('tr');
@@ -110,12 +97,8 @@ function render(stats: Stats): void {
   tiles($('totals'), [
     ['Players', all.players],
     ['Came back another day', all.returned],
-    ['Played in Nimiq Pay', all.nimiqPlayers],
     ['Races finished', all.races],
-    ['Wallets connected', all.wallets],
-    ['Bounty entries', all.bountyEntries],
-    ['Race receipts on-chain', all.receipts],
-    ['Cars bought with NIM', all.purchases]
+    ['Cars bought', all.purchases]
   ]);
 
   const drivers = stats.drivers ?? [];
@@ -130,7 +113,7 @@ function render(stats: Stats): void {
     const tr = document.createElement('tr');
     tr.append(
       cell(dayLabel(day)), cell(d?.players ?? 0), cell(d?.newPlayers ?? 0),
-      cell(d?.races ?? 0), cell(d?.bountyEntries ?? 0)
+      cell(d?.races ?? 0)
     );
     rows.push(tr);
   }

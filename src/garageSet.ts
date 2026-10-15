@@ -253,10 +253,10 @@ function signTexture(): T.CanvasTexture {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.font = '900 132px Orbitron, "Arial Black", sans-serif';
-    ctx.shadowColor = '#ff2e9a';
+    ctx.shadowColor = '#5b8cff';
     ctx.shadowBlur = 30;
     ctx.lineWidth = 8;
-    ctx.strokeStyle = '#ff2e9a';
+    ctx.strokeStyle = '#5b8cff';
     ctx.strokeText('MINIRUSH', 512, 110);
     ctx.fillStyle = '#ffe0f0';
     ctx.shadowBlur = 8;

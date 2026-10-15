@@ -1,6 +1,6 @@
 // Driver identity: the name on the boards, in the race classification and on
 // bounty entries. Everyone gets a generated driver name on first launch; a
-// player who signs in with Nimiq Pay picks their own username. Local, like the
+// player can pick their own username from the driver chip. Local, like the
 // rest of the profile — there is no account server to reserve names on.
 import { RIVAL_NAMES } from './rivals';
 
@@ -65,7 +65,7 @@ export function driverName(): string {
   return current().name;
 }
 
-/** True once the player has picked a username (after a Nimiq sign-in). */
+/** True once the player has picked (or kept) a username. */
 export function hasUsername(): boolean {
   return current().chosen;
 }
