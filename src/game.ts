@@ -1544,8 +1544,13 @@ export class Game {
 
       case 'racing': {
         this.raceTime += dt;
+        // A finger held off to one side keeps steering, like a held arrow
+        // key; the drag alone stops the moment the thumb does, and a corner
+        // keeps pushing.
+        const held = this.input.touchSteer;
+        const touchHold = Math.abs(held) < 0.15 ? 0 : Math.sign(held) * (Math.abs(held) - 0.15) / 0.85;
         this.player.update(
-          dt, elapsed, dragPx, this.input.keySteer, true,
+          dt, elapsed, dragPx, THREE.MathUtils.clamp(this.input.keySteer + touchHold, -1, 1), true,
           this.input.braking, this.input.gas
         );
         // engine pitch rides the speedo; nitro shoves it into the red
