@@ -169,13 +169,15 @@ export class InputManager {
 
   private dragDx = 0;
   private lastX = 0;
-  private down = false;
   private moved = 0;
   private downTime = 0;
   private leftHeld = false;
   private rightHeld = false;
-  // Free-roam steering is a virtual stick: how far the steering finger is
-  // from where it landed. A finger that lands on a pedal or button is not it.
+  // One finger steers: the first that lands off the pedals and buttons. Only
+  // it feeds the track's drag, the free-roam stick and the nitro tap, so a
+  // thumb on the gas or a HUD button can never jerk the car or kill steering.
+  // Free-roam steering is a virtual stick: how far that finger is from where
+  // it landed.
   private steerId: number | null = null;
   private steerFrom = 0;
   private steerAt = 0;
@@ -193,43 +195,37 @@ export class InputManager {
 
   constructor(target: HTMLElement) {
     target.addEventListener('pointerdown', (e) => {
-      this.down = true;
-      this.lastX = e.clientX;
+      if (this.steerId !== null) return; // already steering with another finger
+      const onControl = (e.target as HTMLElement | null)?.closest('button, [role="button"], #btn-gas, #btn-brake');
+      if (onControl) return;
+      this.steerId = e.pointerId;
+      this.steerFrom = this.steerAt = this.lastX = e.clientX;
       this.moved = 0;
       this.downTime = performance.now();
-      const onControl = (e.target as HTMLElement | null)?.closest('button, [role="button"], #btn-gas, #btn-brake');
-      if (!onControl && this.steerId === null) {
-        this.steerId = e.pointerId;
-        this.steerFrom = this.steerAt = e.clientX;
-      }
     });
     target.addEventListener('pointermove', (e) => {
-      if (e.pointerId === this.steerId) {
-        this.steerAt = e.clientX;
-        // Past full lock the anchor follows the finger, so coming back the
-        // other way counter-steers at once instead of unwinding dead travel.
-        const reach = this.steerReach;
-        if (this.steerAt - this.steerFrom > reach) this.steerFrom = this.steerAt - reach;
-        else if (this.steerFrom - this.steerAt > reach) this.steerFrom = this.steerAt + reach;
-      }
-      if (!this.down) return;
-      const dx = e.clientX - this.lastX;
-      this.lastX = e.clientX;
+      if (e.pointerId !== this.steerId) return;
+      const x = e.clientX;
+      this.steerAt = x;
+      // Past full lock the anchor follows the finger, so coming back the
+      // other way counter-steers at once instead of unwinding dead travel.
+      const reach = this.steerReach;
+      if (this.steerAt - this.steerFrom > reach) this.steerFrom = this.steerAt - reach;
+      else if (this.steerFrom - this.steerAt > reach) this.steerFrom = this.steerAt + reach;
+      const dx = x - this.lastX;
+      this.lastX = x;
       // A thumb on a phone covers far less ground than a mouse: the same
       // swipe moves the car further, so a lane change is a flick.
       this.dragDx += e.pointerType === 'touch' ? dx * TOUCH_DRAG_GAIN : dx;
       this.moved += Math.abs(dx) + Math.abs(e.movementY ?? 0);
     });
-    const up = (e: PointerEvent) => {
-      if (e.pointerId === this.steerId) this.steerId = null;
-      if (!this.down) return;
-      this.down = false;
+    target.addEventListener('pointerup', (e) => {
+      if (e.pointerId !== this.steerId) return;
+      this.steerId = null;
       if (this.moved < 14 && performance.now() - this.downTime < 300) this.onTap();
-    };
-    target.addEventListener('pointerup', up);
+    });
     target.addEventListener('pointercancel', (e) => {
       if (e.pointerId === this.steerId) this.steerId = null;
-      this.down = false;
     });
 
     window.addEventListener('keydown', (e) => {
@@ -275,7 +271,6 @@ export class InputManager {
   }
 
   private releaseHeldInputs(): void {
-    this.down = false;
     this.steerId = null;
     this.dragDx = 0;
     this.leftHeld = false;

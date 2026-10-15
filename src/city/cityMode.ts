@@ -234,8 +234,12 @@ export class CityMode {
     // the drift button is held, like a handbrake lever
     const drift = this.hud.querySelector('#city-drift') as HTMLElement;
     const hold = (on: boolean) => (e: Event) => { e.preventDefault(); deps.input.uiHandbrake = on; drift.classList.toggle('on', on); };
-    drift.addEventListener('pointerdown', hold(true));
-    for (const end of ['pointerup', 'pointercancel', 'pointerleave']) drift.addEventListener(end, hold(false));
+    // captured, so a thumb sliding off the lever doesn't drop the drift
+    drift.addEventListener('pointerdown', (e) => {
+      try { drift.setPointerCapture(e.pointerId); } catch { /* finger already gone */ }
+      hold(true)(e);
+    });
+    for (const end of ['pointerup', 'pointercancel', 'lostpointercapture']) drift.addEventListener(end, hold(false));
     this.bigMap.addEventListener('click', toggleMap);
 
     const f = this.drive.forward;

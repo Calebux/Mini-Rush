@@ -576,12 +576,17 @@ export class UI {
     // and tap nitro.
     const pedal = (id: string, cb: (down: boolean) => void) => {
       const el = $(id);
-      const down = (e: Event) => {
+      // Held until the finger lifts: a thumb that slides off the pedal keeps
+      // the gas down (pointer capture), instead of cutting out mid-corner.
+      const down = (e: PointerEvent) => {
         e.stopPropagation();
+        e.preventDefault();
+        try { el.setPointerCapture(e.pointerId); } catch { /* finger already gone */ }
         el.classList.add('held');
         cb(true);
       };
-      const up = () => {
+      const up = (e: PointerEvent) => {
+        e.stopPropagation();
         el.classList.remove('held');
         cb(false);
       };
@@ -589,7 +594,7 @@ export class UI {
       el.addEventListener('pointermove', (e) => e.stopPropagation());
       el.addEventListener('pointerup', up);
       el.addEventListener('pointercancel', up);
-      el.addEventListener('pointerleave', up);
+      el.addEventListener('lostpointercapture', up);
     };
     pedal('btn-brake', (d) => this.onBrake(d));
     pedal('btn-gas', (d) => this.onGas(d));
