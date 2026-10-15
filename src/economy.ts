@@ -1,6 +1,6 @@
 // The coin bank. Coins collected in races accumulate here and pay for
-// upgrades, paint and workshop parts — never for cars, which are bought with
-// NIM. All local; owned() gates the cars a NIM payment has unlocked.
+// cars, upgrades, paint and workshop parts. All local; owned() lists the cars
+// bought so far.
 const BANK_KEY = 'minirush.bank';
 const OWNED_KEY = 'minirush.owned';
 
@@ -31,7 +31,7 @@ export function spend(amount: number): boolean {
   return true;
 }
 
-/** Unlock a car after its NIM payment goes through. Coins never buy cars. */
+/** Unlock a car once it is paid for. */
 export function grantCar(id: string): void {
   const o = owned();
   o.add(id);
@@ -53,4 +53,11 @@ export function racePayout(p: {
   const podium = Math.max(0, 20 - (place - 1) * 6);      // 1st 20 · 2nd 14 · 3rd 8 · 4th 2
   const laps = Math.max(0, lapsRun - 1) * 5;             // multi-lap modes pay more
   return finish + podium + laps;
+}
+
+/** Buy a car with coins. False = can't afford or already owned (nothing deducted). */
+export function buyCar(id: string, price: number): boolean {
+  if (owned().has(id) || !spend(price)) return false;
+  grantCar(id);
+  return true;
 }

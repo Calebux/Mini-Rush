@@ -521,10 +521,10 @@ export class CityMode {
       else if (ev === 'FINISH') {
         this.deps.audio.play('finish');
         const s = race.status();
-        if (this.deps.onRaceFinish) { this.handoff = 2.6; this.showToast(s.place === 1 ? 'YOU WIN!' : `FINISHED · P${s.place}`, '#ff2e9a'); }
+        if (this.deps.onRaceFinish) { this.handoff = 2.6; this.showToast(s.place === 1 ? 'YOU WIN!' : `FINISHED · P${s.place}`, '#5b8cff'); }
         else this.showResults();
       }
-      else if (ev.startsWith('LAP')) { this.deps.audio.play('combo'); this.showToast(`FINAL LAP · ${ev}`, '#ff2e9a'); }
+      else if (ev.startsWith('LAP')) { this.deps.audio.play('combo'); this.showToast(`FINAL LAP · ${ev}`, '#5b8cff'); }
       else { this.deps.audio.play('select'); this.showToast(ev, '#ffffff'); }
     }
   }
@@ -1009,8 +1009,8 @@ function arrow(ctx: CanvasRenderingContext2D, x: number, y: number, angle: numbe
   ctx.lineTo(0, size * 0.35);
   ctx.lineTo(-size * 0.7, size * 0.8);
   ctx.closePath();
-  ctx.fillStyle = '#ff2e9a';
-  ctx.shadowColor = '#ff2e9a';
+  ctx.fillStyle = '#5b8cff';
+  ctx.shadowColor = '#5b8cff';
   ctx.shadowBlur = 8;
   ctx.fill();
   ctx.restore();

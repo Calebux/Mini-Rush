@@ -28,8 +28,8 @@ export interface ModeSpec {
   /** Workshop builds stay out of the grid, player and AI alike: garage cars only. */
   noBuilds?: boolean;
   /**
-   * Only cars nobody can buy. The bounty race pays a cash prize, so a car
-   * bought with NIM must not be a faster way to it — the AI field still drives
+   * Only cars nobody can buy. The bounty race pays a prize, so a car bought
+   * with coins must not be a faster way to it — the AI field still drives
    * the whole shelf, this bars the *entrant's* car.
    */
   freeCarsOnly?: boolean;
@@ -58,7 +58,7 @@ export const carInField = (m: ModeSpec, c: CarSpec): boolean => {
 export const carFits = (m: ModeSpec, c: CarSpec): boolean =>
   (!m.requiresClass || c.class === m.requiresClass)
   && !(m.noBuilds && c.model === 300)
-  && !(m.freeCarsOnly && c.nim > 0);
+  && !(m.freeCarsOnly && c.price > 0);
 
 export const MODES: ModeSpec[] = [
   {

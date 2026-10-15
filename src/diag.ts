@@ -27,7 +27,7 @@ export function showDiagnostics(): void {
 
   const render = (): void => {
     const root = document.documentElement;
-    const buy = document.getElementById('btn-market-nim')?.getBoundingClientRect();
+    const buy = document.getElementById('btn-buy-car')?.getBoundingClientRect();
     const start = document.getElementById('btn-garage-done')?.getBoundingClientRect();
     const cta = buy && !buy.height ? start : buy ?? start;
     const safeBottom = getComputedStyle(root).getPropertyValue('--safe-bottom').trim();
@@ -38,7 +38,6 @@ export function showDiagnostics(): void {
       `inset top  ${probeInset('top')}   bottom ${probeInset('bottom')}`,
       `--safe-bottom ${safeBottom}`,
       `classes    ${root.className || '(none)'}`,
-      `host       nimiq=${!!(window as unknown as { nimiq?: unknown }).nimiq}`,
       `cta        ${cta ? `${Math.round(cta.top)}→${Math.round(cta.bottom)} of ${innerHeight}` : '(not on screen)'}`,
       `gap below  ${cta ? Math.round(innerHeight - cta.bottom) : '—'}px`,
       `ua ${navigator.userAgent}`

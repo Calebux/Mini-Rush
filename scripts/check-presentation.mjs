@@ -32,8 +32,8 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(250);
   await page.click('#tab-hyper');
-  await page.locator('#btn-market-nim').scrollIntoViewIfNeeded();
-  assert.equal(await page.locator('#btn-market-nim').isVisible(), true);
+  await page.locator('#btn-buy-car').scrollIntoViewIfNeeded();
+  assert.equal(await page.locator('#btn-buy-car').isVisible(), true);
   assert.ok(await page.locator('#btn-garage-done').isDisabled());
   await page.screenshot({ path: `${out}/garage-locked.png` });
   await page.click('#tab-fast');

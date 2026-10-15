@@ -1,7 +1,6 @@
 import { AudioManager } from './audio';
 import {
-  BOUNTY_CLOSES, BOUNTY_MODE, bountyActive, bountyMapIndex, bountyPrize, bountyQualifies,
-  bountyReceiver, bountySplit, loadBounty
+  BOUNTY_CLOSES, BOUNTY_MODE, bountyActive, bountyMapIndex, bountyPrize, bountyQualifies, bountySplit, loadBounty
 } from './bounty';
 import { CarClass, CARS } from './cars';
 import { dailyMapIndex, dayKey } from './daily';
@@ -10,8 +9,7 @@ import { weekKey, WEEKLY_PRIZES } from './weekly';
 import {
   countdown, msToClose, msToWeekend, WEEKEND_LAPS, weekendMapIndex, weekendOpen
 } from './weekend';
-import { bank, grantCar, owned, racePayout } from './economy';
-import { saveProfileCar, saveProfileName, syncProfile } from './profile';
+import { bank, buyCar, owned, racePayout } from './economy';
 import { Leaderboard } from './leaderboard';
 import { MAPS } from './maps';
 import { carFits, MODES, ModeSpec } from './modes';
@@ -28,7 +26,7 @@ import {
   applyUpgrades, buyTier, MAX_TIER, TIER_COST, tier, UPGRADE_LABEL, UpgradeStat
 } from './upgrades';
 import { track } from './usage';
-import { BADGES, earnedBadges, mintedReceipts, Wallet } from './wallet';
+import { BADGES, earnedBadges } from './badges';
 import { LAP_METRES, LAPS } from './city/cityRace';
 import { Build, workshopSpec } from './workshop';
 import { WorkshopUI } from './workshopUI';
@@ -51,11 +49,6 @@ const hudWidth = (el: HTMLElement, percent: number): void => {
 
 const BEST_KEY = 'minirush.best';
 const WELCOME_KEY = 'minirush.welcomed';
-/**
- * How long to wait at boot for Nimiq Pay to inject its provider before giving
- * up on signing in by itself. Matches the platform probe in src/usage.ts.
- */
-const AUTO_CONNECT_MS = 5000;
 const PLACE_SUFFIX = ['st', 'nd', 'rd', 'th'];
 const suffix = (place: number) => PLACE_SUFFIX[Math.min(place, 4) - 1];
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -115,7 +108,7 @@ const DECK_EXTRAS: DeckExtra[] = [
     tagline: 'Drive anywhere in the city. Find hidden tokens that unlock cars, and start street races.' },
   // PREVIEW: the bounty's race on Neon City's own streets. Local dev only
   // until it is approved; the live bounty is unchanged.
-  ...(import.meta.env.DEV ? [{ id: 'citygp', name: 'CITY GP', icon: '🏁', group: 'OPEN CITY', accent: '#ff2e9a',
+  ...(import.meta.env.DEV ? [{ id: 'citygp', name: 'CITY GP', icon: '🏁', group: 'OPEN CITY', accent: '#5b8cff',
     button: 'btn-citygp', cta: 'RACE THE CITY', pills: ['PREVIEW', 'NEON CITY', '2 LAPS', '8 CARS'],
     tagline: 'The bounty race on Neon City\'s real streets: through the gates in order, two laps, seven pro drivers.' }] : [])
 ];
@@ -157,7 +150,7 @@ const MODE_RISK: Record<string, string> = {
 // Each mode owns a colour on the select deck: card edge, glow, CTA and the
 // overlay grade all take it, so flicking between modes reads as a scene change.
 const MODE_ACCENT: Record<string, string> = {
-  gp: '#ff2e9a',
+  gp: '#5b8cff',
   burnout: '#ff6a1f',
   copchase: '#3d8bff',
   gunrun: '#ff3b4a',
@@ -177,8 +170,8 @@ const hexAlpha = (hex: string, a: number): string => {
 const intensity = (m: ModeSpec): number => Math.min(1,
   0.18 + m.aggression * 0.42 + (m.rivals / 7) * 0.2 +
   (m.tumble ? 0.12 : 0) + (m.guns ? 0.08 : 0) + (m.pursuit ? 0.1 : 0));
-/** Every locked car is a NIM buy; prices read the same everywhere, e.g. "2,600 NIM". */
-const nimPrice = (nim: number): string => `${nim.toLocaleString('en-US')}\u00a0NIM`;
+/** Every locked car is bought with coins; prices read the same everywhere, e.g. "2,600 COINS". */
+const coinPrice = (coins: number): string => `${coins.toLocaleString('en-US')}\u00a0COINS`;
 
 // Garage shelves, in the order the tabs read left to right.
 const CAR_TABS: CarClass[] = ['hyper', 'fast', 'junk'];
@@ -192,14 +185,14 @@ const KIND_LABEL: Record<CarClass, string> = {
 const tabOrder = (): number[] => CARS
   .map((car, index) => index)
   .sort((a, b) => CAR_TABS.indexOf(CARS[a].class) - CAR_TABS.indexOf(CARS[b].class)
-    || CARS[a].nim - CARS[b].nim);
+    || CARS[a].price - CARS[b].price);
 
 // Owned cars a class-restricted mode will let on the grid — its shelf, less
 // workshop builds where the mode bars them. Cheapest first.
 const eligibleCars = (m: ModeSpec): number[] => {
   const have = owned();
   return tabOrder().filter((i) => carFits(m, CARS[i])
-    && (CARS[i].nim === 0 || have.has(CARS[i].id)));
+    && (CARS[i].price === 0 || have.has(CARS[i].id)));
 };
 
 /** A class mode with an empty shelf behind it: visible, but not enterable. */
@@ -284,17 +277,12 @@ export class UI {
   private keyHintTimer = 0;
   private modeIndex = 0;
   private lastRun: RunCard | null = null;
-  private lastBounty = false;                // the results on screen are a bounty race
   private bountyReturn: HTMLElement | null = null; // page the bounty board was opened from
   private afterUsername: () => void = () => {};    // where the username prompt returns to
   private guideMode: 'paused' | 'first-run' | 'menu' = 'paused';
-  private marketPending = false;
-  private purchaseNote: { id: string; text: string } | null = null; // receipt for the car just bought
+  private purchaseNote: { id: string; text: string } | null = null; // note for the car just bought
 
-  /** The signed-in address, for anything outside the UI that needs identity. */
-  get walletAddress(): string | null { return this.wallet.address; }
-
-  constructor(private wallet: Wallet, private audio: AudioManager) {
+  constructor(private audio: AudioManager) {
     // blur so Space/Enter (nitro key) can't re-trigger the focused button
     const on = (id: string, fn: () => void) =>
       $(id).addEventListener('click', (e) => {
@@ -328,14 +316,13 @@ export class UI {
       this.onRestart();
     });
     on('btn-share', () => {
-      if (this.lastRun) void shareRun(this.lastRun, shareUrl(this.wallet.address));
+      if (this.lastRun) void shareRun(this.lastRun, shareUrl(null));
     });
     on('btn-challenge', () => {
       this.audio.play('click');
       $<HTMLButtonElement>('btn-challenge').disabled = true;
       this.onChallenge();
     });
-    on('btn-mint', () => void this.mintReceipt());
     on('btn-bounty', () => this.openBounty(this.menu));
     on('btn-bounty-results', () => this.openBounty($('results')));
     on('btn-bounty-race', () => this.raceBounty());
@@ -357,10 +344,9 @@ export class UI {
       this.refreshBounty();
       this.refreshBank();
     });
-    void this.autoConnect(); // Nimiq Pay hands us the account; no tap needed.
-
-    // wallet chip → driver card (connecting first if needed)
-    on('wallet-chip', () => void this.onWalletChip());
+    // driver chip → driver card (offering a username first)
+    $('driver-chip').textContent = driverName();
+    on('driver-chip', () => this.onDriverChip());
     // the customs workshop lives in the garage, beside the cars it builds
     const workshop = new WorkshopUI(
       build => this.onWorkshopPreview(build),
@@ -374,7 +360,7 @@ export class UI {
       this.menu.classList.remove('hidden');
     });
 
-    // username: picked after a Nimiq sign-in, editable from the driver card and board
+    // username: picked from the driver chip, editable from the driver card and board
     const nameInput = $<HTMLInputElement>('username-input');
     nameInput.maxLength = USERNAME_MAX;
     nameInput.addEventListener('pointerdown', (e) => e.stopPropagation());
@@ -391,7 +377,7 @@ export class UI {
       this.closeUsername();
     });
     on('btn-profile-name', () => this.askUsername($('profile'), () => this.openProfile()));
-    on('btn-board-name', () => void this.boardNameAction());
+    on('btn-board-name', () => this.boardNameAction());
 
     // race setup flow: RACE → city (tour flyby) → car (garage turntable)
     // + laps → START. The game camera follows each step via onPage.
@@ -503,7 +489,7 @@ export class UI {
     });
     on('btn-garage-done', () => {
       const c = CARS[this.carIndex];
-      if (c.nim > 0 && !owned().has(c.id)) return; // still locked
+      if (c.price > 0 && !owned().has(c.id)) return; // still locked
       if (!carFits(MODES[this.modeIndex], c)) return; // wrong shelf for a class mode
       $('garage').classList.add('hidden');
       this.onPage('menu'); // release the turntable camera before the grid cut
@@ -533,7 +519,7 @@ export class UI {
       }
     });
 
-    on('btn-market-nim', () => void this.buyMarketCar());
+    on('btn-buy-car', () => this.buyGarageCar());
 
     // workshop: coins buy stat tiers on the displayed (owned) car
     const upgrades: [string, UpgradeStat][] = [
@@ -1059,7 +1045,7 @@ export class UI {
     );
     $('bounty-sub').textContent = `${m.flag} ${m.name} · CITY GP · ${LAPS} laps · ${(LAP_METRES / 1000).toFixed(1)} km lap`;
     $('bounty-status').textContent = live
-      ? `Prize posted. Win the race, then enter from the results screen in Nimiq Pay. Closes ${BOUNTY_CLOSES}.`
+      ? `Prize posted. Win the race and your time goes on the board. Closes ${BOUNTY_CLOSES}.`
       : `Wins still rank on the board. No prize is posted for ${weekKey()} yet — when one is, this card lights up.`;
   }
 
@@ -1358,17 +1344,17 @@ export class UI {
     $('st-nos').style.width = pct(up.nitro);
 
     // Locked cars preview fine but can't race. Every locked car is bought with
-    // NIM, and the purchase sits in the footer so it is in view without
+    // coins, and the purchase sits in the footer so it is in view without
     // scrolling the specs card.
     const ownedCars = owned();
-    const isOwned = c.nim === 0 || ownedCars.has(c.id);
-    $('home-car-eyebrow').textContent = isOwned ? 'YOUR GARAGE / READY TO ROLL' : 'PREVIEW / BUY WITH NIM';
+    const isOwned = c.price === 0 || ownedCars.has(c.id);
+    $('home-car-eyebrow').textContent = isOwned ? 'YOUR GARAGE / READY TO ROLL' : 'PREVIEW / BUY WITH COINS';
     // a class mode (Hyper Cup) needs the right shelf as well as ownership
     const activeMode = MODES[this.modeIndex];
     const classOk = carFits(activeMode, c);
     const canRace = isOwned && classOk;
     const start = $<HTMLButtonElement>('btn-garage-done');
-    const pay = $<HTMLButtonElement>('btn-market-nim');
+    const pay = $<HTMLButtonElement>('btn-buy-car');
     start.classList.toggle('hidden', !isOwned);
     pay.classList.toggle('hidden', isOwned);
     start.classList.toggle('locked', !canRace);
@@ -1378,20 +1364,18 @@ export class UI {
       ? 'START\u00a0RACE'
       : activeMode.requiresClass && c.class !== activeMode.requiresClass
         ? `${activeMode.name}\u00a0· ${KIND_LABEL[activeMode.requiresClass]}\u00a0ONLY`
-        : activeMode.freeCarsOnly && c.nim > 0
+        : activeMode.freeCarsOnly && c.price > 0
           ? `${activeMode.name}\u00a0· FREE\u00a0CARS\u00a0ONLY`
           : `${activeMode.name}\u00a0· NO\u00a0BUILDS`;
     if (!isOwned) {
-      pay.disabled = this.marketPending || !this.wallet.marketReady || !this.wallet.available;
-      pay.textContent = this.wallet.marketReady
-        ? `BUY\u00a0· ${nimPrice(c.nim)}` : 'NIM\u00a0PAYMENTS\u00a0OFF';
-      $('market-status').textContent = this.marketPending ? 'Payment awaiting approval. Check Nimiq Pay.' : !this.wallet.available
-        ? `Open MiniRush in Nimiq Pay to buy ${c.name} for ${nimPrice(c.nim)}.` : this.wallet.marketReady
-        // who the payment goes to, before it is confirmed — never just the price
-        ? `${nimPrice(c.nim)} to ${this.wallet.marketReceiverShort} · one payment, unlocks ${c.name} on this device.`
-        : 'NIM payments are not configured yet.';
+      const coins = bank();
+      pay.disabled = coins < c.price;
+      pay.textContent = `BUY\u00a0· ${coinPrice(c.price)}`;
+      $('market-status').textContent = coins >= c.price
+        ? `You have ${coinPrice(coins)}. Unlocks ${c.name} on this device.`
+        : `${coinPrice(c.price - coins)} short. Race to earn more.`;
     } else {
-      // an owned car shows the receipt for the payment that unlocked it
+      // an owned car shows a note for the purchase that unlocked it
       $('market-status').textContent = this.purchaseNote?.id === c.id ? this.purchaseNote.text : '';
     }
 
@@ -1402,13 +1386,13 @@ export class UI {
       tab.textContent = `${cls === 'junk' ? 'JUNKYARD' : cls.toUpperCase()} ${count}`;
     }
     const shelfOwned = CARS.filter((car) => car.class === this.carTab
-      && (car.nim === 0 || ownedCars.has(car.id))).length;
+      && (car.price === 0 || ownedCars.has(car.id))).length;
     const shelfSize = CARS.filter((car) => car.class === this.carTab).length;
     $('car-roster-count').textContent = `${TAB_LABEL[this.carTab]} · ${shelfOwned}/${shelfSize} OWNED`;
 
     this.carButtons.forEach((button, index) => {
       const car = CARS[index];
-      const carOwned = car.nim === 0 || ownedCars.has(car.id);
+      const carOwned = car.price === 0 || ownedCars.has(car.id);
       // the roster dot follows a skin bought since the shelf was built
       button.style.setProperty('--car-color', `#${activeColor(car.id, car.color).toString(16).padStart(6, '0')}`);
       button.hidden = car.class !== this.carTab;
@@ -1416,7 +1400,7 @@ export class UI {
       button.classList.toggle('locked', !carOwned);
       button.setAttribute('aria-pressed', String(index === this.carIndex));
       const status = button.querySelector('small');
-      if (status) status.textContent = carOwned ? 'OWNED' : nimPrice(car.nim);
+      if (status) status.textContent = carOwned ? 'OWNED' : coinPrice(car.price);
     });
     const selectedButton = this.carButtons[this.carIndex];
     if (selectedButton && !$('garage').classList.contains('hidden')) {
@@ -1446,81 +1430,21 @@ export class UI {
     this.renderSkins(isOwned);
   }
 
-  private async buyMarketCar(): Promise<void> {
+  private buyGarageCar(): void {
     const c = CARS[this.carIndex];
-    if (this.marketPending || !this.wallet.available || c.nim === 0 || owned().has(c.id)) return;
-    const button = $<HTMLButtonElement>('btn-market-nim');
-    const status = $('market-status');
-    if (!this.wallet.marketReady) {
-      status.textContent = 'NIM payments are not configured yet.';
-      return;
-    }
-    button.disabled = true;
-    this.marketPending = true;
-    status.textContent = `Confirm ${nimPrice(c.nim)} to ${this.wallet.marketReceiverShort} in Nimiq Pay.`;
-    let tx: string | null = null;
-    try {
-      tx = await this.wallet.buyMarketCar(c.nim);
-    } catch {
-      tx = null;
-    } finally {
-      this.marketPending = false;
-    }
-    if (!tx) {
-      status.textContent = 'Payment was not completed.';
-      button.disabled = false;
+    if (c.price === 0 || owned().has(c.id)) return;
+    if (!buyCar(c.id, c.price)) {
+      this.audio.play('empty');
+      $('market-status').textContent = `${coinPrice(c.price - bank())} short. Race to earn more.`;
       return;
     }
     track('purchase');
-    if (this.wallet.address) saveProfileCar(this.wallet.address, c.id, tx);
-    try { grantCar(c.id); } catch {
-      status.textContent = `Payment returned reference ${tx}, but this device could not save the unlock. Keep the reference; do not pay again.`;
-      return;
-    }
     this.audio.play('buy');
-    this.purchaseNote = {
-      id: c.id,
-      text: `${c.name} unlocked. Paid ${nimPrice(c.nim)} to ${this.wallet.marketReceiverShort} · reference ${tx.slice(0, 10)}…`
-    };
+    this.purchaseNote = { id: c.id, text: `${c.name} unlocked for ${coinPrice(c.price)}.` };
     this.refreshBank();
     this.renderCar();
     this.refreshModeLocks();
     this.onCar(this.carIndex);
-  }
-
-  /**
-   * Opt-in: write the finished run to Nimiq as a transaction whose data field
-   * carries the result. Costs the player one native confirmation, which is why
-   * it's a button and never fires on its own.
-   */
-  private async mintReceipt(): Promise<void> {
-    const run = this.lastRun;
-    if (!run || run.busted) return;
-    const button = $<HTMLButtonElement>('btn-mint');
-    const status = $('mint-status');
-    button.disabled = true;
-    status.textContent = 'Confirm in Nimiq Pay…';
-    // a bounty race win while a prize is posted is written as an MR3 entry
-    const bountyRun = this.lastBounty && bountyActive() && bountyQualifies(run.place, run.busted);
-    const tx = await (bountyRun
-      ? this.wallet.mintBountyReceipt({
-        week: weekKey(), score: run.score, time: run.time, place: run.place
-      }, bountyReceiver())
-      : this.wallet.mintRaceReceipt({
-        score: run.score, place: run.place, mapId: this.mapIndex, modeId: this.modeIndex
-      })
-    ).catch(() => null);
-    if (!tx) {
-      status.textContent = bountyRun ? 'Entry not written. Try again.' : 'Receipt not written.';
-      button.disabled = false;
-      return;
-    }
-    this.audio.play('buy');
-    track(bountyRun ? 'bounty' : 'receipt');
-    button.classList.add('hidden');
-    status.textContent = bountyRun
-      ? '✅ Entered. Win faster and enter again: your fastest win counts.'
-      : '⛓ Run written to Nimiq.';
   }
 
   /** Paint-job dots under the car. Tap an owned skin to equip, a locked one to buy. */
@@ -1636,89 +1560,19 @@ export class UI {
     }
   }
 
-  /**
-   * Read the account without asking for a tap. Nimiq Pay injects its provider
-   * around page load — sometimes a moment after this script runs — so this
-   * waits for it instead of trusting a synchronous read of `window.nimiq`.
-   * Outside Nimiq Pay the wait times out and the chip simply stays the
-   * generated driver name; if the account read is refused, the chip goes back
-   * to offering an explicit connect. Either way the game is already playable.
-   */
-  private async autoConnect(): Promise<void> {
-    // The generated name, styled like the chip's eventual resting state, so a
-    // provider that never shows up leaves nothing to pop in later and one that
-    // does never flashes a "connect" prompt the player didn't have to answer.
-    const chip = $('wallet-chip');
-    chip.classList.add('connectable');
-    chip.textContent = driverName();
-    try {
-      await this.wallet.connect(AUTO_CONNECT_MS);
-    } catch {
-      this.prepareWalletChip();
-      return;
-    }
-    await this.loadWalletProfile();
-    await this.refreshChip();
-    // the player may have opened a panel while the provider was still coming up
-    if (!$('profile').classList.contains('hidden')) this.renderProfile();
-    if (!$('board').classList.contains('hidden')) this.renderNameRow();
+  private refreshChip(): void {
+    $('driver-chip').textContent = driverName();
   }
 
-  /**
-   * Offer explicit account permission in Nimiq Pay. Outside it there is no
-   * sign-in, so the chip wears the generated driver name and opens the card.
-   */
-  private prepareWalletChip(): void {
-    const chip = $('wallet-chip');
-    chip.classList.add('connectable');
-    chip.textContent = this.wallet.available ? 'CONNECT NIMIQ' : driverName();
-  }
-
-  /**
-   * Bring the wallet's saved name and cars onto this phone, and back up the
-   * phone's to the wallet. Nimiq Pay can wipe the Mini App's storage; this is
-   * what gets a player their garage back afterwards.
-   */
-  private async loadWalletProfile(): Promise<void> {
-    const address = this.wallet.address;
-    if (!address) return;
-    if (!(await syncProfile(address))) return;
-    this.renderCar();
-    this.refreshModeLocks();
-    if (!$('profile').classList.contains('hidden')) this.renderProfile();
-    if (!$('board').classList.contains('hidden')) this.renderNameRow();
-  }
-
-  private async refreshChip(): Promise<void> {
-    const chip = $('wallet-chip');
-    chip.classList.remove('connectable');
-    chip.textContent = driverName();
-    // Balance needs an RPC endpoint the Mini App provider doesn't supply;
-    // without one the chip just shows the name.
-    const nim = await this.wallet.balance().catch(() => null);
-    if (nim) chip.textContent = `${driverName()} · ${nim} NIM`;
-  }
-
-  /** Chip tap: connect if the boot read didn't land, then open the driver card. */
-  private async onWalletChip(): Promise<void> {
-    if (!this.wallet.address && this.wallet.available) {
-      try {
-        await this.wallet.connect();
-      } catch {
-        return; // dialog dismissed — stay on the menu, chip keeps offering
-      }
-      // before the username check: a returning wallet already has its name
-      await this.loadWalletProfile();
-      void this.refreshChip();
-    }
-    // signed in and still racing under a generated name: offer to pick one.
+  /** Chip tap: offer a username once, then open the driver card. */
+  private onDriverChip(): void {
+    this.audio.play('open');
+    // still racing under a generated name: offer to pick one.
     // "KEEP IT" settles on the generated name, so this asks at most once.
-    if (this.wallet.address && !hasUsername()) {
-      this.audio.play('open');
+    if (!hasUsername()) {
       this.askUsername(this.menu, () => this.openProfile());
       return;
     }
-    this.audio.play('open');
     this.openProfile();
   }
 
@@ -1729,8 +1583,7 @@ export class UI {
   }
 
   /**
-   * Username prompt: right after a Nimiq sign-in, and from the driver card or
-   * board. `from` is hidden while it's up; `then` runs once it closes.
+   * Username prompt: from the driver chip, the driver card or the board. `from` is hidden while it's up; `then` runs once it closes.
    */
   private askUsername(from: HTMLElement, then: () => void): void {
     this.afterUsername = then;
@@ -1754,15 +1607,13 @@ export class UI {
     }
     this.audio.play('select');
     track('name');
-    if (this.wallet.address) saveProfileName(this.wallet.address, driverName());
     this.closeUsername();
   }
 
   private closeUsername(): void {
     $<HTMLInputElement>('username-input').blur();
     $('username').classList.add('hidden');
-    if (this.wallet.address) void this.refreshChip();
-    else this.prepareWalletChip();
+    this.refreshChip();
     this.afterUsername();
   }
 
@@ -1770,47 +1621,28 @@ export class UI {
   private renderNameRow(): void {
     $('board-name').textContent = driverName();
     const button = $('btn-board-name');
-    button.textContent = this.wallet.address ? 'EDIT' : 'SIGN IN';
-    button.classList.toggle('hidden', !this.wallet.available);
-    $('board-name-note').textContent = this.wallet.address ? ''
-      : this.wallet.available ? 'Sign in with Nimiq to pick your username.'
-      : 'Your driver name. Open MiniRush in Nimiq Pay to pick your own.';
+    button.textContent = 'EDIT';
+    $('board-name-note').textContent = 'Your driver name on the boards.';
   }
 
-  private async boardNameAction(): Promise<void> {
-    if (!this.wallet.address) {
-      if (!this.wallet.available) return;
-      try {
-        await this.wallet.connect();
-      } catch {
-        return;
-      }
-      await this.loadWalletProfile();
-      void this.refreshChip();
-    }
+  private boardNameAction(): void {
     this.askUsername($('board'), () => {
       this.renderBoard();
       $('board').classList.remove('hidden');
     });
   }
 
-  /** The driver card: identity + local progress; on-chain stats fill in async. */
+  /** The driver card: identity + local progress. */
   private renderProfile(): void {
     const name = driverName();
     $('profile-tag').textContent = name.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('');
     $('profile-name').textContent = name;
-    $('btn-profile-name').classList.toggle('hidden', !this.wallet.address);
-    $('profile-addr').textContent = this.wallet.address
-      ? this.wallet.shortAddress()
-      : this.wallet.available ? 'Not signed in with Nimiq' : 'Open MiniRush in Nimiq Pay to pick a username';
-    $('profile-balance').textContent = '';
-    void this.wallet.balance()
-      .then((b) => { if (b) $('profile-balance').textContent = `${b} NIM`; })
-      .catch(() => { /* balance is best-effort */ });
+    $('profile-addr').textContent = 'Saved on this device';
+    $('profile-balance').textContent = `${bank().toLocaleString('en-US')} coins`;
 
     $('p-best').textContent = String(this.best);
     $('p-coins').textContent = String(bank());
-    const cars = CARS.filter((c) => c.nim === 0 || owned().has(c.id)).length;
+    const cars = CARS.filter((c) => c.price === 0 || owned().has(c.id)).length;
     $('p-cars').textContent = `${cars}/${CARS.length}`;
     const got = stamps();
     $('p-stamps').textContent = `${got.size}/${MAPS.length}`;
@@ -1845,25 +1677,6 @@ export class UI {
       badgeRow.appendChild(el);
     }
 
-    // on-chain panel — receipts this device has minted, plus live chain head
-    const note = $('profile-chain-note');
-    const receipts = mintedReceipts();
-    $('p-receipts').textContent = String(receipts.length);
-    $('p-block').textContent = '…';
-    note.textContent = '';
-    void this.wallet.chainInfo().then((info) => {
-      if (!info) {
-        $('p-block').textContent = '—';
-        note.textContent = this.wallet.available
-          ? 'Nimiq node unreachable right now.'
-          : 'Open MiniRush inside Nimiq Pay to mint runs on-chain.';
-        return;
-      }
-      $('p-block').textContent = info.blockNumber.toLocaleString();
-      note.textContent = receipts.length > 0
-        ? `Consensus ${info.consensus ? 'established' : 'syncing'} · your last receipt: ${receipts[receipts.length - 1].slice(0, 16)}…`
-        : 'Finish a race, then tap “Mint receipt” to write it to Nimiq.';
-    });
   }
 
   showRace(): void {
@@ -2286,27 +2099,6 @@ export class UI {
       place, time, coins, score, style: Math.round(style), laps, car,
       map: this.cityBounty ? '🌃 NEON CITY' : `${map.flag} ${map.name}`, mode: this.cityBounty ? 'CITY GP' : mode.name, daily, busted
     };
-    // minting is only offered on a finished run, inside Nimiq Pay, with a
-    // receipt anchor configured
-    const bountyRun = bounty && won && bountyActive();
-    // a posted bounty may name its own entry address
-    const receiptsReady = bountyRun
-      ? this.wallet.bountyEntriesReady(bountyReceiver())
-      : this.wallet.receiptsReady;
-    const canMint = !busted && this.wallet.available && receiptsReady;
-    this.lastBounty = bounty;
-    const mint = $<HTMLButtonElement>('btn-mint');
-    mint.classList.toggle('hidden', !canMint);
-    mint.classList.toggle('bounty', bountyRun);
-    mint.textContent = bountyRun ? '💰 ENTER THE BOUNTY' : 'MINT RECEIPT';
-    mint.disabled = false;
-    // entering publishes a time and a wallet address, so say so before the tap
-    const anchor = this.wallet.receiptReceiverShort(bountyRun ? bountyReceiver() : null);
-    $('mint-status').textContent = !bountyRun
-      ? canMint ? `Writes this run to Nimiq: 1 Luna (0.00001 NIM) to ${anchor}.` : ''
-      : !this.wallet.available ? `You won the bounty race. Open MiniRush in Nimiq Pay to enter it for ${bountyPrize()}.`
-      : !receiptsReady ? 'Bounty entries are not open yet.'
-      : `Enters your win: 1 Luna (0.00001 NIM) to ${anchor}, publishing your time and wallet address on Nimiq. Your fastest win counts.`;
     $('btn-bounty-results').classList.toggle('hidden', !bounty);
     // a fresh run is a fresh challenge; busted runs have no time to beat
     $('btn-challenge').classList.toggle('hidden', busted);

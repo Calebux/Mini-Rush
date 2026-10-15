@@ -5,12 +5,8 @@
  * `--safe-bottom` keeps a floor once the page is tagged `android-inapp`.
  *
  * The tag is set from the boot script in index.html when the user agent says
- * WebView, and from here once the Nimiq host object turns up: Nimiq Pay can
- * inject it well after load, and not every WebView admits to being one in its
- * user agent, so waiting for the host is the reliable signal.
+ * WebView, and from here when the page covers the whole display.
  */
-const HOST_WAIT_MS = 30000;
-
 /**
  * True when the page appears to cover the whole display — the signature of a
  * WebView laid out edge to edge, behind the status and navigation bars. A
@@ -19,11 +15,6 @@ const HOST_WAIT_MS = 30000;
  */
 const coversDisplay = (): boolean =>
   !!window.screen?.height && window.innerHeight >= window.screen.height - 4;
-
-const hostPresent = (): boolean => {
-  const w = window as unknown as { nimiq?: unknown; nimiqPay?: unknown };
-  return !!w.nimiq || !!w.nimiqPay;
-};
 
 /**
  * How much of the page sits below what the WebView is actually showing.
@@ -49,17 +40,6 @@ export function trackVisibleViewport(): void {
 
 export function watchAndroidHost(): void {
   if (typeof window === 'undefined' || !/Android/i.test(navigator.userAgent)) return;
-  const mark = (): void => { document.documentElement.classList.add('android-inapp'); };
-  // edge-to-edge is visible immediately; the host object can take seconds
-  if (coversDisplay()) { mark(); return; }
-  const tag = (): boolean => {
-    if (!hostPresent()) return false;
-    mark();
-    return true;
-  };
-  if (tag()) return;
-  const started = Date.now();
-  const timer = window.setInterval(() => {
-    if (tag() || Date.now() - started > HOST_WAIT_MS) window.clearInterval(timer);
-  }, 400);
+  // edge-to-edge: the page sits behind the status and navigation bars
+  if (coversDisplay()) document.documentElement.classList.add('android-inapp');
 }

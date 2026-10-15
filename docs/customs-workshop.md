@@ -19,11 +19,9 @@ Builds and part ownership use `minirush.workshop.v1` in this browser's local sto
 
 This is a local earned-coin parts shop, not player-to-player trading, an on-chain inventory or a cash-out economy. Coins have no cash value. Server-verified entitlements, recovery across devices and anti-cheat are separate work before presenting this as a secure real-money marketplace.
 
-## Nimiq Pay
+## Car market
 
-Home links directly to **NIM Market**, which opens the existing Hypercars shelf. Account access is requested after a user action, not at startup. NIM purchase buttons require both the host provider and payment configuration. A pending payment prevents a second submission; changing the selected car during approval does not change the purchased car.
-
-Browser tests stub the wallet for rejection, concurrency and fulfilment tests. They do not prove a native transaction or on-chain confirmation. Before competition submission, test on a physical phone inside Nimiq Pay using testnet and correctly configured recipient addresses: account approval/refusal, payment approval/refusal, insufficient funds, returning from the native dialog, and reopening the app. Also check touch scrolling and the on-screen keyboard on that device. Do not use `npm run stress` for UI testing; it is a separate financial workflow.
+Home links directly to **Car Market**, which opens the Hypercars shelf. Every locked car is bought with coins, like parts; the buy button is disabled until the bank covers the price, and a purchase unlocks the car on this device.
 
 ## Repeatable checks
 

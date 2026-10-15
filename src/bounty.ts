@@ -1,9 +1,9 @@
 // The weekly bounty: a free-to-enter prize for the fastest WIN of the week's
 // HARDCORE race. Everyone races the same circuit — seed, city and lap length
 // all derive from the ISO week — in the free VIPER GT, since every other car
-// is bought with NIM, so the only thing that separates entries is driving. No backend for entries: an entry is a race receipt minted from the
-// winner's own wallet, the organizer ranks entries after they close
-// (scripts/bounty-entries.mjs) and pays by hand.
+// is bought with coins, so the only thing that separates entries is driving.
+// A win posts itself to the bounty board on Convex; the organizer ranks the
+// board after entries close.
 //
 // Which weeks carry a prize is read at runtime from the organizer's Convex
 // table (convex/bounty.ts), so a bounty is posted or pulled in the Convex
@@ -14,7 +14,7 @@ import { MODES } from './modes';
 import { weekKey, weeklySeed } from './weekly';
 
 const WEEK = (import.meta.env.VITE_BOUNTY_WEEK as string | undefined)?.trim();
-const PRIZE = (import.meta.env.VITE_BOUNTY_PRIZE as string | undefined)?.trim() || '$20 in NIM';
+const PRIZE = (import.meta.env.VITE_BOUNTY_PRIZE as string | undefined)?.trim() || 'PRIZE POSTED';
 const CONVEX_URL = (import.meta.env.VITE_CONVEX_URL as string | undefined)?.trim().replace(/\/+$/, '');
 
 /** A bounty posted in Convex for one ISO week. */
@@ -22,7 +22,6 @@ interface Posted {
   week: string;
   prize: string;
   split: string[] | null; // prize per place, 1st first; null = winner takes all
-  receiver: string | null;
 }
 
 let posted: Posted | null = null;
@@ -43,8 +42,7 @@ function parsePosted(value: unknown, week: string): Posted | null {
     : [];
   return {
     week, prize,
-    split: split.length > 1 ? split : null,
-    receiver: typeof row.receiver === 'string' ? row.receiver.trim() : null
+    split: split.length > 1 ? split : null
   };
 }
 
@@ -78,14 +76,11 @@ export function loadBounty(fresh = false): Promise<void> {
   return pending;
 }
 
-/** Prize as shown to players, e.g. "$20 in NIM". */
+/** Prize as shown to players, e.g. "5,000 COINS". */
 export const bountyPrize = (): string => current()?.prize ?? PRIZE;
 
 /** Prize per place when the posted bounty is shared by the fastest few wins; null = winner takes all. */
 export const bountySplit = (): string[] | null => current()?.split ?? null;
-
-/** Entry address named by the posted bounty, if any. */
-export const bountyReceiver = (): string | null => current()?.receiver ?? null;
 
 /** Entries always close at the end of the ISO week. */
 export const BOUNTY_CLOSES = 'Sun 23:59 UTC';

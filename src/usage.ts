@@ -1,11 +1,9 @@
 /**
  * Player counter and driver list behind the /stats page. Each device gets a
  * random id in localStorage, and the game tells Convex (convex/usage.ts) when
- * it opens, finishes a race, connects a wallet, sends something on-chain or
- * picks a username. The driver name goes along so /stats can list drivers;
- * no wallet address or Nimiq device id is sent with these pings (the wallet
- * profile in src/profile.ts is keyed by address, separately). It all fails
- * silently: gameplay never waits on it.
+ * it opens, finishes a race, buys a car or picks a username. The driver name
+ * goes along so /stats can list drivers. It all fails silently: gameplay never
+ * waits on it.
  */
 import { driverName } from './driver';
 
@@ -14,11 +12,7 @@ const CONVEX_URL = (import.meta.env.VITE_CONVEX_URL as string | undefined)?.repl
 const ID_KEY = 'minirush.player';
 const PLAYER_ID = /^[a-f0-9]{24}$/;
 
-export type UsageEvent = 'open' | 'race' | 'wallet' | 'receipt' | 'bounty' | 'purchase' | 'name';
-type Platform = 'nimiq' | 'web';
-
-let platform: Promise<Platform> | null = null;
-
+export type UsageEvent = 'open' | 'race' | 'purchase' | 'name';
 /** The random per-device id /stats counts and the Weekend GP posts under. */
 export const deviceId = (): string | null => playerId();
 
@@ -35,34 +29,19 @@ function playerId(): string | null {
   }
 }
 
-/** Nimiq Pay injects its globals around page load; wait briefly before calling it the web. */
-function detectPlatform(): Promise<Platform> {
-  platform ??= new Promise((resolve) => {
-    const started = Date.now();
-    const check = (): void => {
-      if ('nimiq' in window || 'nimiqPay' in window) resolve('nimiq');
-      else if (Date.now() - started > 5000) resolve('web');
-      else setTimeout(check, 100);
-    };
-    check();
-  });
-  return platform;
-}
-
 export function track(event: UsageEvent): void {
   // headless runs (race sims, screenshot scripts) aren't players
   if (!CONVEX_URL || navigator.webdriver) return;
   const pid = playerId();
   if (!pid) return;
-  void detectPlatform()
-    .then((where) => fetch(`${CONVEX_URL}/api/mutation`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        path: 'usage:ping',
-        args: { pid, platform: where, event, name: driverName() },
-        format: 'json'
-      })
-    }))
+  void fetch(`${CONVEX_URL}/api/mutation`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      path: 'usage:ping',
+      args: { pid, platform: 'web', event, name: driverName() },
+      format: 'json'
+    })
+  })
     .catch(() => { /* offline or blocked: this event just isn't counted */ });
 }

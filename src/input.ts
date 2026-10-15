@@ -16,6 +16,7 @@ const PAD = {
 } as const;
 const DEADZONE = 0.14;      // a resting stick is never quite centred
 const TRIGGER = 0.18;       // how far a trigger goes in before it counts
+const TOUCH_DRAG_GAIN = 1.7;  // track races: a finger's drag counts this much more than a mouse's
 
 export class InputManager {
   onTap: () => void = () => {};
@@ -179,11 +180,15 @@ export class InputManager {
   private steerFrom = 0;
   private steerAt = 0;
 
+  /** Pixels of drag from the anchor to full lock: short, so a turn is a flick, not a swipe. */
+  private get steerReach(): number {
+    return Math.max(40, Math.min(window.innerWidth, window.innerHeight) * 0.11);
+  }
+
   /** -1..1: the steering finger's offset from where it landed; 0 with no finger down. */
   get touchSteer(): number {
     if (this.steerId === null) return 0;
-    const reach = Math.max(60, window.innerWidth * 0.16);
-    return Math.max(-1, Math.min(1, (this.steerAt - this.steerFrom) / reach));
+    return Math.max(-1, Math.min(1, (this.steerAt - this.steerFrom) / this.steerReach));
   }
 
   constructor(target: HTMLElement) {
@@ -199,11 +204,20 @@ export class InputManager {
       }
     });
     target.addEventListener('pointermove', (e) => {
-      if (e.pointerId === this.steerId) this.steerAt = e.clientX;
+      if (e.pointerId === this.steerId) {
+        this.steerAt = e.clientX;
+        // Past full lock the anchor follows the finger, so coming back the
+        // other way counter-steers at once instead of unwinding dead travel.
+        const reach = this.steerReach;
+        if (this.steerAt - this.steerFrom > reach) this.steerFrom = this.steerAt - reach;
+        else if (this.steerFrom - this.steerAt > reach) this.steerFrom = this.steerAt + reach;
+      }
       if (!this.down) return;
       const dx = e.clientX - this.lastX;
       this.lastX = e.clientX;
-      this.dragDx += dx;
+      // A thumb on a phone covers far less ground than a mouse: the same
+      // swipe moves the car further, so a lane change is a flick.
+      this.dragDx += e.pointerType === 'touch' ? dx * TOUCH_DRAG_GAIN : dx;
       this.moved += Math.abs(dx) + Math.abs(e.movementY ?? 0);
     });
     const up = (e: PointerEvent) => {
