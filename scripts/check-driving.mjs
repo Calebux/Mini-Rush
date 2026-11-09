@@ -83,7 +83,7 @@ try {
     p.airH = 0; car.s = p.s - 5; g.updateStyle(0, 1);
     check(g.style.score === 0, 'Jumping over traffic does not count as a near miss');
 
-    const args = [2, 4, 12.34, 5, 3, 2, false, 35, 1, 2, [0.25, 0.26, 0.2, 0.3], 2, 0.4];
+    const args = [2, 4, 12.34, 5, 2, false, 35, 1, 2, [0.25, 0.26, 0.2, 0.3], 2, 0.4];
     g.ui.updateHud(...args);
     const observer = new MutationObserver(() => {});
     observer.observe(document.getElementById('hud'), { subtree: true, childList: true, attributes: true, characterData: true });
@@ -91,11 +91,67 @@ try {
     const idleHudMutations = observer.takeRecords().length;
     observer.disconnect();
     check(idleHudMutations === 0, 'Unchanged HUD produces no DOM mutations');
-    args[0] = 1; args[1] = 8; args[3] = 9; args[5] = 0; args[6] = true;
+    args[0] = 1; args[1] = 8; args[3] = 9; args[4] = 0; args[5] = true;
     g.ui.updateHud(...args);
-    check(document.getElementById('hud-pos').textContent === 'P1/8' &&
+    check(document.getElementById('hud-pos').textContent === '1ST/8' &&
       document.getElementById('hud-coins').textContent === '⬤ 9' &&
       document.getElementById('nitro-ui').classList.contains('burning'), 'HUD still reflects race changes immediately');
+
+    // Hold a stable line to exercise the power-drift state machine independently
+    // of this seed's corners. The player's actual acceleration/release code runs.
+    const startDrift = (seconds = 1) => {
+      p.reset({s: 50, x: 0}); p.v = 37;
+      for (let i = 0; i < seconds * 60; i++) {
+        p.x = 0;
+        p.update(1 / 60, i / 60, 0, .2, true, true, true);
+      }
+    };
+    const release = () => {
+      let boost = 0;
+      for (let i = 0; i < 15; i++) {
+        p.x = 0; p.update(1 / 60, 2 + i / 60, 0, 0, true, false, true);
+        boost = Math.max(boost, p.driftBoost);
+      }
+      return boost;
+    };
+    startDrift();
+    check(p.driftDir !== 0 && p.driftTime > .9 && p.v > 30, 'Brake and steer hold a power drift at racing speed');
+    const earnedBoost = release();
+    check(earnedBoost > 4 && p.driftDir === 0, 'Clean release earns a drift boost');
+    for (let i = 0; i < 20; i++) { p.x = 0; p.update(1 / 60, 3, 0, 0, true, false, true); }
+    check(p.v > 39, 'Release boost persists beyond a single frame');
+    startDrift(.25);
+    check(release() === 0, 'Brief brake taps cannot farm release boosts');
+    startDrift(); p.x = 8; p.update(1 / 60, 2, 0, 0, true, false, true);
+    check(p.driftDir === 0 && p.driftBoost === 0, 'Off-road drift ends without a release reward');
+    startDrift(); p.nitroTimer = 1; p.update(1 / 60, 2, 0, 0, true, false, true);
+    check(p.driftDir === 0 && p.driftBoost === 0, 'Nitro cancels drift without stacking a release reward');
+    startDrift(); p.airH = 1; p.update(1 / 60, 2, 0, 0, true, false, true);
+    check(p.driftDir === 0 && p.driftBoost === 0, 'Jumping cancels drift without a release reward');
+    startDrift(); p.wreck(); p.update(1 / 60, 2, 0, 0, true, false, true);
+    check(p.driftDir === 0 && p.driftBoost === 0, 'Wrecking clears the drift');
+    startDrift(); release(); p.reset({s: 0, x: 0});
+    check(p.driftBoost === 0 && p.driftTime === 0 && p.driftDir === 0, 'Retry clears drift rewards and charge');
+    p.v = 37;
+    for (let i = 0; i < 6; i++) p.update(1 / 60, 0, 0, 0, true, true, true);
+    p.update(1 / 60, .1, 0, .3, true, true, true);
+    check(p.driftDir !== 0, 'Brake before steer still enters a drift inside the input window');
+    g.ui.showDrift(1, 1);
+    check(document.getElementById('drift-release').textContent === 'RELEASE BRAKE TO BOOST', 'HUD explains the earned release boost');
+
+    // A baked body colour can have a misleading material name. Rims have
+    // their own finish and must stay neutral when the player changes skin.
+    const { finishVehicle, repaintVehicle } = await import('/src/toon.ts');
+    const model = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshStandardMaterial({name:'Paint Matte Black #1', color:0xff2e8a}));
+    const wheel = new THREE.Mesh(new THREE.BoxGeometry(.3,.3,.1), new THREE.MeshStandardMaterial({name:'Paint Metallic Cool Grey', color:0x333333}));
+    const mergedBody = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshStandardMaterial({name:'Paint Metallic Cool Grey', color:0x333333}));
+    wheel.name = 'rims 1_4'; mergedBody.name = 'rims_merged'; model.add(body, wheel, mergedBody);
+    finishVehicle(model, 0xff2e8a); repaintVehicle(model, 0x00ffcc, 0xff2e8a);
+    check(body.material.isMeshPhysicalMaterial && body.material.color.getHex() === 0x00ffcc, 'Baked body paint receives clearcoat and the selected skin');
+    check(wheel.material.color.getHex() === 0x77818e && !wheel.material.userData.isPaint, 'Rims keep their metal finish across paint changes');
+    check(mergedBody.material.color.getHex() === 0x00ffcc, 'Merged body geometry keeps its paint despite a misleading rim name');
+    model.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
 
     let hiddenWorldUpdates = 0;
     g.renderFrame = () => {};

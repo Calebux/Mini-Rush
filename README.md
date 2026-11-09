@@ -24,6 +24,12 @@ also the 📷 button). Mobile: hold the gas pedal (bottom-right) to accelerate,
 drag to steer, hold the brake pedal (bottom-left), tap for nitro. Release the
 gas and the car coasts down to a roll.
 
+Power drift: hold brake while steering at racing speed. The HUD shows charge
+and prompts a release after half a second; release brake on the road for a
+0.65-second speed boost. Holding for 1.75 seconds earns the perfect-drift
+callout. Leaving the road, jumping, wrecking or firing nitro cancels the release
+reward. Drifting still feeds the style gauge to earn nitro.
+
 Query params for testing: `?len=500` (lap length in metres, default 1800),
 `?seed=7` (deterministic circuit), `?laps=4`, `?map=beijing` (city id or index),
 `?mode=burnout` (mode id or index).
@@ -126,6 +132,13 @@ Cel-shaded PS2-era arcade style with real 3D models (CC0/free asset packs,
 credits in `public/assets/models/CREDITS.txt`), procedural fallback art where
 kits aren't loaded, and hot-swappable models/sounds by filename — see
 **`public/assets/README.md`** for the full asset list and credits.
+
+The home, garage, route select and results screens share a restrained studio
+presentation (`src/consolePresentation.css`). The garage uses physical
+materials and generated softbox reflections; car paint and metallic rims have
+separate material roles. These changes reuse the existing models and add no
+downloaded art. Desktop and responsive browser checks do not establish console
+parity or performance on a physical Android device.
 
 Browser checks (with the dev server running): `scripts/check-presentation.mjs`,
 `scripts/check-driving.mjs`, `scripts/check-danfo.mjs`, `scripts/visual-world.mjs`

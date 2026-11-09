@@ -1,10 +1,8 @@
 import * as T from 'three';
-import { toonMat } from './toon';
 
 /**
- * The garage the car is shown in: modelled, in the game's cel-shaded style,
- * so the menu looks like the same game as the races. Only the car is
- * realistic; everything here is flat colour with stepped toon shading.
+ * The garage uses shared physical materials and a small studio light rig.
+ * The existing geometry stays bounded; material and light contrast supply depth.
  *
  * A closed room 28 m square, because the turntable camera orbits all the way
  * round: roller shutters to the back, a tool wall and bench to the left, a
@@ -16,10 +14,10 @@ const HEIGHT = 8.5;
 
 export function buildGarage(scene: T.Scene): void {
   const mats = new Map<string, T.Material>();
-  const m = (color: number, extra: Partial<T.MeshToonMaterialParameters> = {}) => {
+  const m = (color: number, extra: Partial<T.MeshStandardMaterialParameters> = {}) => {
     const key = `${color}/${JSON.stringify(extra)}`;
     let mat = mats.get(key);
-    if (!mat) { mat = toonMat(color, extra); mats.set(key, mat); }
+    if (!mat) { mat = new T.MeshStandardMaterial({ color, roughness: .72, metalness: .16, ...extra }); mats.set(key, mat); }
     return mat;
   };
   const glow = (color: number, strength = 1.8) =>
@@ -42,12 +40,12 @@ export function buildGarage(scene: T.Scene): void {
   };
 
   // ── floor: polished concrete, a painted bay, a hazard-striped edge ─────
-  const floor = new T.Mesh(new T.PlaneGeometry(ROOM * 2, ROOM * 2), m(0x6b7080, { map: concreteTexture() }));
+  const floor = new T.Mesh(new T.PlaneGeometry(ROOM * 2, ROOM * 2), m(0x424c5a, { map: concreteTexture(), roughness: .42, metalness: .25 }));
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = -0.05;
   floor.receiveShadow = true;
   scene.add(floor);
-  const line = m(0xf2c230);
+  const line = m(0x85939c);
   for (const x of [-4.2, 4.2]) box(0.12, 0.012, 9, x, -0.04, 0, line, false);
   box(8.52, 0.012, 0.12, 0, -0.04, -4.5, line, false);
   // hazard stripes along the back wall
@@ -57,7 +55,7 @@ export function buildGarage(scene: T.Scene): void {
   scene.add(stripes);
 
   // ── walls: dark lower panels, lighter upper, a ceiling ────────────────
-  const lower = m(0x2a3040), upper = m(0x444b5e), trim = m(0x1b1f2b);
+  const lower = m(0x171e28), upper = m(0x28313e), trim = m(0x10151e);
   for (const [x, z, ry] of [[0, -ROOM, 0], [0, ROOM, Math.PI], [-ROOM, 0, Math.PI / 2], [ROOM, 0, -Math.PI / 2]] as const) {
     const wall = new T.Group();
     wall.position.set(x, 0, z);
@@ -81,7 +79,7 @@ export function buildGarage(scene: T.Scene): void {
 
   // ── back wall: two roller shutters and the sign ───────────────────────
   for (const x of [-5.5, 5.5]) {
-    const frame = m(0x1b1f2b), slat = m(0x8a91a3), slat2 = m(0x747b8d);
+    const frame = m(0x1b1f2b), slat = m(0x454f5c), slat2 = m(0x3c4654);
     box(6.4, 0.35, 0.5, x, 5.3, -ROOM + 0.35, frame);
     for (const side of [-1, 1]) box(0.3, 5.3, 0.5, x + side * 3.05, 2.65, -ROOM + 0.35, frame);
     for (let y = 0.2; y < 5.1; y += 0.34) box(5.8, 0.3, 0.12, x, y + 0.15, -ROOM + 0.25, Math.round(y / 0.34) % 2 ? slat : slat2, false);
@@ -167,8 +165,8 @@ export function buildGarage(scene: T.Scene): void {
   box(0.06, 0.06, 20, ROOM - 0.25, 2.5, -1, glow(0x22e6ff, 2.6), false);
 
   // soft bounce from the ceiling strips and the floor
-  scene.add(new T.HemisphereLight(0xeef2ff, 0x3a3f4c, 1.25));
-  const key = new T.DirectionalLight(0xffffff, 1.9);
+  scene.add(new T.HemisphereLight(0xc8ddff, 0x171b26, .55));
+  const key = new T.DirectionalLight(0xffefdb, 2.6);
   key.position.set(-3, HEIGHT - 0.5, 4);
   key.target.position.set(0, 0, 0);
   key.castShadow = true;
@@ -178,6 +176,9 @@ export function buildGarage(scene: T.Scene): void {
   key.shadow.normalBias = .03;
   key.shadow.bias = -.0002;
   scene.add(key, key.target);
+  const rimLight = new T.DirectionalLight(0x9bdcff, 1.8);
+  rimLight.position.set(4, 4, -5);
+  scene.add(rimLight);
   const fillPink = new T.PointLight(0xff2e9a, 14, 14, 1.8); fillPink.position.set(-ROOM + 1.5, 2.6, -1); scene.add(fillPink);
   const fillCyan = new T.PointLight(0x22e6ff, 14, 14, 1.8); fillCyan.position.set(ROOM - 1.5, 2.6, -1); scene.add(fillCyan);
 }
@@ -199,7 +200,7 @@ function canvasTexture(w: number, h: number, draw: (ctx: CanvasRenderingContext2
   return t;
 }
 
-/** Concrete in big flat-shaded slabs with a few oil stains: cartoon, not photo. */
+/** Fine concrete grain; avoid large repeating stains competing with the car. */
 function concreteTexture(): T.CanvasTexture {
   return canvasTexture(512, 512, (ctx) => {
     ctx.fillStyle = '#9aa0ad';
@@ -211,11 +212,9 @@ function concreteTexture(): T.CanvasTexture {
       ctx.fillStyle = `rgb(${v},${v + 3},${v + 12})`;
       ctx.fillRect(i * 128 + 2, j * 128 + 2, 124, 124);
     }
-    for (let i = 0; i < 5; i++) {
-      ctx.fillStyle = 'rgba(40,44,56,0.22)';
-      ctx.beginPath();
-      ctx.ellipse(rand() * 512, rand() * 512, 14 + rand() * 30, 8 + rand() * 18, rand() * 3, 0, Math.PI * 2);
-      ctx.fill();
+    for (let i = 0; i < 16000; i++) {
+      ctx.fillStyle = rand() > .5 ? 'rgba(255,255,255,.035)' : 'rgba(0,0,0,.035)';
+      ctx.fillRect(rand() * 512, rand() * 512, 1, 1);
     }
   }, [6, 6]);
 }

@@ -83,17 +83,13 @@ const GradeShader = {
         // Radial streaks: smear each sample back toward the centre so the world
         // stretches past you. Strength rises with distance from the middle, so
         // the road stays sharp and the edges tear.
-        float reach = boost * 0.055 * edge;
+        float reach = boost * 0.025 * edge;
         vec3 sum = vec3(0.0);
         for (int i = 0; i < 5; i++) {
           float k = float(i) / 4.0;
           sum += texture2D(tDiffuse, vUv - toCentre * reach * k).rgb;
         }
         texel = vec4(sum / 5.0, 1.0);
-        // chromatic fringe pulls red and blue apart at the rim
-        float split2 = boost * 0.004 * edge;
-        texel.r = texture2D(tDiffuse, vUv - toCentre * split2).r;
-        texel.b = texture2D(tDiffuse, vUv + toCentre * split2).b;
       } else {
         texel = texture2D(tDiffuse, vUv);
         if (fringe > 0.0) {
@@ -212,11 +208,16 @@ export function createPostFX(
 ): PostFX | null {
   if (!QUALITY[tier].grade) return null;
   const composer = new EffectComposer(renderer);
+  // Canvas antialiasing does not apply to the composer's offscreen buffers.
+  // MSAA here resolves silhouettes before the grade/bloom samples the image.
+  const samples = tier === 2 ? Math.min(4, renderer.capabilities.maxSamples) : 0;
+  composer.renderTarget1.samples = samples;
+  composer.renderTarget2.samples = samples;
   composer.addPass(new RenderPass(scene, camera));
   let bloom: UnrealBloomPass | null = null;
   if (QUALITY[tier].bloom) {
     bloom = new UnrealBloomPass(
-      new THREE.Vector2(window.innerWidth, window.innerHeight), 0.34, 0.75, 0.92);
+      new THREE.Vector2(window.innerWidth, window.innerHeight), 0.18, 0.5, 1.15);
     composer.addPass(bloom);
   }
   const grade = new ShaderPass(GradeShader);
@@ -243,12 +244,12 @@ export function createPostFX(
       return;
     }
     u.contrast.value = night ? 1.0 : 1.02;
-    u.saturation.value = night ? 1.10 : 1.06;
-    u.vignette.value = night ? 0.14 : 0.18;
-    u.split.value = night ? 0.008 : 0.015;
-    u.lift.value = night ? 0.012 : 0.008;
+    u.saturation.value = night ? 1.10 : .98;
+    u.vignette.value = night ? 0.14 : 0.1;
+    u.split.value = night ? 0.008 : 0.006;
+    u.lift.value = night ? 0.012 : .003;
     u.tone.value = u.fringe.value = u.grain.value = u.mono.value = u.keepRed.value = 0;
-    if (bloom) bloom.strength = night ? 0.62 : 0.34; // neon signs earn it
+    if (bloom) bloom.strength = night ? 0.62 : 0.18;
   };
   return {
     composer,

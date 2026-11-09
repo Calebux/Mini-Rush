@@ -33,6 +33,7 @@ import { setUnderglow } from './meshes';
 import { Player } from './player';
 import { createPostFX, LookId, PostFX, savedLook } from './postfx';
 import { Rain } from './rain';
+import { raceSkyMaterial } from './raceSky';
 import { RaceMinimap } from './raceMap';
 import { PadMenu } from './padMenu';
 import { bindFullscreenButton, toggleFullscreen } from './fullscreen';
@@ -77,8 +78,8 @@ const SEPARATION_PASSES = 3;
 // where the car is. `driver` hides the car body — there is no modelled
 // interior to sit inside, so the view is from the screen rail forward.
 const CAMS = [
-  { back: 6.6, h: 3.5, ahead: 12, fov: 60, lat: 0.55, driver: false },
-  { back: 5.2, h: 2.9, ahead: 11, fov: 75, lat: 0.55, driver: false },
+  { back: 7.1, h: 2.7, ahead: 17, fov: 55, lat: 0.7, driver: false },
+  { back: 5.6, h: 1.8, ahead: 20, fov: 62, lat: 0.8, driver: false },
   { back: 14.0, h: 11.0, ahead: 19, fov: 57, lat: 0.55, driver: false },
   // Seated at the car's middle rather than out on the nose: a driver sits
   // there anyway, and the extra clearance keeps the eye out of the back of
@@ -430,42 +431,28 @@ export class Game {
     if (code) void this.enterChallenge(code);
   }
 
-  /** Gradient sky dome + retro sun disc; follows the camera on x/z. */
+  /** Atmospheric sky with a small solar disc; follows the camera on x/z. */
   private buildSky(): THREE.Group {
     const g = new THREE.Group();
     const theme = environmentTheme(MAPS[this.mapIndex]);
-    this.skyMat = new THREE.ShaderMaterial({
-      uniforms: {
-        top: { value: new THREE.Color(theme.sky) },
-        bottom: { value: new THREE.Color(theme.horizon) }
-      },
-      vertexShader: `
-        varying vec3 vPos;
-        void main() {
-          vPos = position;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }`,
-      fragmentShader: `
-        uniform vec3 top; uniform vec3 bottom; varying vec3 vPos;
-        void main() {
-          float h = clamp(normalize(vPos).y * 1.6 + 0.12, 0.0, 1.0);
-          vec3 c = mix(bottom, top, pow(h, 0.75));
-          gl_FragColor = vec4(c, 1.0);
-          #include <tonemapping_fragment>
-          #include <colorspace_fragment>
-        }`,
-      side: THREE.BackSide,
-      depthWrite: false
-    });
+    this.skyMat = raceSkyMaterial(theme);
     const dome = new THREE.Mesh(new THREE.SphereGeometry(250, 24, 12), this.skyMat);
     dome.renderOrder = -3;
     dome.frustumCulled = false;
     g.add(dome);
 
+    const halo = document.createElement('canvas'); halo.width = halo.height = 64;
+    const ctx = halo.getContext('2d')!;
+    const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gradient.addColorStop(0, 'rgba(255,235,208,.8)');
+    gradient.addColorStop(.2, 'rgba(255,235,208,.2)');
+    gradient.addColorStop(1, 'rgba(255,235,208,0)');
+    ctx.fillStyle = gradient; ctx.fillRect(0, 0, 64, 64);
+    const haloMap = new THREE.CanvasTexture(halo); haloMap.colorSpace = THREE.SRGBColorSpace;
     const glow = new THREE.Mesh(
       new THREE.CircleGeometry(13, 32),
       new THREE.MeshBasicMaterial({
-        color: 0xffdab1, transparent: true, opacity: 0.12, depthWrite: false, fog: false
+        map: haloMap, color: 0xffe6c4, transparent: true, opacity: .5, depthWrite: false, fog: false
       })
     );
     glow.position.set(-120, 105, -150).multiplyScalar(1.01);
@@ -475,7 +462,7 @@ export class Game {
     this.sunGlow = glow;
 
     const sun = new THREE.Mesh(
-      new THREE.CircleGeometry(7, 32),
+      new THREE.CircleGeometry(1.65, 32),
       new THREE.MeshBasicMaterial({ color: 0xffe9a3, depthWrite: false, fog: false })
     );
     sun.position.set(-120, 105, -150);
@@ -819,7 +806,7 @@ export class Game {
     const theme = environmentTheme(map);
     this.scene.environment?.dispose();
     this.scene.environment = buildReflectionSky(theme);
-    this.scene.environmentIntensity = theme.night ? 1.0 : 0.85;
+    this.scene.environmentIntensity = theme.night ? 1.0 : 0.6;
     this.skyline = buildHorizon(theme);
     this.sky.add(this.skyline);
     (this.skyMat.uniforms.top.value as THREE.Color).setHex(theme.sky);
@@ -829,14 +816,14 @@ export class Game {
     this.groundMat.color.setHex(theme.ground);
     this.hemi.color.setHex(theme.night ? 0xa6c6df : 0xe9f3f5);
     this.hemi.groundColor.setHex(theme.night ? 0x394253 : 0x6d6e62);
-    this.hemi.intensity = 1.65;
+    this.hemi.intensity = theme.night ? 1.65 : 1.05;
     this.sun.color.setHex(theme.night ? 0xaacbea : 0xffe2b5);
     this.sun.intensity = theme.night ? 1.5 : 2.7;
     if (map.id === 'lagos') {
-      this.hemi.intensity = 1.45;
-      this.hemi.groundColor.setHex(0x687365);
-      this.sun.color.setHex(0xffefd3);
-      this.sun.intensity = 2.35;
+      this.hemi.intensity = 1.0;
+      this.hemi.groundColor.setHex(0x5f695a);
+      this.sun.color.setHex(0xffe1b8);
+      this.sun.intensity = 2.7;
     }
     if (theme.neon) {
       // The city lights itself. Keep a violet sky fill so car paint still has
@@ -856,6 +843,13 @@ export class Game {
     this.postfx?.setLook(this.look, !!theme.neon);
     // Rain falls in the world when the weather says so, on any map.
     const raining = this.weather.type === 'rain';
+    this.skyMat.uniforms.daylight.value = theme.night ? 0 : 1;
+    this.skyMat.uniforms.clouds.value = this.quality === 0 || theme.night ? 0 : raining ? .85 : .55;
+    if (raining && !theme.night) {
+      this.sun.intensity = 1.2;
+      this.hemi.intensity = 1.0;
+      this.sunDisc.visible = this.sunGlow.visible = false;
+    }
     if (raining && !this.rain) this.rain = new Rain(this.quality === 0 ? 1200 : 2600);
     if (this.rain) {
       if (raining) this.scene.add(this.rain.object);
@@ -863,14 +857,15 @@ export class Game {
     }
     this.wet = raining || !!theme.neon;
     setUnderglow(theme.night ? 1 : 0.2);
-    this.scenery = new Scenery(this.scene, this.track, seed, map);
-    this.sunOffset.set(-35, 50, -30);
+    this.scenery = new Scenery(this.scene, this.track, seed, map, raining);
+    this.sunOffset.set(-35, 36, -30);
     if (theme.coast) {
       const f = this.track.frame(65), side = this.scenery.group.userData.shoreSide as number;
-      this.sunOffset.set(f.nx * side * 50 + Math.sin(f.theta) * 25, 48,
+      this.sunOffset.set(f.nx * side * 50 + Math.sin(f.theta) * 25, 30,
         f.nz * side * 50 - Math.cos(f.theta) * 25);
     }
     this.sunDisc.position.copy(this.sunOffset).normalize().multiplyScalar(215);
+    (this.skyMat.uniforms.sunDirection.value as THREE.Vector3).copy(this.sunOffset).normalize();
     this.sunDisc.lookAt(0, 0, 0);
     this.sunGlow.position.copy(this.sunDisc.position).multiplyScalar(1.01);
     this.sunGlow.lookAt(0, 0, 0);
@@ -1416,6 +1411,7 @@ export class Game {
    */
   private demoteQuality(): void {
     this.quality = (this.quality - 1) as QualityTier;
+    if (this.quality === 0) this.skyMat.uniforms.clouds.value = 0;
     const q = QUALITY[this.quality];
     // Rebuild rather than keep a composer built for a tier we no longer are —
     // demoting off the desktop tier has to actually drop the bloom passes.
@@ -1496,13 +1492,8 @@ export class Game {
     const dt = real * dilation;
     let trafficUpdated = false;
     this.cine.flash = Math.max(0, this.cine.flash - real * 5.5);
-    // Boost drama ramps in fast and falls away slowly, so the release breathes.
-    // Near the car's own top speed a lighter dose of it comes in on its own:
-    // the edges start to tear before the nitro does it properly.
-    const top = BASE_SPEED * this.player.speedMul;
-    const flatOut = this.state === 'racing'
-      ? THREE.MathUtils.clamp((this.player.v / top - 0.66) / 0.34, 0, 1) * 0.55 : 0;
-    const wanted = this.player.nitroActive ? 1 : flatOut;
+    // Ordinary driving stays sharp. Nitro adds a restrained peripheral blur.
+    const wanted = this.player.nitroActive ? .45 : 0;
     this.boostFx += (wanted - this.boostFx) * Math.min(1, real * (wanted > this.boostFx ? 9 : 3.5));
     this.postfx?.tick(elapsed);
     this.postfx?.setDrama(this.boostFx, this.cine.flash);
@@ -1761,7 +1752,7 @@ export class Game {
     const p = this.player;
     if (p.driftDir !== 0) this.style.stoke(0.2 * dt); // a held power drift charges nitro
     if (p.driftBoost > 0) {
-      this.ui.banner('DRIFT BOOST', 'drift');
+      this.ui.banner(p.driftBoost >= 6 ? 'PERFECT DRIFT' : 'DRIFT BOOST', 'drift');
       this.audio.play('combo');
       this.shake = Math.max(this.shake, 0.5);
     }
@@ -1769,7 +1760,7 @@ export class Game {
       this.style.driftTick(dt);
       this.driftChain += dt;
       if (this.driftChain > this.driftBestThisRace) this.driftBestThisRace = this.driftChain;
-      this.ui.showDrift(this.driftChain);
+      this.ui.showDrift(this.driftChain, p.driftDir !== 0 ? p.driftTime : 0);
     } else if (this.driftChain > 0.5) {
       // drift ended — pay out the chain
       const driftPts = Math.floor(this.driftChain * 40);
@@ -2183,9 +2174,7 @@ export class Game {
     }
 
     // glide between camera modes rather than snapping
-    const m = MAPS[this.mapIndex].id === 'lagos' && this.camMode === 0
-      ? { ...CAMS[0], back: 6.4, h: 3.3, ahead: 13, fov: 60 }
-      : CAMS[this.camMode];
+    const m = CAMS[this.camMode];
     this.cam.back = THREE.MathUtils.damp(this.cam.back, m.back, 4, dt);
     this.cam.h = THREE.MathUtils.damp(this.cam.h, m.h, 4, dt);
     this.cam.ahead = THREE.MathUtils.damp(this.cam.ahead, m.ahead, 4, dt);
@@ -2198,18 +2187,18 @@ export class Game {
     // tarmac; both read as a surge before the FOV even moves.
     const surgeTarget = p.nitroActive && !m.driver ? 1 : 0;
     this.camSurge = THREE.MathUtils.damp(this.camSurge, surgeTarget, surgeTarget ? 5 : 2.2, dt);
-    const back = this.track.frame(p.s - this.cam.back - this.camSurge * 1.8);
+    const back = this.track.frame(p.s - this.cam.back - this.camSurge * .65);
     const ahead = this.track.frame(p.s + this.cam.ahead);
     const lat = p.x * this.cam.lat;
 
     let cx = back.x + back.nx * lat;
     let cz = back.z + back.nz * lat;
-    let cy = this.cam.h - this.camSurge * 0.45;
+    let cy = this.cam.h - this.camSurge * .12;
     // Road rumble: a fine, fast tremor that starts near top speed and doubles
     // under nitro. Two detuned sines rather than noise, so it hums, not jitters.
     const topV = BASE_SPEED * p.speedMul;
     const rumble = this.state === 'racing'
-      ? THREE.MathUtils.clamp((p.v / topV - 0.72) / 0.28, 0, 1) * 0.035 + this.camSurge * 0.05 : 0;
+      ? THREE.MathUtils.clamp((p.v / topV - 0.72) / 0.28, 0, 1) * .009 + this.camSurge * .012 : 0;
     if (rumble > 0.001) {
       this.rumbleT += dt;
       cx += Math.sin(this.rumbleT * 47) * rumble;
@@ -2233,7 +2222,7 @@ export class Game {
     this.syncSky(cx, cz);
 
     // FOV: camera-mode base + speed stretch + nitro punch
-    const targetFov = this.cam.fov + p.v * 0.19 + (p.nitroActive ? 13 : 0);
+    const targetFov = this.cam.fov + Math.min(p.v, 80) * .065 + (p.nitroActive ? 4 : 0);
     if (Math.abs(this.camera.fov - targetFov) > 0.1) {
       this.camera.fov = THREE.MathUtils.damp(this.camera.fov, targetFov, 6, dt);
       this.camera.updateProjectionMatrix();

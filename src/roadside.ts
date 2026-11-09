@@ -60,10 +60,11 @@ export function buildRoadside(track: Track, map: MapSpec, kit: EnvironmentKit): 
   const soil = shaded(kit.material(t.ground));
   if (map.id === 'lagos') soil.map = turfTexture();
   const water = shaded(kit.material(t.water));
-  water.roughness = 0.28;
-  water.metalness = 0.2;
+  water.roughness = 0.2;
+  water.metalness = 0.05;
+  water.envMapIntensity = 1.15;
   water.bumpMap = waterRipples();
-  water.bumpScale = 0.11;
+  water.bumpScale = 0.04;
   const verge = shaded(kit.material(
     new THREE.Color(t.ground).lerp(new THREE.Color(t.pavement), 0.35).getHex()));
   if (map.id === 'lagos') verge.color.setHex(0x555d52);
@@ -242,10 +243,14 @@ function waterRipples(): THREE.CanvasTexture {
   const canvas = document.createElement('canvas'); canvas.width = canvas.height = 256;
   const ctx = canvas.getContext('2d')!, rand = mulberry32(0x736561);
   ctx.fillStyle = '#808080'; ctx.fillRect(0, 0, 256, 256);
-  for (let i = 0; i < 300; i++) {
-    ctx.fillStyle = `rgba(255,255,255,${0.03 + rand() * 0.14})`;
-    ctx.fillRect(rand() * 256, rand() * 256, 5 + rand() * 34, 1);
+  const pixels = ctx.createImageData(256, 256);
+  for (let y = 0; y < 256; y++) for (let x = 0; x < 256; x++) {
+    const u = x / 256 * Math.PI * 2, v = y / 256 * Math.PI * 2;
+    const h = 128 + Math.sin(u * 3 + Math.sin(v * 2)) * 25
+      + Math.sin(v * 7 + u * 2) * 14 + Math.sin(v * 13 - u * 3) * 6 + rand() * 3;
+    pixels.data.set([h, h, h, 255], (y * 256 + x) * 4);
   }
+  ctx.putImageData(pixels, 0, 0);
   const texture = new THREE.CanvasTexture(canvas);
   texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
   texture.anisotropy = 4;

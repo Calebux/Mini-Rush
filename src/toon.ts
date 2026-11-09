@@ -40,11 +40,21 @@ const PAINT_RE = /paint|body|shell|hood|bonnet|fender|bumper|door/i;
  */
 export function finishVehicle(root: THREE.Object3D, paint?: number): void {
   const cache = new Map<THREE.Material, THREE.Material>();
+  const wheelCache = new Map<THREE.Material, THREE.Material>();
+  root.updateMatrixWorld(true);
+  const modelSize = new THREE.Box3().setFromObject(root).getSize(new THREE.Vector3());
+  const meshBounds = new THREE.Box3(), meshSize = new THREE.Vector3();
   root.traverse((obj) => {
     const mesh = obj as THREE.Mesh;
     if (!mesh.isMesh) return;
+    // Optimized imports can merge body panels into a mesh still named "rims".
+    // Only an independently bounded wheel mesh may override its paint name.
+    meshBounds.setFromObject(mesh).getSize(meshSize);
+    const wheel = /\brims?\b|\bwheels?\b/i.test(mesh.name.replace(/_/g, ' '))
+      && meshSize.y < modelSize.y * .7 && meshSize.z < modelSize.z * .9;
+    const materialCache = wheel ? wheelCache : cache;
     const convert = (material: THREE.Material): THREE.Material => {
-      if (cache.has(material)) return cache.get(material)!;
+      if (materialCache.has(material)) return materialCache.get(material)!;
       const src = material as THREE.MeshStandardMaterial;
       if (!src.color) return material;
       const out = src.isMeshStandardMaterial ? src.clone() : new THREE.MeshStandardMaterial({
@@ -55,9 +65,12 @@ export function finishVehicle(root: THREE.Object3D, paint?: number): void {
       const name = src.name;
       const neutral = !src.map && Math.abs(src.color.r - src.color.g) < 0.02 &&
         Math.abs(src.color.g - src.color.b) < 0.02 && src.color.r > 0.4;
-      // The main CAD shell is named Metallic / Cool Grey. Preserve black aero,
-      // brakes, badges and textured liveries instead of painting the whole car.
-      if (!src.map && paint !== undefined && /paint.*(metallic|cool grey)|^body|^shell/i.test(name)) {
+      // CAD exports reuse paint names on rims; mesh semantics take priority.
+      // The baked body can also carry a misleading "Matte Black" name.
+      if (wheel && !src.map && !/tire|tyre|rubber/i.test(name)) {
+        out.color.setHex(0x77818e);
+      } else if (!src.map && paint !== undefined && (src.color.getHex() === paint
+        || /paint.*(metallic|cool grey)|^body|^shell/i.test(name))) {
         out.color.setHex(paint);
         out.userData.isPaint = true; // a skin repaints exactly these
       } else if (neutral) {
@@ -74,9 +87,11 @@ export function finishVehicle(root: THREE.Object3D, paint?: number): void {
       const role = src.map ? 'textured'
         : /glass|wind(ow|shield)/i.test(name) ? 'glass'
         : /tire|tyre|rubber/i.test(name) ? 'tyre'
+        : wheel ? 'chrome'
+        : out.userData.isPaint ? 'paint'
         : /cloth|carbon|interior|leather|seat|dash|black|soft/i.test(name) ? 'trim'
         : /steel|alumin|chrome|rim|exhaust|grill|silver/i.test(name) ? 'chrome'
-        : out.userData.isPaint || /paint|body|shell/i.test(name) ? 'paint' : 'other';
+        : /paint|body|shell/i.test(name) ? 'paint' : 'other';
       const finish: Record<typeof role, [number, number, number]> = {
         // roughness, metalness, reflection strength
         textured: [0.6, 0.05, 0.8], glass: [0.04, 0.2, 1.6], tyre: [0.9, 0, 0.35],
@@ -90,7 +105,7 @@ export function finishVehicle(root: THREE.Object3D, paint?: number): void {
         result = new THREE.MeshPhysicalMaterial({
           name: out.name, color: out.color, map: out.map, normalMap: out.normalMap, side: out.side,
           transparent: out.transparent, opacity: out.opacity, alphaTest: out.alphaTest,
-          clearcoat: 1, clearcoatRoughness: 0.05
+          clearcoat: .85, clearcoatRoughness: .18, specularIntensity: .7
         });
         result.userData = { ...out.userData };
         out.dispose();
@@ -98,6 +113,7 @@ export function finishVehicle(root: THREE.Object3D, paint?: number): void {
       result.roughness = roughness;
       result.metalness = metalness;
       result.userData.carSurface = reflect;
+      result.userData.carRole = role;
       if (role === 'glass') result.color.multiplyScalar(0.6);
       if (/emissive|headlight|taillight/i.test(name) && neutral) {
         const light = /warm|tail/i.test(name) ? 0xff3b25 : 0xc4edff;
@@ -105,7 +121,7 @@ export function finishVehicle(root: THREE.Object3D, paint?: number): void {
         result.color.setHex(light); result.emissive.setHex(light); result.emissiveIntensity = 2;
       }
       if (src.map) src.map.magFilter = THREE.NearestFilter;
-      cache.set(material, result);
+      materialCache.set(material, result);
       return result;
     };
     mesh.material = Array.isArray(mesh.material) ? mesh.material.map(convert) : convert(mesh.material);
@@ -177,8 +193,9 @@ export function repaintVehicle(root: THREE.Object3D, color: number, loadPaint?: 
   const swaps = new Map<THREE.Material, THREE.Material>();
   const reskin = (m: THREE.Material): THREE.Material => {
     // the load marks what it painted; a model that arrived already wearing that
-    // colour — baked rims, a second body material — is matched by colour
+    // colour — a second body material — is matched by colour
     const wearsLoadPaint = loadPaint !== undefined
+      && m.userData.carRole !== 'chrome' && m.userData.carRole !== 'tyre'
       && (m as THREE.MeshStandardMaterial).color?.getHex() === loadPaint;
     if (!m.userData.isPaint && !wearsLoadPaint) return m;
     let out = swaps.get(m);

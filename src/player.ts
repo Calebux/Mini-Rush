@@ -46,9 +46,11 @@ export class Player {
   driftDir = 0;
   driftTime = 0;        // seconds into the current power drift
   driftBoost = 0;       // > 0 for one frame after a long drift releases into a kick
+  private driftBoostT = 0;
+  private driftBoostPower = 0;
   private driftYaw = 0; // visual tail-out, damped
   private driftGrace = 0;
-  private brakeT = 0;   // seconds the brake has been held, for the drift window // outward velocity owed to corner force alone (not steering)
+  private brakeT = 0;   // seconds the brake has been held, for the drift window
   private bumpCooldown = 0;
   private steerLean = 0;
   private latV = 0; // smoothed real lateral velocity (drag steering bypasses xVel)
@@ -98,6 +100,11 @@ export class Player {
     this.driftDir = 0;
     this.driftTime = 0;
     this.driftYaw = 0;
+    this.driftGrace = 0;
+    this.brakeT = 0;
+    this.driftBoost = 0;
+    this.driftBoostT = 0;
+    this.driftBoostPower = 0;
     this.nitroTimer = 0;
     this.finished = false;
     this.bumpCooldown = 0;
@@ -123,6 +130,10 @@ export class Player {
     this.nitroTimer = 0;
     this.driftV = 0;
     this.xVel = 0;
+    this.driftDir = 0;
+    this.driftTime = 0;
+    this.driftBoostT = 0;
+    this.driftBoost = 0;
   }
 
   get offroad(): boolean {
@@ -204,6 +215,8 @@ export class Player {
     this.nitroTimer = Math.max(0, this.nitroTimer - dt);
     this.landed = false;
     this.driftBoost = 0;
+    this.driftBoostT = Math.max(0, this.driftBoostT - dt);
+    if (this.offroad || this.airborne || this.nitroActive || !driving || braking) this.driftBoostT = 0;
     if (this.damage > 0 && elapsed - this.lastHitAt > this.damageCool) this.damage = 0;
     if (this.tumbleT > 0) {
       this.tumbleT -= dt;
@@ -235,10 +248,14 @@ export class Player {
       this.driftTime += dt;
     } else if (this.driftDir !== 0) {
       this.driftGrace -= dt;
-      if (this.driftGrace <= 0 || !driving || this.tumbleT > 0 || this.offroad) {
-        // running wide onto the verge still pays out — it just ends the slide
-        if (this.driftTime > 0.5 && driving && this.tumbleT <= 0) {
+      if (this.driftGrace <= 0 || !driving || this.tumbleT > 0 || this.offroad || this.airborne || this.nitroActive) {
+        // A controlled release earns the burst. Leaving the road, wrecking,
+        // jumping or burning nitro cancels it instead of paying an extra boost.
+        if (this.driftTime > 0.5 && driving && !braking && this.tumbleT <= 0
+          && !this.offroad && !this.airborne && !this.nitroActive && this.v > 22) {
           this.driftBoost = Math.min(7, 2.5 + this.driftTime * 2);
+          this.driftBoostPower = this.driftBoost;
+          this.driftBoostT = .65;
           this.v += this.driftBoost;
         }
         this.driftDir = 0;
@@ -259,6 +276,7 @@ export class Player {
           : gas
           ? BASE_SPEED * this.spec.speed + progression
           : COAST_SPEED;
+      if (this.driftBoostT > 0) target = BASE_SPEED * this.spec.speed + progression + this.driftBoostPower;
       if (this.offroad && !this.nitroActive && !this.airborne) target = Math.min(target, OFFROAD_SPEED);
       if (braking && !this.nitroActive && !driftWindow) target = Math.min(target, BRAKE_SPEED);
       if (this.tumbleT > 0) target = 2;

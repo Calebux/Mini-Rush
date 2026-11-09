@@ -1490,7 +1490,7 @@
         </svg>
       </div>
     </div>
-    <div id="drift-ui"><small>DRIFT</small><span id="drift-time">0.0s</span></div>
+    <div id="drift-ui"><small id="drift-label">DRIFT</small><span id="drift-time">0.0s</span><div class="drift-charge" aria-hidden="true"><i id="drift-charge-fill"></i></div><small id="drift-release">HOLD YOUR LINE</small></div>
     <canvas id="race-mini" width="150" height="150" aria-hidden="true"></canvas>
   </div>
   <div id="speedlines"></div>
@@ -1515,6 +1515,7 @@
         <div class="control-grid">
           <div class="control-item"><strong>STEER</strong><span>Drag left/right · A/D · arrow keys</span></div>
           <div class="control-item"><strong>DRIVE</strong><span>Hold yellow gas · W/↑ · red pedal or S/↓ brakes</span></div>
+          <div class="control-item"><strong>POWER DRIFT</strong><span>Brake + steer at speed. Hold a clean slide, then release brake for a boost. Drifting also charges nitro.</span></div>
           <div class="control-item"><strong>NITRO / FIRE</strong><span>Tap the blue pill · Space fires in armed modes</span></div>
           <div class="control-item"><strong>CAMERA / PAUSE</strong><span>Camera button or C · pause button, P, or Esc</span></div>
           <div class="control-item"><strong>CONTROLLER</strong><span>Stick or D-pad steers · R2 gas · L2 brake · R1 handbrake (city) · ✕ nitro · □ camera · Options pause</span></div>
@@ -1697,6 +1698,7 @@
   </div>
 
   <div class="overlay hidden" id="results">
+    <div class="result-heading"><span class="console-eyebrow">SESSION COMPLETE</span><h2>Race report</h2></div>
     <div id="result-verdict">
       <div id="result-place">1<em>st</em></div>
       <div id="result-word">WIN</div>

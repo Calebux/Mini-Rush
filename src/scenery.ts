@@ -10,7 +10,7 @@ import {
   buildLaunchRamp, buildPalm, buildPhoneBox, mulberry32
 } from './meshes';
 import { toonify, toonMat } from './toon';
-import { Track } from './track';
+import { roadRoughness, Track } from './track';
 import { bakedPath } from './trackPaths';
 import { dressLagosCoast } from './coast';
 import { isSharedNeonTexture, NeonDressing, puddleRoughness } from './neonCity';
@@ -97,7 +97,8 @@ export class Scenery {
     scene: THREE.Scene,
     private track: Track,
     seed: number,
-    map: MapSpec
+    map: MapSpec,
+    wet = false
   ) {
     const rand = mulberry32(seed ^ 0x5eed);
     this.kit = new EnvironmentKit(environmentTheme(map));
@@ -113,6 +114,12 @@ export class Scenery {
     const road = track.buildRoadMesh(roadStyle);
     this.roadMat = road.material as THREE.MeshStandardMaterial;
     this.roadMat.color.setHex(theme.night ? 0x9ca9bd : 0xebe7dc);
+    if (wet && !theme.neon && roadStyle !== 'snow') {
+      this.roadMat.color.setHex(theme.night ? 0x88929d : 0xb8bec1);
+      this.roadMat.roughness = 1;
+      this.roadMat.roughnessMap = roadRoughness(true);
+      this.roadMat.envMapIntensity = 1.1;
+    }
     if (theme.neon) {
       // Rain-slick tarmac: dark, glossy, with puddles. The sheen comes from the
       // environment cube and the lights; the streaks from the signs are geometry.

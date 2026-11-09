@@ -87,8 +87,12 @@ export function dressLagosCoast(track: Track, kit: EnvironmentKit, shore: number
   const rand = mulberry32(seed ^ 0xc0a57), route = track.outline(2);
   const terrainY = terrains.get(track) ?? (() => 0);
   const bark = new T.MeshStandardMaterial({ color: 0x746b50, roughness: 1 });
-  const foliage = new T.MeshStandardMaterial({ map: leafTexture(false), color: 0xb4c992, roughness: .93, side: T.DoubleSide, alphaTest: .42 });
-  const fronds = new T.MeshStandardMaterial({ map: leafTexture(true), color: 0xc2d79e, roughness: .86, side: T.DoubleSide, alphaTest: .42 });
+  // A little transmitted leaf colour keeps backlit foliage from reading as
+  // opaque black cards. Alpha-to-coverage smooths the atlas edges under MSAA.
+  const foliage = new T.MeshStandardMaterial({ map: leafTexture(false), color: 0xb4c992, roughness: .93,
+    emissive: 0x344520, emissiveIntensity: .18, side: T.DoubleSide, alphaTest: .42, alphaToCoverage: true });
+  const fronds = new T.MeshStandardMaterial({ map: leafTexture(true), color: 0xc2d79e, roughness: .86,
+    emissive: 0x344520, emissiveIntensity: .18, side: T.DoubleSide, alphaTest: .42, alphaToCoverage: true });
   const card = new T.PlaneGeometry(1, 1), trunk = new T.CylinderGeometry(.12, .12, 1, 7);
   function branch(g: T.Group, a: T.Vector3, b: T.Vector3, radius: number) {
     const m = new T.Mesh(trunk, bark); m.position.copy(a).add(b).multiplyScalar(.5);

@@ -290,7 +290,7 @@ export class Track {
       const nx = -Math.cos(t), nz = -Math.sin(t);
       const x = this.px[k], z = this.pz[k];
       pos.set([x + nx * w, 0.02, z + nz * w, x - nx * w, 0.02, z - nz * w], i * 6);
-      const v = (i * SAMPLE_STEP) / (style === 'coast' ? 32 : 8);
+      const v = (i * SAMPLE_STEP) / (style === 'snow' || style === 'rally' ? 8 : 32);
       uv.set([0, v, 1, v], i * 4);
       if (i > 0) {
         const a = (i - 1) * 2;
@@ -304,8 +304,9 @@ export class Track {
     geo.computeVertexNormals();
     const mesh = new THREE.Mesh(
       geo,
-      new THREE.MeshStandardMaterial({ color: 0xe6e2d8, map: roadTexture(style), roughness: style === 'snow' ? 0.55 : 0.94,
-        ...(style === 'coast' ? { bumpMap: asphaltGrain(), bumpScale: .018 } : {}) })
+      new THREE.MeshStandardMaterial({ color: 0xe6e2d8, map: roadTexture(style), roughness: style === 'snow' ? .55 : 1,
+        roughnessMap: roadRoughness(false),
+        ...(style !== 'snow' && style !== 'rally' ? { bumpMap: asphaltGrain(), bumpScale: .012 } : {}) })
     );
     mesh.frustumCulled = false; // spans the whole map; fog hides the distance
     return mesh;
@@ -317,8 +318,8 @@ const roadTextures = new Map<RoadStyle, THREE.Texture>();
 function roadTexture(style: RoadStyle): THREE.Texture {
   const cached = roadTextures.get(style);
   if (cached) return cached;
-  if (style === 'coast') {
-    const texture = coastalAsphalt(); roadTextures.set(style, texture); return texture;
+  if (style === 'coast' || style === 'city' || style === 'circuit') {
+    const texture = pavedAsphalt(style); roadTextures.set(style, texture); return texture;
   }
   const c = document.createElement('canvas');
   c.width = 256;
@@ -336,12 +337,8 @@ function roadTexture(style: RoadStyle): THREE.Texture {
   ctx.fillStyle = '#e7e3ce';
   ctx.fillRect(8, 0, 3, 256);
   ctx.fillRect(245, 0, 3, 256);
-  if (style === 'city') {
-    for (const x of [86, 168]) ctx.fillRect(x, 0, 4, 110);
-  } else if (style !== 'circuit') {
-    ctx.fillStyle = style === 'rally' ? '#dfc88c' : '#e0e7e4';
-    ctx.fillRect(126, 0, 4, 140);
-  }
+  ctx.fillStyle = style === 'rally' ? '#dfc88c' : '#e0e7e4';
+  ctx.fillRect(126, 0, 4, 140);
   const roadTex = new THREE.CanvasTexture(c);
   roadTex.wrapS = THREE.RepeatWrapping;
   roadTex.wrapT = THREE.RepeatWrapping;
@@ -365,14 +362,14 @@ function asphaltGrain(): THREE.CanvasTexture {
 }
 
 /** Original asphalt atlas: fine aggregate, worn paint, tyre bands and sparse repairs. */
-function coastalAsphalt(): THREE.CanvasTexture {
+function pavedAsphalt(style: 'coast' | 'city' | 'circuit'): THREE.CanvasTexture {
   const c = document.createElement('canvas'); c.width = 1024; c.height = 2048;
   const ctx = c.getContext('2d')!, rand = mulberry32(0xc0a57);
   const pixels = ctx.createImageData(c.width, c.height);
   for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) {
     const n = (rand() - .5) * 15 + Math.sin(x * .021 + Math.sin(y * .006)) * 2 + Math.sin(y * .025) * 1.5;
     const i = (y * c.width + x) * 4;
-    pixels.data.set([58 + n, 64 + n, 68 + n, 255], i);
+    pixels.data.set([57 + n, 59 + n, 60 + n, 255], i);
   }
   ctx.putImageData(pixels, 0, 0);
   for (const x of [250, 365, 660, 775]) {
@@ -388,11 +385,43 @@ function coastalAsphalt(): THREE.CanvasTexture {
     ctx.stroke();
   }
   ctx.fillStyle = '#e2e2d1'; ctx.fillRect(29, 0, 10, 2048); ctx.fillRect(985, 0, 10, 2048);
-  ctx.fillStyle = '#d7c789';
-  for (let y = 0; y < 2048; y += 512) ctx.fillRect(508, y, 8, 240);
+  if (style === 'coast') {
+    ctx.fillStyle = '#d7c789';
+    for (let y = 0; y < 2048; y += 512) ctx.fillRect(508, y, 8, 240);
+  } else if (style === 'city') {
+    ctx.fillStyle = '#deddd2';
+    for (const x of [340, 680]) for (let y = 0; y < 2048; y += 512) ctx.fillRect(x, y, 10, 230);
+  }
+  // Worn patches and paint chips are baked once into the cached atlas.
+  for (let i = 0; i < 6; i++) {
+    ctx.fillStyle = '#22262918';
+    ctx.fillRect(65 + rand() * 730, rand() * 2048, 70 + rand() * 100, 80 + rand() * 180);
+  }
   for (let i = 0; i < 19000; i++) {
     ctx.fillStyle = rand() < .5 ? '#333b4220' : '#d9dedb13'; ctx.fillRect(rand() * 1024, rand() * 2048, 1, 1);
   }
   const texture = new THREE.CanvasTexture(c); texture.colorSpace = THREE.SRGBColorSpace;
   texture.wrapS = texture.wrapT = THREE.RepeatWrapping; texture.anisotropy = 8; return texture;
+}
+
+const roughnessTextures = new Map<boolean, THREE.CanvasTexture>();
+/** Dry rubber bands and damp patches react differently to grazing sunlight. */
+export function roadRoughness(wet: boolean): THREE.CanvasTexture {
+  const cached = roughnessTextures.get(wet);
+  if (cached) return cached;
+  const c = document.createElement('canvas'); c.width = 256; c.height = 512;
+  const ctx = c.getContext('2d')!, pixels = ctx.createImageData(c.width, c.height);
+  const rand = mulberry32(0x726f6164);
+  for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) {
+    const track = Math.exp(-(((x - 74) / 16) ** 2)) + Math.exp(-(((x - 181) / 16) ** 2));
+    const patch = Math.sin(x * .059 + Math.sin(y * .024)) * Math.cos(y * .017);
+    const v = wet ? 95 + patch * 32 + track * 18 + rand() * 9 : 235 - track * 28 + patch * 8 + rand() * 8;
+    pixels.data.set([v, v, v, 255], (y * c.width + x) * 4);
+  }
+  ctx.putImageData(pixels, 0, 0);
+  const texture = new THREE.CanvasTexture(c);
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  texture.anisotropy = 8;
+  roughnessTextures.set(wet, texture);
+  return texture;
 }

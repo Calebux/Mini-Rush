@@ -2,8 +2,7 @@ import * as T from 'three';
 import { AssetLibrary, disposeCarInstance } from './assets';
 import type { CarSpec } from './cars';
 import { buildGarage } from './garageSet';
-import { toonMat } from './toon';
-import { lightCars } from './lighting';
+import { lightCars, studioEnvironment } from './lighting';
 
 /** One renderer, a separate scene in the garage: menu lighting never changes a race. */
 export class Showroom {
@@ -16,28 +15,18 @@ export class Showroom {
   private stage: HTMLElement | null = null;
   private bounds = new T.Box3();
   private lit = '';
-  private envReady = false;
   private carEnv: T.Texture | null = null;
   constructor(private assets: AssetLibrary) {
-    // The garage is modelled in the game's own cel-shaded style
-    // (src/garageSet.ts), so the menu looks like the same game as the races.
-    // Only the car is realistic: its paint reflects a photograph of a real
-    // auto shop (Poly Haven, CC0), which is never shown itself.
+    // A physical studio set with broad softbox reflections across the paint.
     this.scene.background = new T.Color(0x0c0e16);
     buildGarage(this.scene);
     // a display turntable: a dark disc with a thin cyan edge
-    const plinth = new T.Mesh(new T.CylinderGeometry(3.25, 3.32, .07, 96), toonMat(0x22262f));
+    const plinth = new T.Mesh(new T.CylinderGeometry(3.25, 3.32, .07, 96),
+      new T.MeshStandardMaterial({ color: 0x141a23, roughness: .38, metalness: .55 }));
     plinth.position.y = -.03; plinth.receiveShadow = true; this.scene.add(plinth);
-    const ring = new T.Mesh(new T.RingGeometry(3.12, 3.18, 96),
-      new T.MeshBasicMaterial({ color: new T.Color(0x22e6ff).multiplyScalar(1.1), side: T.DoubleSide, toneMapped: false }));
+    const ring = new T.Mesh(new T.RingGeometry(3.14, 3.16, 96),
+      new T.MeshBasicMaterial({ color: 0x8bdaee, side: T.DoubleSide, toneMapped: false }));
     ring.rotation.x = -Math.PI / 2; ring.position.y = .012; this.scene.add(ring);
-    new T.TextureLoader().load(`${import.meta.env.BASE_URL}assets/env/garage_2k.jpg`, (photo) => {
-      photo.mapping = T.EquirectangularReflectionMapping;
-      photo.colorSpace = T.SRGBColorSpace;
-      this.carEnv = photo;
-      this.envReady = true;
-      this.lit = ''; // re-light the car now its reflections are in
-    });
     for (const id of ['home-car-stage', 'workshop-car-stage', 'garage-car-stage']) {
       const el = document.getElementById(id)!;
       el.addEventListener('pointerdown', e => { this.dragX = e.clientX; el.setPointerCapture(e.pointerId); });
@@ -59,6 +48,11 @@ export class Showroom {
     }
   }
   render(renderer: T.WebGLRenderer, workshop: boolean, garage = false): void {
+    if (!this.carEnv) {
+      this.carEnv = studioEnvironment(renderer);
+      this.scene.environment = this.carEnv;
+      this.scene.environmentIntensity = .35;
+    }
     this.stage = document.getElementById(garage ? 'garage-car-stage' : workshop ? 'workshop-car-stage' : 'home-car-stage');
     const r = this.stage!.getBoundingClientRect();
     const w = renderer.domElement.clientWidth, h = renderer.domElement.clientHeight;
@@ -71,13 +65,13 @@ export class Showroom {
     this.camera.fov = T.MathUtils.radToDeg(2 * Math.atan(Math.tan(T.MathUtils.degToRad(18)) * wanted / radius));
     this.camera.aspect = w / h;
     this.camera.setViewOffset(w, h, w / 2 - (r.left + r.width / 2), h / 2 - (r.top + r.height / 2), w, h);
-    this.camera.position.set(Math.sin(this.angle) * radius, radius * .39, Math.cos(this.angle) * radius);
+    this.camera.position.set(Math.sin(this.angle) * radius, radius * .25, Math.cos(this.angle) * radius);
     this.camera.lookAt(0, .65, 0); this.camera.updateProjectionMatrix();
     if (garage) {
       // Fit the actual car into the clear UI rectangle at every rotation.
       // Contact-shadow planes must not make a small car look far away.
       const center = this.bounds.getCenter(new T.Vector3());
-      const direction = new T.Vector3(Math.sin(this.angle), .32, Math.cos(this.angle)).normalize();
+      const direction = new T.Vector3(Math.sin(this.angle), .24, Math.cos(this.angle)).normalize();
       this.camera.position.copy(center).add(direction);
       this.camera.lookAt(center);
       const inverse = this.camera.quaternion.clone().invert();
@@ -96,9 +90,8 @@ export class Showroom {
       this.camera.lookAt(center);
     }
     // the car on the turntable reflects studio softboxes: the photo-shoot look
-    if (this.car && this.lit !== this.key && this.envReady) {
-      // the car reflects the garage around it, once the photo is in
-      if (this.carEnv) lightCars(this.car, this.carEnv, 1);
+    if (this.car && this.lit !== this.key) {
+      lightCars(this.car, this.carEnv, .85);
       this.lit = this.key;
     }
     renderer.render(this.scene, this.camera);

@@ -1,0 +1,93 @@
+/* Shared front-end treatment. Layout rules stay scoped away from the race HUD. */
+:root {
+  --console-paper: #f1f4f7;
+  --console-muted: #a8b6c6;
+  --console-line: rgba(218, 234, 249, .18);
+  --console-panel: rgba(10, 16, 25, .9);
+}
+.console-eyebrow { display: block; color: #a6dbe8; font: 700 10px/1.4 system-ui, sans-serif; letter-spacing: 2.5px; }
+:is(#tour, #results) button { transition: background-color .16s, border-color .16s, box-shadow .16s; }
+:is(#tour, #results) button:focus-visible {
+  outline: 2px solid #fff; outline-offset: 4px; box-shadow: 0 0 0 6px #68cce633;
+}
+/* Home + garage cards keep the original Neon Night shape; only the type
+   changes, to the cleaner system face used across the other screens. */
+#menu .logo, #menu .sub-logo, #menu .driver-chip,
+#menu .setup-pill span, #menu .setup-pill strong,
+#menu .mode-home-copy small, #menu .mode-home-copy strong, #menu .mode-home-copy em, #menu .mode-home-cta,
+#menu #btn-play, #menu #btn-garage-menu,
+#menu #btn-bounty .ev-title, #menu #btn-bounty .ev-label, #menu #btn-bounty .ev-meta,
+#menu #bank-line, #menu .home-links button, #menu .home-links #btn-how,
+#home-car-name, .showroom-caption small, #home-car-eyebrow, .garage-caption small, .showroom-hint,
+#garage .stage-title, #garage .stage-step, #garage #car-name, #garage #car-blurb,
+#garage .car-tab, #garage .car-roster-item strong, #garage .car-roster-item small,
+#garage .cstat, #garage #garage-bank, #garage #btn-workshop-garage,
+#garage #btn-garage-done, #garage #btn-buy-car {
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+#tour .stage-cta, #results .dock-hero {
+  background: #edf5f7; color: #101925; border: 1px solid #fff; border-radius: 3px;
+  box-shadow: none; font: 800 17px/1.3 system-ui, sans-serif; letter-spacing: 1.8px; text-shadow: none;
+}
+#tour .stage-cta:hover, #results .dock-hero:hover { background: #bcecf5; }
+#tour .stage-title { font: 750 20px system-ui, sans-serif; letter-spacing: 5px; }
+#tour .stage-title em { color: #a6dbe8; }
+#tour .stage-step { color: var(--console-muted); font: 600 9px system-ui, sans-serif; letter-spacing: 2px; margin-top: 8px; }
+#tour .stage-card {
+  border-radius: 4px; border: 1px solid var(--console-line); background: var(--console-panel); box-shadow: none;
+}
+#tour .stage-card { padding: 24px; }
+#tour #map-name-t { font: italic 800 30px system-ui, sans-serif; }
+#tour #map-route { color: #b5dbe7; }
+#tour #map-blurb { color: var(--console-muted); font: 13px/1.6 system-ui, sans-serif; }
+#tour .stage-arrow, #tour .stage-back { border-radius: 3px; border-color: var(--console-line); }
+
+#results { background: radial-gradient(ellipse at 15% 35%, #27405066, transparent 60%), #080f1aee; color: var(--console-paper); }
+.result-heading { text-align: center; margin-bottom: 8px; }
+.result-heading h2 { font: 750 28px/1.1 system-ui, sans-serif; letter-spacing: -.8px; margin: 8px 0; }
+#results #result-place { font-family: system-ui, sans-serif; font-weight: 900; letter-spacing: -6px; }
+#results #result-word { font: 700 13px system-ui, sans-serif; letter-spacing: 6px; }
+#results .standing { border-radius: 2px; padding: 9px 12px; }
+#results .standing.you { border-color: #a6dbe866; background: #a6dbe814; }
+#results .tally { border-radius: 3px; background: #ffffff04; border: 1px solid var(--console-line); }
+#results .tally-row { padding: 8px 14px; }
+#results .tally-row .k { color: #aebdce; font: 650 10px system-ui, sans-serif; letter-spacing: 2px; }
+#results .tally-row .v { font-family: system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+#results .dock-btn { border-radius: 3px; border-color: var(--console-line); font: 650 11px system-ui, sans-serif; }
+
+/* A readable release cue turns the power slide into a learnable mechanic. */
+#drift-ui { min-width: 150px; bottom: max(240px, calc(var(--safe-bottom) + 220px)); padding: 12px 18px; background: #09131dd9; border-left: 2px solid #8cd8ed; color: #e8f8ff; }
+#drift-ui small { font: 700 9px/1.4 system-ui, sans-serif; letter-spacing: 1.6px; opacity: 1; }
+#drift-time { display: block; margin: 3px 0; font: italic 800 32px/1 system-ui, sans-serif; }
+.drift-charge { height: 3px; background: #ffffff24; margin: 8px 0; overflow: hidden; }
+.drift-charge i { display: block; height: 100%; width: 0; background: #a6dbe8; }
+#drift-ui.ready { border-color: #ffc37f; color: #ffe2be; }
+#drift-ui.ready .drift-charge i { background: #ffc37f; }
+#drift-release { color: #b4c9d8; }
+#drift-ui.ready #drift-release { color: #ffe2be; }
+#hud-banner { top: 24%; }
+body.finish-view #hud-banner, body:has(#hud:not(.visible)) #hud-banner { visibility: hidden; }
+
+@media (min-width: 900px) and (min-height: 560px) {
+  #results { display: grid; grid-template-columns: minmax(280px, 440px) minmax(300px, 440px); grid-template-rows: auto auto auto auto auto auto; justify-content: center; align-content: center; gap: 14px 70px; padding: 40px; }
+  #results.hidden { display: none; }
+  #results::before, #results::after { display: none; }
+  #results .result-heading { grid-column: 1 / -1; text-align: left; padding-bottom: 20px; border-bottom: 1px solid var(--console-line); }
+  #result-verdict { grid-column: 1; grid-row: 2 / 4; align-self: center; }
+  #results #result-place { font-size: 130px; }
+  #results #r-rank { grid-column: 1; grid-row: 4; }
+  #results #r-standings { grid-column: 2; grid-row: 2 / 4; width: 100%; }
+  #results .tally { grid-column: 1; grid-row: 5; width: 100%; }
+  #results #r-coin-note { grid-column: 1; grid-row: 6; }
+  #results .result-dock { grid-column: 2; grid-row: 4 / 7; width: 100%; align-self: end; }
+  #results #btn-bounty-results { grid-column: 1 / -1; }
+}
+@media (min-width: 600px) and (max-height: 500px) {
+  #drift-ui { right: auto; left: 50%; bottom: max(104px, calc(var(--safe-bottom) + 90px)); transform: translateX(-50%); padding: 8px 12px; }
+  #drift-time { font-size: 24px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(#tour, #results) button { transition: none; }
+  #results .standing { animation: none; }
+  #hud-banner.show { animation: none; opacity: 1; }
+}

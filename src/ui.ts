@@ -259,6 +259,9 @@ export class UI {
   private progress = $('progress');
   private driftUi = $('drift-ui');
   private driftTime = $('drift-time');
+  private driftLabel = $('drift-label');
+  private driftRelease = $('drift-release');
+  private driftCharge = $('drift-charge-fill');
   private modeButtons: HTMLElement[] = [];
   private modeCards: HTMLElement[] = [];
   private deckIndex = 0;       // mode the select deck is focused on
@@ -1951,16 +1954,22 @@ export class UI {
   }
 
   /** Live drift-chain readout on the HUD. Pass null (or ≤0) to hide it. */
-  showDrift(seconds: number | null): void {
+  showDrift(seconds: number | null, powerSeconds = 0): void {
     if (!seconds || seconds < 0.35) {
       hudClass(this.driftUi, 'on', false);
       return;
     }
     hudText(this.driftTime, `${seconds.toFixed(1)}s`);
+    hudText(this.driftLabel, powerSeconds > 0 ? 'POWER DRIFT' : 'DRIFT');
+    hudText(this.driftRelease, powerSeconds > 1.75 ? 'PERFECT · RELEASE BRAKE'
+      : powerSeconds > .5 ? 'RELEASE BRAKE TO BOOST' : 'HOLD YOUR LINE');
+    hudWidth(this.driftCharge, Math.min(1, powerSeconds / 1.75) * 100);
+    hudClass(this.driftUi, 'ready', powerSeconds > .5);
     hudClass(this.driftUi, 'on', true);
   }
 
   private bannerEl: HTMLElement | null = null;
+  private bannerTimer = 0;
 
   /**
    * A full-width slanted strip for the big moments (takedowns, wrecks, drift
@@ -1974,10 +1983,13 @@ export class UI {
       document.body.appendChild(this.bannerEl);
     }
     const el = this.bannerEl;
+    window.clearTimeout(this.bannerTimer);
     el.className = '';
     el.innerHTML = `<span>${text.replace(/[<>&]/g, '')}</span>`;
     void el.offsetWidth;
     el.className = `show ${kind}`;
+    // Also dismiss when reduced motion disables the CSS animation.
+    this.bannerTimer = window.setTimeout(() => el.classList.remove('show'), kind === 'drift' ? 900 : 1250);
   }
 
   popText(text: string, color = '#fcff52'): void {

@@ -27,7 +27,7 @@ const DAY: EnvironmentTheme = {
 };
 
 const THEMES: Record<string, Partial<EnvironmentTheme>> = {
-  lagos: { coast: true, sky: 0x78afcb, horizon: 0xe6e6d5, fog: 0xbdcdd0,
+  lagos: { coast: true, sky: 0x79a5c6, horizon: 0xe8d8bc, fog: 0xbcc8cb,
     ground: 0x65754c, pavement: 0xbfc2af, foliage: 0x47643e, water: 0x397f8d,
     facade: [0xd5c9ad, 0xb6c6c1, 0xddd8c6, 0xacae99], accent: 0x306d63 },
   beijing: { sky: 0x849fae, horizon: 0xedcfae, fog: 0xb7ada0,
