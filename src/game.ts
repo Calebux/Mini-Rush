@@ -77,7 +77,7 @@ const SEPARATION_PASSES = 3;
 // where the car is. `driver` hides the car body — there is no modelled
 // interior to sit inside, so the view is from the screen rail forward.
 const CAMS = [
-  { back: 8.5, h: 6.1, ahead: 13, fov: 66, lat: 0.55, driver: false },
+  { back: 6.6, h: 3.5, ahead: 12, fov: 60, lat: 0.55, driver: false },
   { back: 5.2, h: 2.9, ahead: 11, fov: 75, lat: 0.55, driver: false },
   { back: 14.0, h: 11.0, ahead: 19, fov: 57, lat: 0.55, driver: false },
   // Seated at the car's middle rather than out on the nose: a driver sits
@@ -159,6 +159,8 @@ export class Game {
   // the wreck, the frame whites out, then control comes straight back.
   private cine = { t: 0, s: 0, flash: 0 };
   private boostFx = 0;
+  private camSurge = 0; // 0..1, the nitro pull-back on the chase camera
+  private rumbleT = 0;
   private busted = false;
   private lastDistrict = -1;
   private gun!: GunHud;
@@ -878,7 +880,7 @@ export class Game {
     // thing that makes speed legible. A no-traffic mode (HARDCORE) leaves the
     // road to the racers.
     this.traffic = new TrafficManager(
-      this.scene, this.assets, this.track, seed, mode.noTraffic ? 0 : 10,
+      this.scene, this.assets, this.track, seed, mode.noTraffic ? 0 : 14,
       CARS[this.carIndex].model, map.id
     );
     // A class mode fields the rest of that shelf (less workshop builds where
@@ -1499,7 +1501,7 @@ export class Game {
     // the edges start to tear before the nitro does it properly.
     const top = BASE_SPEED * this.player.speedMul;
     const flatOut = this.state === 'racing'
-      ? THREE.MathUtils.clamp((this.player.v / top - 0.7) / 0.3, 0, 1) * 0.42 : 0;
+      ? THREE.MathUtils.clamp((this.player.v / top - 0.66) / 0.34, 0, 1) * 0.55 : 0;
     const wanted = this.player.nitroActive ? 1 : flatOut;
     this.boostFx += (wanted - this.boostFx) * Math.min(1, real * (wanted > this.boostFx ? 9 : 3.5));
     this.postfx?.tick(elapsed);
@@ -2163,7 +2165,7 @@ export class Game {
 
     // glide between camera modes rather than snapping
     const m = MAPS[this.mapIndex].id === 'lagos' && this.camMode === 0
-      ? { ...CAMS[0], back: 7.2, h: 3.7, ahead: 15, fov: 63 }
+      ? { ...CAMS[0], back: 6.4, h: 3.3, ahead: 13, fov: 60 }
       : CAMS[this.camMode];
     this.cam.back = THREE.MathUtils.damp(this.cam.back, m.back, 4, dt);
     this.cam.h = THREE.MathUtils.damp(this.cam.h, m.h, 4, dt);
@@ -2173,14 +2175,28 @@ export class Game {
     // snapping the view sideways
     this.cam.lat = THREE.MathUtils.damp(this.cam.lat, m.lat, 4, dt);
 
-    const back = this.track.frame(p.s - this.cam.back);
+    // Nitro lets the car pull away from the lens and drops the eye toward the
+    // tarmac; both read as a surge before the FOV even moves.
+    const surgeTarget = p.nitroActive && !m.driver ? 1 : 0;
+    this.camSurge = THREE.MathUtils.damp(this.camSurge, surgeTarget, surgeTarget ? 5 : 2.2, dt);
+    const back = this.track.frame(p.s - this.cam.back - this.camSurge * 1.8);
     const ahead = this.track.frame(p.s + this.cam.ahead);
     const lat = p.x * this.cam.lat;
-    const speedZoom = this.player.nitroActive ? 0.9 : 0;
 
     let cx = back.x + back.nx * lat;
     let cz = back.z + back.nz * lat;
-    let cy = this.cam.h + speedZoom * 0.4;
+    let cy = this.cam.h - this.camSurge * 0.45;
+    // Road rumble: a fine, fast tremor that starts near top speed and doubles
+    // under nitro. Two detuned sines rather than noise, so it hums, not jitters.
+    const topV = BASE_SPEED * p.speedMul;
+    const rumble = this.state === 'racing'
+      ? THREE.MathUtils.clamp((p.v / topV - 0.72) / 0.28, 0, 1) * 0.035 + this.camSurge * 0.05 : 0;
+    if (rumble > 0.001) {
+      this.rumbleT += dt;
+      cx += Math.sin(this.rumbleT * 47) * rumble;
+      cy += Math.sin(this.rumbleT * 61 + 1.3) * rumble * 0.8;
+      cz += Math.sin(this.rumbleT * 53 + 2.1) * rumble * 0.6;
+    }
     if (this.shake > 0.002) {
       this.shake *= Math.exp(-6 * dt);
       cx += (Math.random() - 0.5) * this.shake;
@@ -2198,7 +2214,7 @@ export class Game {
     this.syncSky(cx, cz);
 
     // FOV: camera-mode base + speed stretch + nitro punch
-    const targetFov = this.cam.fov + p.v * 0.12 + (p.nitroActive ? 9 : 0);
+    const targetFov = this.cam.fov + p.v * 0.19 + (p.nitroActive ? 13 : 0);
     if (Math.abs(this.camera.fov - targetFov) > 0.1) {
       this.camera.fov = THREE.MathUtils.damp(this.camera.fov, targetFov, 6, dt);
       this.camera.updateProjectionMatrix();

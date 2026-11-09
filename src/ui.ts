@@ -1,4 +1,5 @@
 import { AudioManager } from './audio';
+import { SPEED_DISPLAY } from './constants';
 import {
   BOUNTY_CLOSES, BOUNTY_MODE, bountyActive, bountyMapIndex, bountyPrize, bountyQualifies, bountySplit, loadBounty
 } from './bounty';
@@ -1882,12 +1883,12 @@ export class UI {
 
   private updateDash(kmh: number, nitroTanks: number, nitroActive: boolean): void {
     if (!this.dashOn) return; // the dials are not on screen; don't touch them
-    const gear = Math.max(1, Math.min(6, 1 + Math.floor(kmh / 40)));
-    const rev = nitroActive ? 0.93 : Math.min(1, (kmh % 40) / 40 * 0.82 + 0.12);
+    const gear = Math.max(1, Math.min(6, 1 + Math.floor(kmh / 62)));
+    const rev = nitroActive ? 0.93 : Math.min(1, (kmh % 62) / 62 * 0.82 + 0.12);
     hudText(this.dashKmh, String(kmh));
     hudText(this.dashGearN, String(gear));
     hudText(this.dashBoost, nitroActive ? 'ON' : String(nitroTanks));
-    this.setDial(this.dashSpeedArc, this.dashSpeedNeedle, kmh / 260);
+    this.setDial(this.dashSpeedArc, this.dashSpeedNeedle, kmh / 420);
     this.setDial(this.dashRevArc, this.dashRevNeedle, rev);
     hudClass(this.hud, 'redline-dash', rev > 0.85);
   }
@@ -1910,10 +1911,10 @@ export class UI {
     }
     hudText(this.hudLap, `LAP ${lap}/${laps}`);
     hudText(this.hudTime, time.toFixed(2));
-    const kmh = Math.round(speed * 3.6);
+    const kmh = Math.round(speed * 3.6 * SPEED_DISPLAY);
     hudText(this.hudSpeed, String(kmh));
     // 230 km/h is roughly nitro top speed, so the bar reads full only on boost
-    const strain = Math.min(1, kmh / 230);
+    const strain = Math.min(1, kmh / 380);
     hudWidth(this.speedFill, strain * 100);
     hudClass(this.speedUi, 'redline', strain > 0.82);
     hudText(this.hudCoins, `⬤ ${coins}`);

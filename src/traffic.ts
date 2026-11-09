@@ -22,8 +22,8 @@ import { Track } from './track';
 // Four lanes inside the road, with 2.25 m between neighbours — wide enough to
 // thread at speed, tight enough that it counts.
 const LANES = [-3.4, -1.15, 1.15, 3.4];
-const MIN_ROW_GAP = 26;   // metres between one row of traffic and the next
-const ROW_SPREAD = 34;    // ...plus up to this much more
+const MIN_ROW_GAP = 19;   // metres between one row of traffic and the next
+const ROW_SPREAD = 26;    // ...plus up to this much more
 
 export interface TrafficCar {
   mesh: THREE.Group;

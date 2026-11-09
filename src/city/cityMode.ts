@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { SPEED_DISPLAY } from '../constants';
 import type { AssetLibrary } from '../assets';
 import { disposeCarInstance } from '../assets';
 import type { AudioManager } from '../audio';
@@ -725,7 +726,7 @@ export class CityMode {
   private updateHud(dt: number, speed: number): void {
     this.updateWanted();
     this.hud.classList.toggle('has-pad', !!this.deps.input.padName);
-    const kmh = Math.round(Math.abs(speed) * 3.6);
+    const kmh = Math.round(Math.abs(speed) * 3.6 * SPEED_DISPLAY);
     if (this.driverView) this.deps.dash?.update(kmh, this.drive.nitro >= 0.999 ? 1 : 0, this.drive.boosting);
     const speedEl = document.getElementById('hud-speed-v');
     if (speedEl) speedEl.textContent = String(kmh);

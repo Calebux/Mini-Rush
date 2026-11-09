@@ -3,6 +3,9 @@ export const TRACK_LENGTH_DEFAULT = 1800;
 export const SAMPLE_STEP = 2; // meters between track spline samples
 
 export const BASE_SPEED = 37;
+// The speedo reads the world faster than the physics runs it: arcade racers
+// show 250-350 km/h, and the number is part of how fast the race feels.
+export const SPEED_DISPLAY = 1.65;
 export const END_SPEED_BONUS = 9; // extra top speed by the final stretch
 export const NITRO_SPEED = 62;
 export const NITRO_TIME = 2.4;
