@@ -2,7 +2,8 @@ import { Game } from './game';
 import { trackVisibleViewport, watchAndroidHost } from './host';
 import { track } from './usage';
 import { recoverPurchase } from './workshop';
-import './neonHome.css'; // last: the Neon Night theme overrides the older sheets
+import './neonHome.css'; // the Neon Night theme overrides the older sheets
+import './raceHud.css'; // last: the console race HUD sits on top of the theme
 
 // Finish an interrupted coin purchase before any menu/race can read the bank.
 try { recoverPurchase(); } catch { /* Workshop displays the recoverable storage error. */ }

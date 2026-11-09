@@ -1,0 +1,165 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   RACE HUD — console pass. Loaded after neonHome.css so it wins.
+
+   One language for everything the eye reads mid-race: slanted glass plates
+   with a cyan edge, Orbitron for labels, heavy italic numerals for the three
+   things that change (place, speed, nitro). The plates lean forward at the
+   same angle as the speed lines, so the HUD reads as part of the motion.
+   ───────────────────────────────────────────────────────────────────────── */
+
+:root {
+  --hud-skew: -12deg;
+  --hud-plate: linear-gradient(100deg, rgba(8, 10, 24, .86) 0%, rgba(8, 10, 24, .6) 100%);
+  --hud-edge: var(--nn-cyan, #22e6ff);
+  --hud-num: 'Orbitron', 'Eurostile', 'Arial Black', sans-serif;
+}
+
+#hud { text-shadow: none; }
+
+/* ---------- place / lap / time: one plate, top left ---------- */
+#hud-top > div:first-child {
+  position: relative;
+  display: grid; grid-template-columns: auto auto; grid-template-rows: auto auto;
+  column-gap: 14px; align-items: end;
+  padding: 8px 18px 9px 16px;
+  background: var(--hud-plate);
+  border-left: 3px solid var(--hud-edge);
+  transform: skewX(var(--hud-skew));
+  transform-origin: left top;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .35);
+}
+#hud-top > div:first-child > * { transform: skewX(calc(var(--hud-skew) * -1)); }
+#hud-pos {
+  grid-row: 1 / span 2;
+  font-family: var(--hud-num); font-style: italic; font-weight: 900;
+  font-size: 44px; line-height: .9; letter-spacing: -1px; color: #fff;
+}
+#hud-pos small {
+  font-size: 15px; font-weight: 700; letter-spacing: 0; color: rgba(238, 242, 255, .55);
+  margin-left: 2px;
+}
+#hud-pos sup {
+  font-size: 16px; font-weight: 900; vertical-align: top; position: relative; top: 4px;
+  color: var(--hud-edge); margin-left: 1px;
+}
+#hud-pos.first { color: var(--nn-money, #fcd34d); text-shadow: 0 0 18px rgba(252, 211, 77, .35); }
+#hud-lap {
+  font-family: var(--hud-num); font-weight: 800; font-size: 11px; letter-spacing: 2.4px;
+  color: var(--hud-edge); margin: 0;
+}
+#hud-time {
+  font-family: var(--hud-num); font-weight: 600; font-size: 14px; letter-spacing: .5px;
+  color: #fff; opacity: 1; margin: 0;
+}
+#weather-label { grid-column: 1 / span 2; }
+
+/* ---------- coins: a small money plate, top right ---------- */
+#hud-coins {
+  font-family: var(--hud-num); font-weight: 800; font-size: 15px;
+  padding: 7px 14px; background: var(--hud-plate);
+  border-right: 3px solid var(--nn-money, #fcd34d);
+  transform: skewX(var(--hud-skew));
+}
+
+/* ---------- race progress: a hairline with markers ---------- */
+#progress {
+  height: 3px; border-radius: 0; width: min(56vw, 300px);
+  background: linear-gradient(90deg, rgba(34, 230, 255, .1), rgba(34, 230, 255, .35), rgba(34, 230, 255, .1));
+}
+#progress .dot {
+  width: 7px; height: 12px; border-radius: 1px; background: rgba(238, 242, 255, .7);
+  transform: translate(-50%, -50%) skewX(var(--hud-skew));
+}
+#progress .dot.player {
+  width: 9px; height: 16px; border-radius: 1px; background: var(--hud-edge);
+  box-shadow: 0 0 12px var(--hud-edge);
+}
+
+#btn-pause {
+  width: 40px; height: 34px; border-radius: 0;
+  background: var(--hud-plate); border: 0; border-bottom: 2px solid var(--hud-edge);
+  font-size: 14px; transform: translateX(-50%) skewX(var(--hud-skew));
+}
+
+/* ---------- speed: the hero numeral, bottom right ---------- */
+#hud-speed { line-height: 1; }
+#hud-speed-v {
+  font-family: var(--hud-num); font-style: italic; font-weight: 900;
+  font-size: 58px; letter-spacing: -2px; color: #fff;
+  text-shadow: 0 4px 18px rgba(0, 0, 0, .55);
+  display: inline-block; min-width: 3ch; text-align: right;
+}
+#hud-speed small {
+  font-family: var(--hud-num); font-size: 10px; font-weight: 800; letter-spacing: 3px;
+  color: var(--hud-edge); opacity: 1;
+}
+/* the strain bar becomes a slanted segmented tach */
+#speed-bar {
+  width: 150px; height: 8px; margin-top: 6px; border-radius: 0;
+  transform: skewX(var(--hud-skew));
+  background:
+    repeating-linear-gradient(90deg, transparent 0 13px, rgba(6, 7, 18, .9) 13px 15px),
+    rgba(238, 242, 255, .14);
+}
+#speed-bar i {
+  border-radius: 0;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 13px, rgba(6, 7, 18, .9) 13px 15px),
+    linear-gradient(90deg, var(--hud-edge), #8fd8ff 70%, #fff);
+  transition: width .08s linear;
+}
+#hud-speed.redline #speed-bar i {
+  background:
+    repeating-linear-gradient(90deg, transparent 0 13px, rgba(6, 7, 18, .9) 13px 15px),
+    linear-gradient(90deg, var(--hud-edge), #ffd04a 55%, #ff4d2e);
+  box-shadow: 0 0 14px rgba(255, 77, 46, .6);
+}
+#hud-speed.redline #hud-speed-v { color: #fff3e8; text-shadow: 0 0 22px rgba(255, 110, 60, .55); }
+
+/* ---------- nitro: a slanted charge plate, bottom centre ---------- */
+#nitro-ui {
+  border-radius: 0; padding: 10px 20px; gap: 12px;
+  font-family: var(--hud-num); font-size: 12px; font-weight: 900; letter-spacing: 3px;
+  background: linear-gradient(100deg, rgba(10, 30, 60, .85), rgba(8, 10, 24, .7));
+  border: 0; border-bottom: 2px solid #37b6ff; color: #9fe0ff;
+  transform: translateX(-50%) skewX(var(--hud-skew));
+}
+#nitro-ui > * { transform: skewX(calc(var(--hud-skew) * -1)); }
+#nitro-pips { gap: 5px; }
+#nitro-pips i { width: 22px; height: 10px; border-radius: 0; transform: skewX(var(--hud-skew)); }
+#nitro-pips i.lit { background: linear-gradient(90deg, #37b6ff, #bff0ff); box-shadow: 0 0 12px rgba(55, 182, 255, .9); }
+#nitro-ui.ready { box-shadow: 0 0 26px rgba(55, 182, 255, .5); animation: hud-ready 1.2s ease-in-out infinite; }
+#nitro-ui.burning {
+  background: linear-gradient(100deg, rgba(55, 182, 255, .85), rgba(160, 120, 255, .75));
+  color: #fff; border-bottom-color: #fff; box-shadow: 0 0 34px rgba(55, 182, 255, .85);
+}
+@keyframes hud-ready { 50% { box-shadow: 0 0 40px rgba(55, 182, 255, .75); } }
+
+/* ---------- style combo ---------- */
+#style-mult { font-family: var(--hud-num); font-size: 20px; letter-spacing: 1px; }
+
+/* ---------- countdown: big, slanted, punches in ---------- */
+#countdown {
+  font-family: var(--hud-num); font-style: italic; font-weight: 900;
+  font-size: clamp(90px, 24vw, 168px); letter-spacing: -4px; color: #fff;
+  text-shadow: 0 0 40px rgba(34, 230, 255, .55), 0 8px 30px rgba(0, 0, 0, .6);
+}
+#countdown.show { animation: hud-count .9s cubic-bezier(.2, .9, .25, 1) both; }
+@keyframes hud-count {
+  0% { transform: scale(1.9) skewX(var(--hud-skew)); opacity: 0; filter: blur(6px); }
+  22% { transform: scale(1) skewX(var(--hud-skew)); opacity: 1; filter: blur(0); }
+  80% { transform: scale(.96) skewX(var(--hud-skew)); opacity: 1; }
+  100% { transform: scale(.9) skewX(var(--hud-skew)); opacity: .9; }
+}
+
+/* ---------- phones: same plates, smaller ---------- */
+@media (max-width: 520px) {
+  #hud-pos { font-size: 34px; }
+  #hud-speed-v { font-size: 44px; }
+  #speed-bar { width: 112px; }
+  #nitro-pips i { width: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #countdown.show, #nitro-ui.ready { animation: none; }
+}

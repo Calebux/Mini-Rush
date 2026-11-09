@@ -1840,7 +1840,13 @@ export class UI {
   }
 
   countdown(text: string): void {
+    const changed = this.countdownEl.textContent !== text;
     this.countdownEl.textContent = text;
+    if (changed) {
+      // restart the punch-in for every new number, not just the first
+      this.countdownEl.classList.remove('show');
+      void this.countdownEl.offsetWidth;
+    }
     this.countdownEl.classList.add('show');
   }
 
@@ -1907,7 +1913,10 @@ export class UI {
     const placeKey = `${place}/${racers}`;
     if (this.hudPlaceKey !== placeKey) {
       this.hudPlaceKey = placeKey;
-      this.hudPos.innerHTML = `P${place}<small>/${racers}</small>`;
+      const suffix = place % 100 >= 11 && place % 100 <= 13 ? 'th'
+        : (['th', 'st', 'nd', 'rd'][place % 10] ?? 'th');
+      this.hudPos.innerHTML = `${place}<sup>${suffix.toUpperCase()}</sup><small>/${racers}</small>`;
+      this.hudPos.classList.toggle('first', place === 1);
     }
     hudText(this.hudLap, `LAP ${lap}/${laps}`);
     hudText(this.hudTime, time.toFixed(2));
