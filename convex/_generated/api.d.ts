@@ -11,6 +11,9 @@
 import type * as boards from "../boards.js";
 import type * as bounty from "../bounty.js";
 import type * as challenges from "../challenges.js";
+import type * as crons from "../crons.js";
+import type * as near from "../near.js";
+import type * as nearDb from "../nearDb.js";
 import type * as profiles from "../profiles.js";
 import type * as usage from "../usage.js";
 import type * as weekend from "../weekend.js";
@@ -25,6 +28,9 @@ declare const fullApi: ApiFromModules<{
   boards: typeof boards;
   bounty: typeof bounty;
   challenges: typeof challenges;
+  crons: typeof crons;
+  near: typeof near;
+  nearDb: typeof nearDb;
   profiles: typeof profiles;
   usage: typeof usage;
   weekend: typeof weekend;

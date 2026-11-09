@@ -60,6 +60,7 @@ import {
 } from './weekend';
 import { decodeGhost, encodeGhost } from './ghostShare';
 import { Challenge, challengeCode, createChallenge, loadChallenge } from './challenge';
+import { payRace, useNitroCan } from './near';
 
 type State = 'boot' | 'menu' | 'countdown' | 'racing' | 'finished';
 
@@ -1255,6 +1256,11 @@ export class Game {
     this.coins += payout;
     if (payout > 0) setTimeout(() => this.ui.popText(`+${payout} COINS`, '#fcff52'), 1600);
     deposit(this.coins); // race coins bank for the garage
+    // ...and the same coins are minted to the player as RUSH on NEAR
+    const earned = this.coins;
+    void payRace(earned).then((r) => {
+      if (r && this.state !== 'racing') this.ui.popText(`+${r.minted} RUSH · ON NEAR`, '#22e6ff');
+    });
 
     // Record local stats
     recordLocalRace({
@@ -1522,6 +1528,14 @@ export class Game {
         if (this.countdownT <= 0) {
           this.state = 'racing';
           this.ui.countdown('GO!');
+          // A nitro can held on NEAR is cracked open at the line: burned on
+          // chain, +1 tank in the car once the burn lands.
+          const racer = this.player;
+          void useNitroCan().then((used) => {
+            if (!used || this.player !== racer || this.state !== 'racing') return;
+            racer.nitroTanks++;
+            this.ui.popText('NITRO CAN CRACKED · +1 TANK', '#7fd4ff');
+          });
           this.audio.play('go');
           this.ui.startTutorial();
           setTimeout(() => this.ui.hideCountdown(), 600);

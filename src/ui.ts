@@ -29,6 +29,7 @@ import {
 import { track } from './usage';
 import { BADGES, earnedBadges } from './badges';
 import { LAP_METRES, LAPS } from './city/cityRace';
+import { Market } from './market';
 import { Build, workshopSpec } from './workshop';
 import { WorkshopUI } from './workshopUI';
 
@@ -257,6 +258,7 @@ export class UI {
   private combo = $('combo');
   private countdownEl = $('countdown');
   private progress = $('progress');
+  private market: Market | null = null;
   private driftUi = $('drift-ui');
   private driftTime = $('drift-time');
   private driftLabel = $('drift-label');
@@ -469,9 +471,15 @@ export class UI {
       goto('menu', 'garage');
     });
     on('btn-market-home', () => {
+      this.audio.play('click');
       this.exitDaily(); this.exitWeekend(); this.exitBounty();
-      this.selectCar(CARS.findIndex(c => c.class === 'hyper'));
-      goto('menu', 'garage');
+      this.market ??= new Market();
+      this.market.onClose = () => {
+        this.audio.play('back');
+        this.menu.classList.remove('hidden');
+      };
+      this.menu.classList.add('hidden');
+      void this.market.open();
     });
     on('pill-laps', () => {
       this.audio.unlock();

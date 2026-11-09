@@ -116,5 +116,34 @@ export default defineSchema({
     receipts: v.number(),                  // race receipts sent on-chain
     bountyEntries: v.number(),
     purchases: v.number()                  // garage cars bought with NIM
-  }).index('by_day', ['day'])
+  }).index('by_day', ['day']),
+
+  // NEAR testnet accounts the game created for players (convex/near.ts). The
+  // device holds the private key; we keep the public key to check that a race
+  // payout request was signed by that device.
+  nearPlayers: defineTable({
+    account: v.string(),                   // "p1a2b3c4d5e.minirush-garage.testnet"
+    publicKey: v.string(),                 // "ed25519:…"
+    createdAt: v.number(),
+    paidToday: v.number(),                 // RUSH minted on `payDay`
+    payDay: v.string(),
+    lastPaidAt: v.number(),
+    lastNonce: v.number()
+  }).index('by_account', ['account']).index('by_key', ['publicKey'])
+    .index('by_created', ['createdAt']).index('by_paid', ['lastPaidAt']),
+
+  // What each dealer agent decided, newest last: the price, why, and the sales
+  // it was looking at. The same reason is written on chain with the price.
+  dealerMoves: defineTable({
+    dealer: v.string(),
+    token: v.string(),
+    oldPrice: v.number(),
+    price: v.number(),
+    sold: v.number(),                      // lifetime sales seen at decision time
+    soldSince: v.number(),                 // sales since the previous decision
+    reason: v.string(),
+    by: v.string(),                        // model name, or "rules"
+    tx: v.optional(v.string()),
+    at: v.number()
+  }).index('by_token', ['token']).index('by_at', ['at'])
 });

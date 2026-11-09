@@ -1,0 +1,18 @@
+import { readFileSync } from 'node:fs';
+import { Account, KeyPair, actions, encodeSignedDelegate } from 'near-api-js';
+const env = Object.fromEntries(readFileSync('.env.local','utf8').split('\n').filter(l=>l.includes('=')&&!l.startsWith('#')).map(l=>[l.slice(0,l.indexOf('=')),l.slice(l.indexOf('=')+1)]));
+const URL = env.VITE_CONVEX_URL; const RPC='https://test.rpc.fastnear.com', G='minirush-garage.testnet';
+const call = async (kind, path, args) => { const r = await fetch(`${URL}/api/${kind}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path,args,format:'json'})}); const b=await r.json(); if(b.status!=='success') throw new Error(path+': '+(b.errorMessage||JSON.stringify(b))); return b.value; };
+const kp = KeyPair.fromRandom('ed25519');
+const { account } = await call('action','near:createPlayer',{ publicKey: kp.getPublicKey().toString() });
+console.log('account', account);
+const view = (m,a)=> new Account(G,RPC).provider.callFunction({contractId:G,method:m,args:a});
+console.log('welcome rush', await view('mt_balance_of',{account_id:account,token_id:'rush'}));
+const nonce = Date.now(), coins = 120;
+const sig = kp.sign(new TextEncoder().encode(`minirush:pay:${account}:${coins}:${nonce}`));
+console.log('pay', await call('action','near:payRace',{account,coins,nonce,signature:Buffer.from(sig.signature).toString('base64')}));
+const me = new Account(account, RPC, kp.toString());
+const { signedDelegate } = await me.createSignedMetaTransaction({ receiverId: G, actions:[actions.functionCall('buy',{token_id:'car:gecko',max_price:'260'},30_000_000_000_000n,0n)] });
+const r = await call('action','near:relay',{ signedDelegate: Buffer.from(encodeSignedDelegate(signedDelegate)).toString('base64') });
+console.log('relay buy', r);
+console.log('holdings', JSON.stringify(await view('mt_tokens_for_owner',{account_id:account})));
