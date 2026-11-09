@@ -1960,6 +1960,26 @@ export class UI {
     hudClass(this.driftUi, 'on', true);
   }
 
+  private bannerEl: HTMLElement | null = null;
+
+  /**
+   * A full-width slanted strip for the big moments (takedowns, wrecks, drift
+   * boosts). Separate from popText so the small callouts never fight it.
+   */
+  banner(text: string, kind: 'takedown' | 'wreck' | 'drift'): void {
+    if (!this.bannerEl) {
+      this.bannerEl = document.createElement('div');
+      this.bannerEl.id = 'hud-banner';
+      this.bannerEl.setAttribute('aria-live', 'polite');
+      document.body.appendChild(this.bannerEl);
+    }
+    const el = this.bannerEl;
+    el.className = '';
+    el.innerHTML = `<span>${text.replace(/[<>&]/g, '')}</span>`;
+    void el.offsetWidth;
+    el.className = `show ${kind}`;
+  }
+
   popText(text: string, color = '#fcff52'): void {
     this.combo.textContent = text;
     this.combo.style.color = color;

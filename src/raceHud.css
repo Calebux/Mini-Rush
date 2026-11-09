@@ -163,3 +163,30 @@
 @media (prefers-reduced-motion: reduce) {
   #countdown.show, #nitro-ui.ready { animation: none; }
 }
+
+/* ---------- big-moment banner: takedown, wreck, drift boost ---------- */
+#hud-banner {
+  position: fixed; left: 0; right: 0; top: 30%; z-index: 8; pointer-events: none;
+  display: flex; justify-content: center; opacity: 0;
+}
+#hud-banner span {
+  display: inline-block; padding: 10px 46px 12px;
+  font-family: var(--hud-num); font-style: italic; font-weight: 900;
+  font-size: clamp(30px, 7vw, 64px); letter-spacing: 2px; color: #fff;
+  background: linear-gradient(100deg, transparent 0, rgba(255, 92, 40, .92) 12%, rgba(255, 40, 90, .92) 88%, transparent 100%);
+  transform: skewX(var(--hud-skew));
+  text-shadow: 0 3px 14px rgba(0, 0, 0, .45);
+}
+#hud-banner.wreck span { background: linear-gradient(100deg, transparent 0, rgba(60, 60, 70, .92) 12%, rgba(120, 20, 30, .92) 88%, transparent 100%); }
+#hud-banner.drift span {
+  font-size: clamp(22px, 4.6vw, 40px);
+  background: linear-gradient(100deg, transparent 0, rgba(55, 182, 255, .9) 12%, rgba(139, 92, 246, .9) 88%, transparent 100%);
+}
+#hud-banner.show { animation: hud-banner 1.25s cubic-bezier(.2, .9, .25, 1) both; }
+#hud-banner.drift.show { animation-duration: .9s; }
+@keyframes hud-banner {
+  0% { opacity: 0; transform: translateX(-30vw) scaleY(.6); }
+  14% { opacity: 1; transform: translateX(0) scaleY(1); }
+  78% { opacity: 1; transform: translateX(2vw); }
+  100% { opacity: 0; transform: translateX(24vw); }
+}

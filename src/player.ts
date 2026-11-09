@@ -41,7 +41,14 @@ export class Player {
 
   private rollA = 0;
   private xVel = 0;
-  private driftV = 0; // outward velocity owed to corner force alone (not steering)
+  private driftV = 0;
+  /** Power drift: -1/+1 = sliding into a right/left-hand line, 0 = gripping. */
+  driftDir = 0;
+  driftTime = 0;        // seconds into the current power drift
+  driftBoost = 0;       // > 0 for one frame after a long drift releases into a kick
+  private driftYaw = 0; // visual tail-out, damped
+  private driftGrace = 0;
+  private brakeT = 0;   // seconds the brake has been held, for the drift window // outward velocity owed to corner force alone (not steering)
   private bumpCooldown = 0;
   private steerLean = 0;
   private latV = 0; // smoothed real lateral velocity (drag steering bypasses xVel)
@@ -88,6 +95,9 @@ export class Player {
     this.wallHit = 0;
     this.latV = 0;
     this.nitroTanks = 1;
+    this.driftDir = 0;
+    this.driftTime = 0;
+    this.driftYaw = 0;
     this.nitroTimer = 0;
     this.finished = false;
     this.bumpCooldown = 0;
@@ -121,7 +131,7 @@ export class Player {
 
   /** Sliding sideways hard enough to smoke the tires. */
   get drifting(): boolean {
-    return this.v > 16 && Math.abs(this.latV) > 3.2 && !this.offroad;
+    return this.driftDir !== 0 || (this.v > 16 && Math.abs(this.latV) > 3.2 && !this.offroad);
   }
 
   /** Kicking up dust off the asphalt. */
@@ -193,6 +203,7 @@ export class Player {
     this.heatGrace = Math.max(0, this.heatGrace - dt);
     this.nitroTimer = Math.max(0, this.nitroTimer - dt);
     this.landed = false;
+    this.driftBoost = 0;
     if (this.damage > 0 && elapsed - this.lastHitAt > this.damageCool) this.damage = 0;
     if (this.tumbleT > 0) {
       this.tumbleT -= dt;
@@ -208,15 +219,48 @@ export class Player {
     // push, so brake-into-corner is the way to hit a tight apex
     const progression =
       Math.min(1, this.s / (this.raceLength || this.track.length)) * END_SPEED_BONUS;
+
+    // Power drift: brake while steering at speed and the car slides instead of
+    // scrubbing. It keeps most of its pace, hugs the corner, and a long slide
+    // releases into a kick of speed. A short grace keeps a flickering finger
+    // from dropping the drift mid-corner.
+    const steerDir = keySteer !== 0 ? Math.sign(keySteer)
+      : Math.abs(dragPx) > 0.6 ? Math.sign(dragPx) : 0;
+    this.brakeT = braking ? this.brakeT + dt : 0;
+    const canDrift = driving && braking && !this.nitroActive && this.tumbleT <= 0
+      && !this.airborne && !this.offroad && this.v > 22;
+    if (canDrift && (steerDir !== 0 || this.driftDir !== 0)) {
+      if (this.driftDir === 0) { this.driftDir = steerDir; this.driftTime = 0; }
+      this.driftGrace = 0.2;
+      this.driftTime += dt;
+    } else if (this.driftDir !== 0) {
+      this.driftGrace -= dt;
+      if (this.driftGrace <= 0 || !driving || this.tumbleT > 0 || this.offroad) {
+        // running wide onto the verge still pays out — it just ends the slide
+        if (this.driftTime > 0.5 && driving && this.tumbleT <= 0) {
+          this.driftBoost = Math.min(7, 2.5 + this.driftTime * 2);
+          this.v += this.driftBoost;
+        }
+        this.driftDir = 0;
+        this.driftTime = 0;
+      }
+    }
+    const powerDrift = this.driftDir !== 0;
+    if (powerDrift) braking = false; // the brake is the drift button now
+    // The first instant of a brake at speed only lifts, so a steer that lands
+    // a beat after the brake still kicks into a drift instead of a stop.
+    const driftWindow = braking && this.brakeT < 0.22 && this.v > 22 && !this.nitroActive;
     let target = 0;
     if (driving) {
       target = this.nitroActive
         ? NITRO_SPEED * this.spec.speed
-        : gas
+        : powerDrift
+          ? (BASE_SPEED * this.spec.speed + progression) * 0.9
+          : gas
           ? BASE_SPEED * this.spec.speed + progression
           : COAST_SPEED;
       if (this.offroad && !this.nitroActive && !this.airborne) target = Math.min(target, OFFROAD_SPEED);
-      if (braking && !this.nitroActive) target = Math.min(target, BRAKE_SPEED);
+      if (braking && !this.nitroActive && !driftWindow) target = Math.min(target, BRAKE_SPEED);
       if (this.tumbleT > 0) target = 2;
       if (this.voltageMode && this.tumbleT <= 0) {
         this.nitroTanks = Math.max(1, this.nitroTanks); // nitro locked ready
@@ -226,9 +270,11 @@ export class Player {
     }
     let rate: number;
     if (this.v < target) rate = ACCEL * this.spec.accel * (this.nitroActive ? 1.8 : 1);
+    else if (driftWindow) rate = COAST_DECEL;
     else if (braking) rate = BRAKE * 1.6;
     else if (this.offroad || gas) rate = BRAKE;
     else rate = COAST_DECEL;
+    if (powerDrift && this.v > target) rate = COAST_DECEL * 1.4;
     this.v = THREE.MathUtils.damp(this.v, target, rate / Math.max(this.v, 8), dt * 8);
     this.s += this.v * dt;
 
@@ -249,9 +295,10 @@ export class Player {
     const dragMeters = (driving ? dragPx : 0) * (13 / window.innerWidth) * grip;
     const f = this.track.frame(this.s);
     // grippy cars steer harder AND shrug off more of the corner push
-    const cornerPush = f.curvature * this.v * this.v * CENTRIFUGAL * (2 - grip) * dt;
+    const cornerPush = f.curvature * this.v * this.v * CENTRIFUGAL * (2 - grip) * dt
+      * (powerDrift ? 0.4 : 1);
     this.xVel += cornerPush;
-    this.xVel -= keySteer * 55 * grip * dt;
+    this.xVel -= keySteer * 55 * grip * (powerDrift ? 0.85 : 1) * dt;
     this.xVel *= Math.exp(-6 * dt);
     // driftV shadows xVel but only ever hears the corner force — at the wall
     // it tells "thrown wide by speed" (crash) apart from "steered into it"
@@ -293,7 +340,9 @@ export class Player {
 
   private syncMesh(elapsed: number): void {
     this.track.place(this.mesh, this.s, this.x);
-    this.mesh.rotation.y += Math.PI + this.steerLean; // model faces +z; flip down-track
+    // a power drift swings the nose into the turn and the tail out
+    this.driftYaw = THREE.MathUtils.damp(this.driftYaw, -this.driftDir * 0.42, 7, 1 / 60);
+    this.mesh.rotation.y += Math.PI + this.steerLean + this.driftYaw; // model faces +z; flip down-track
     this.mesh.rotation.z = -this.steerLean * 0.25;
     this.mesh.position.y = Math.sin(elapsed * 24) * 0.012 + (this.offroad && !this.airborne ? Math.abs(Math.sin(elapsed * 30)) * 0.05 : 0);
     // ramp jump: lift the body and pitch the nose up on the way up, down on the way down

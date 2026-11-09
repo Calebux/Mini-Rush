@@ -1459,11 +1459,11 @@ export class Game {
 
   /** Kick off an impact cinematic centred on a point of the lap. */
   private cinematic(s: number, label: string): void {
-    this.cine.t = 0.85;
+    this.cine.t = 1.1;
     this.cine.s = s;
     this.cine.flash = 1;
     this.shake = Math.max(this.shake, 1.6);
-    this.ui.popText(label, '#ff8a3d');
+    this.ui.banner(label, label === 'WRECKED' ? 'wreck' : 'takedown');
     this.audio.play('crash');
     if (navigator.vibrate) navigator.vibrate([50, 40, 110]);
     this.input.rumble(1, 320);
@@ -1759,6 +1759,12 @@ export class Game {
    */
   private updateStyle(dt: number, elapsed: number): void {
     const p = this.player;
+    if (p.driftDir !== 0) this.style.stoke(0.2 * dt); // a held power drift charges nitro
+    if (p.driftBoost > 0) {
+      this.ui.banner('DRIFT BOOST', 'drift');
+      this.audio.play('combo');
+      this.shake = Math.max(this.shake, 0.5);
+    }
     if (p.drifting) {
       this.style.driftTick(dt);
       this.driftChain += dt;
@@ -1796,6 +1802,17 @@ export class Game {
         car.closestPass = Math.min(car.closestPass, dx);
         // Contact during cooldown and airborne passes cannot earn a clean pass.
         if (dx < 1.55 || p.airborne || p.tumbleT > 0) car.nearMissed = true;
+      }
+      if (dx < 1.55 && overlapping && p.tumbleT <= 0 && !p.airborne && p.nitroActive) {
+        // Under nitro you are the hazard: the civilian car is punted aside and
+        // you keep your speed. That's a takedown, with the slow-motion shot.
+        this.traffic.hit(car, 1);
+        this.takedowns++;
+        this.bonusScore += 150;
+        this.style.stoke(0.5);
+        this.audio.play('combo');
+        this.cinematic(car.s, 'TAKEDOWN');
+        continue;
       }
       if (dx < 1.55 && overlapping && p.tumbleT <= 0 && !p.airborne && p.canBump) {
         // Clipping traffic costs speed and the chain — it does not total the
@@ -2067,6 +2084,8 @@ export class Game {
     // longer than a saloon.
     for (const car of this.traffic.cars) {
       if (!car.mesh.visible || car.wrecked > 0) continue;
+      // under nitro the player ploughs through; updateStyle scores the takedown
+      if (p.nitroActive && !p.airborne && p.tumbleT <= 0) continue;
       separate(p, car, PLAYER_X_LIMIT, RIVAL_X_LIMIT, car.contactLength);
     }
   }
@@ -2149,7 +2168,7 @@ export class Game {
     if (this.cine.t > 0) {
       // Low and close, off to the side, looking back into the impact.
       const f = this.track.frame(this.cine.s);
-      const k = 1 - this.cine.t / 0.85; // pushes in over the shot
+      const k = 1 - this.cine.t / 1.1; // pushes in over the shot
       this.camera.position.set(
         f.x + f.nx * 7.5 - Math.sin(f.theta) * (9 - k * 4),
         1.5 + k * 0.8,
