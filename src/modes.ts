@@ -93,8 +93,8 @@ export const MODES: ModeSpec[] = [
     rivals: 7, tumble: true, aggression: 0.85, featured: true
   },
   {
-    id: 'trafficjam', name: 'TRAFFIC JAM', icon: '🚧',
-    tagline: 'Dense pack racing. Near misses and clean exits matter.',
+    id: 'trafficjam', name: 'PACK ATTACK', icon: '🏎️',
+    tagline: 'Six racers. Tight gaps, late braking, clean exits.',
     rivals: 5, tumble: false, aggression: 0.35
   },
   {

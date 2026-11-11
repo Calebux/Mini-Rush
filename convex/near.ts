@@ -1,7 +1,7 @@
 'use node';
 // The NEAR side of MiniRush (testnet). Everything that needs a key runs here:
 //   createPlayer — makes the player's account from a key the phone generated
-//   payRace      — mints the race's coins as RUSH, signed-request + capped
+//   beginRace / raceProgress — rewards from timed, signed race sessions; the place picks a fixed tier
 //   relay        — submits a player's signed meta-transaction, game pays gas
 //   dealerTick   — the three dealer agents reprice their stalls (cron)
 //
@@ -16,11 +16,12 @@ import { Account, actions, PublicKey, SCHEMA, type KeyPairString } from 'near-ap
 import { v } from 'convex/values';
 import { action, internalAction } from './_generated/server';
 import { internal } from './_generated/api';
+import { RACE_PAYOUT, raceRush, rewardPlace } from '../shared/raceRules';
 
 const GARAGE = process.env.NEAR_GARAGE ?? 'minirush-garage.testnet';
 const RPC = process.env.NEAR_RPC ?? 'https://test.rpc.fastnear.com';
 const TGAS = 1_000_000_000_000n;
-const WELCOME_RUSH = 300;
+const WELCOME_RUSH = 0; // No transferable signup grant: extra accounts must not print spending money.
 const PLAYER_NEAR = 10_000_000_000_000_000_000_000n; // 0.01 NEAR: account storage only — the game pays gas
 
 function gameAccount(): Account {
@@ -33,7 +34,7 @@ function dealerKeys(): Record<string, string> {
   try { return JSON.parse(process.env.NEAR_DEALER_KEYS ?? '{}'); } catch { return {}; }
 }
 
-const view = <T>(method: string, args: object = {}) =>
+const view = <T>(method: string, args: Record<string, unknown> = {}) =>
   new Account(GARAGE, RPC).provider.callFunction({ contractId: GARAGE, method, args }) as Promise<T>;
 
 function panicText(err: unknown): string {
@@ -62,38 +63,53 @@ export const createPlayer = action({
       actions: [actions.createAccount(), actions.transfer(PLAYER_NEAR), actions.addFullAccessKey(PublicKey.from(publicKey))]
     });
     await ctx.runMutation(internal.nearDb.insertPlayer, { account, publicKey });
-    await game.signAndSendTransaction({
-      receiverId: GARAGE,
-      actions: [actions.functionCall('mint', { receiver_id: account, token_id: 'rush', amount: String(WELCOME_RUSH), memo: 'welcome' }, 30n * TGAS, 0n)]
-    });
     return { account, welcome: WELCOME_RUSH, created: true };
   }
 });
 
+// Retained as an explicit rejection for old clients: browser-selected payouts are disabled.
 export const payRace = action({
   args: { account: v.string(), coins: v.number(), nonce: v.number(), signature: v.string() },
-  handler: async (ctx, { account, coins, nonce, signature }): Promise<{ minted: number; tx: string }> => {
+  handler: async (): Promise<never> => { throw new Error('Update the game to use race sessions'); }
+});
+
+export const beginRace = action({
+  args: { account: v.string(), run: v.string(), distance: v.number(), signature: v.string() },
+  handler: async (ctx, { account, run, distance, signature }): Promise<string> => {
     const p = await ctx.runQuery(internal.nearDb.playerByAccount, { account });
-    if (!p) throw new Error('unknown player');
-    const msg = new TextEncoder().encode(`minirush:pay:${account}:${Math.floor(coins)}:${nonce}`);
-    const ok = PublicKey.from(p.publicKey).verify(msg, Buffer.from(signature, 'base64'));
-    if (!ok) throw new Error('bad signature');
-    const amount: number = await ctx.runMutation(internal.nearDb.reservePayout, { account, coins, nonce });
-    try {
-      const res = await gameAccount().signAndSendTransaction({
-        receiverId: GARAGE,
-        actions: [actions.functionCall('mint', { receiver_id: account, token_id: 'rush', amount: String(amount), memo: 'race' }, 30n * TGAS, 0n)]
-      });
-      return { minted: amount, tx: res.transaction.hash };
-    } catch (err) {
-      await ctx.runMutation(internal.nearDb.releasePayout, { account, amount });
-      throw new Error(panicText(err));
+    const message = `minirush:race:begin:${account}:${run}:${distance}`;
+    if (!p || !PublicKey.from(p.publicKey).verify(new TextEncoder().encode(message), Buffer.from(signature, 'base64'))) throw new Error('bad signature');
+    return ctx.runMutation(internal.nearDb.beginRace, { account, run, distance });
+  }
+});
+export const raceProgress = action({
+  args: { account: v.string(), race: v.id('nearRaces'), progress: v.number(), elapsed: v.number(), finish: v.boolean(),
+    place: v.optional(v.number()), signature: v.string() },
+  handler: async (ctx, { account, race, progress, elapsed, finish, place, signature }): Promise<{ minted: number; alloy: number; circuit: number; place: number; tx: string } | null> => {
+    const p = await ctx.runQuery(internal.nearDb.playerByAccount, { account });
+    // The finishing place is part of the signed message, so it cannot be altered in transit.
+    const message = `minirush:race:progress:${account}:${race}:${progress}:${elapsed}:${finish}${place === undefined ? '' : `:${place}`}`;
+    if (!p || !PublicKey.from(p.publicKey).verify(new TextEncoder().encode(message), Buffer.from(signature, 'base64'))) throw new Error('bad signature');
+    const r = await ctx.runMutation(internal.nearDb.raceProgress, { account, race, progress, elapsed, finish, place });
+    if (!finish) return null;
+    const tier = rewardPlace(r.place);
+    let tx = r.tx;
+    if (!tx) {
+      const result = await gameAccount().signAndSendTransaction({ receiverId: GARAGE,
+        actions: [actions.functionCall('reward_race', { receiver_id: account, race_id: race, place: tier || null }, 60n * TGAS, 0n)] });
+      for (const receipt of result.receipts_outcome) {
+        if ('Failure' in (receipt.outcome.status as object)) throw new Error('Race payout failed; retry this claim');
+      }
+      tx = result.transaction.hash;
+      await ctx.runMutation(internal.nearDb.completeRace, { race, tx });
     }
+    return { minted: raceRush(tier), alloy: RACE_PAYOUT.alloy, circuit: RACE_PAYOUT.circuit, place: tier, tx };
   }
 });
 
 /** What a player may ask the game to pay gas for: these garage calls, nothing else. */
-const RELAYABLE: Record<string, bigint> = { buy: 0n, sell_back: 0n, consume: 0n, mt_transfer: 1n };
+const RELAYABLE: Record<string, bigint> = { buy: 0n, sell_back: 0n, consume: 0n, mt_transfer: 1n,
+  craft_component: 0n, install_component: 0n, list_component: 0n, cancel_component: 0n, buy_component: 0n, recycle_component: 0n, nft_transfer: 1n };
 
 export const relay = action({
   args: { signedDelegate: v.string() },
@@ -111,7 +127,7 @@ export const relay = action({
       const fc = a.functionCall;
       if (!fc || !(fc.methodName in RELAYABLE)) throw new Error('method not relayed');
       if (BigInt(fc.deposit) !== RELAYABLE[fc.methodName]) throw new Error('bad deposit');
-      if (BigInt(fc.gas) > 50n * TGAS) throw new Error('too much gas');
+      if (BigInt(fc.gas) > 80n * TGAS) throw new Error('too much gas');
     }
     try {
       const res = await gameAccount().signAndSendTransaction({

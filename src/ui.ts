@@ -1,3 +1,4 @@
+import { applyComponents } from './components';
 import { AudioManager } from './audio';
 import { SPEED_DISPLAY } from './constants';
 import {
@@ -30,8 +31,12 @@ import { track } from './usage';
 import { BADGES, earnedBadges } from './badges';
 import { LAP_METRES, LAPS } from './city/cityRace';
 import { Market } from './market';
+import { RaceRewards } from './raceRewards';
+import { holdings, nearAccount, type Reward } from './near';
+import type { Recipe } from './components';
 import { Build, workshopSpec } from './workshop';
 import { WorkshopUI } from './workshopUI';
+import { handlingProfile } from './testDrive';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T =>
   document.getElementById(id) as T;
@@ -204,6 +209,7 @@ const modeLocked = (m: ModeSpec): boolean =>
 export class UI {
   onPlay: () => void = () => {};
   onRetrySame: () => void = () => {};
+  onTestDrive: () => void = () => {};
   onBrake: (down: boolean) => void = () => {};
   onGas: (down: boolean) => void = () => {};
   onCamera: () => void = () => {};
@@ -214,8 +220,10 @@ export class UI {
   onCar: (index: number) => void = () => {};
   onMap: (index: number) => void = () => {};
   onMode: (index: number) => void = () => {};
-  onPage: (page: 'menu' | 'garage' | 'tour' | 'workshop') => void = () => {};
-  onWorkshopPreview: (build: Build | null) => void = () => {};
+  onPage: (page: 'menu' | 'garage' | 'tour' | 'workshop' | 'market') => void = () => {};
+  onMarketPreview: (id: string) => void = () => {};
+  onWorkshopPreview: (build: Build | null, chassis?: string) => void = () => {};
+  onComponentInstalled: (recipe: Recipe, chassis: string) => void = () => {};
   onNitroPress: () => void = () => {}; // the pill itself — needed when tap = shoot
   onDaily: () => void = () => {};      // daily challenge picked from the menu
   onDailyExit: () => void = () => {};  // backed out of / done with the daily
@@ -259,6 +267,7 @@ export class UI {
   private countdownEl = $('countdown');
   private progress = $('progress');
   private market: Market | null = null;
+  private rewards = new RaceRewards($('race-rewards'));
   private driftUi = $('drift-ui');
   private driftTime = $('drift-time');
   private driftLabel = $('drift-label');
@@ -354,12 +363,29 @@ export class UI {
     $('driver-chip').textContent = driverName();
     on('driver-chip', () => this.onDriverChip());
     // the customs workshop lives in the garage, beside the cars it builds
+    let workshopFromResults = false;
     const workshop = new WorkshopUI(
-      build => this.onWorkshopPreview(build),
-      () => { $('garage').classList.remove('hidden'); this.onPage('garage'); this.refreshBank(); this.renderCar(); },
-      () => { const index = CARS.findIndex(c => c.model === 300); this.setCar(index); this.onCar(index); }
+      (build, chassis) => this.onWorkshopPreview(build, chassis),
+      () => {
+        if (workshopFromResults) {
+          workshopFromResults = false; this.results.classList.remove('hidden'); this.onPage('menu'); this.rewards.show();
+          this.results.querySelector<HTMLButtonElement>('[data-reward-action="workshop"]')?.focus({ preventScroll: true });
+        } else { $('garage').classList.remove('hidden'); this.onPage('garage'); }
+        this.refreshBank(); this.renderCar();
+      },
+      () => {
+        const index = CARS.findIndex(c => c.model === 300); this.setCar(index); this.onCar(index);
+        // A saved custom car may not qualify for the previous race's class.
+        // Return through the garage's eligibility gate before another start.
+        if (workshopFromResults && !carFits(MODES[this.modeIndex], CARS[index])) workshopFromResults = false;
+      },
+      (recipe, chassis) => this.onComponentInstalled(recipe, chassis)
     );
-    on('btn-workshop-garage', () => { $('garage').classList.add('hidden'); this.onPage('workshop'); workshop.open(); });
+    this.rewards.onWorkshop = (recipe, chassis) => {
+      workshopFromResults = true; this.audio.play('click'); this.results.classList.add('hidden');
+      this.onPage('workshop'); workshop.open(chassis, recipe);
+    };
+    on('btn-workshop-garage', () => { $('garage').classList.add('hidden'); this.onPage('workshop'); workshop.open(CARS[this.carIndex].id); });
     on('btn-profile-close', () => {
       this.audio.play('back');
       $('profile').classList.add('hidden');
@@ -474,11 +500,16 @@ export class UI {
       this.audio.play('click');
       this.exitDaily(); this.exitWeekend(); this.exitBounty();
       this.market ??= new Market();
+      this.market.onPreview = id => this.onMarketPreview(id);
       this.market.onClose = () => {
         this.audio.play('back');
+        this.onPage('menu');
         this.menu.classList.remove('hidden');
+        this.renderCar();
+        this.onCar(this.carIndex);
       };
       this.menu.classList.add('hidden');
+      this.onPage('market');
       void this.market.open();
     });
     on('pill-laps', () => {
@@ -499,6 +530,7 @@ export class UI {
         goto('garage', 'tour', 'back');
       }
     });
+    on('btn-test-drive', () => this.onTestDrive());
     on('btn-garage-done', () => {
       const c = CARS[this.carIndex];
       if (c.price > 0 && !owned().has(c.id)) return; // still locked
@@ -971,6 +1003,28 @@ export class UI {
     const line = `⬤ ${bank()} coins`;
     $('bank-line').textContent = line;
     $('garage-bank').textContent = line;
+    this.refreshRush();
+  }
+
+  private rushReadAt = 0;
+  /**
+   * On-chain earnings beside the local coins. Read-only, and only for a garage that
+   * already exists: the home screen never creates an account or signs anything.
+   */
+  private refreshRush(): void {
+    const line = $('rush-line');
+    if (!nearAccount()) { line.classList.add('hidden'); return; }
+    const now = performance.now();
+    if (this.rushReadAt && now - this.rushReadAt < 8000) return; // purchases call this in bursts
+    this.rushReadAt = now;
+    void holdings().then(held => {
+      const of = (id: string) => Number(held.find(h => h.token_id === id)?.balance ?? 0);
+      // Salvage counts are dropped first on a narrow phone (see #rush-line small in neonHome.css).
+      const salvage = document.createElement('small');
+      salvage.textContent = ` · ${of('material:alloy')} alloy · ${of('material:circuit')} circuits`;
+      line.replaceChildren(`◆ ${of('rush').toLocaleString()} RUSH`, salvage);
+      line.classList.remove('hidden');
+    }).catch(() => { this.rushReadAt = 0; /* keep the last confirmed line; retry on the next refresh */ });
   }
 
   /** The daily button always says which city today's circuit visits. */
@@ -1342,11 +1396,11 @@ export class UI {
 
   private renderCar(): void {
     const c = CARS[this.carIndex];
-    const up = c.model === 300 ? workshopSpec(c) : applyUpgrades(c);
+    const up = applyComponents(c.model === 300 ? workshopSpec(c) : applyUpgrades(c));
     $('home-car-name').textContent = c.model === 300 ? up.build!.name : c.name;
     $('car-name-t').textContent = c.name;
     $('menu-car').textContent = c.name;
-    $('car-blurb').textContent = c.blurb;
+    $('car-blurb').textContent = `${c.blurb} · ${handlingProfile(up).name}`;
     // the chip wears the skin the car is actually painted in
     const hex = `#${activeColor(c.id, c.color).toString(16).padStart(6, '0')}`;
     const chip = $('car-chip');
@@ -1365,6 +1419,7 @@ export class UI {
     // scrolling the specs card.
     const ownedCars = owned();
     const isOwned = c.price === 0 || ownedCars.has(c.id);
+    $<HTMLButtonElement>('btn-test-drive').disabled = !isOwned;
     $('home-car-eyebrow').textContent = isOwned ? 'YOUR GARAGE / READY TO ROLL' : 'PREVIEW / BUY WITH COINS';
     // a class mode (Hyper Cup) needs the right shelf as well as ownership
     const activeMode = MODES[this.modeIndex];
@@ -1694,6 +1749,26 @@ export class UI {
       badgeRow.appendChild(el);
     }
 
+  }
+
+  beginTestDrive(): void {
+    $('garage').classList.add('hidden');
+    this.onPage('menu');
+  }
+
+  endTestDriveRun(): void {
+    this.hud.classList.remove('visible');
+    this.hideCountdown(); this.hidePause(); this.endTutorial(); this.showDrift(null);
+    $('key-hints').classList.add('hidden');
+    this.speedlines.classList.remove('on');
+  }
+
+  returnFromTestDrive(): void {
+    this.endTestDriveRun(); this.hideFinishMoment();
+    this.menu.classList.add('hidden'); this.results.classList.add('hidden');
+    $('garage').classList.remove('hidden');
+    this.onPage('garage'); this.renderCar();
+    $('btn-test-drive').focus();
   }
 
   showRace(): void {
@@ -2073,6 +2148,11 @@ export class UI {
     });
   }
 
+  resetRaceRewards(): void { this.rewards.reset(); }
+  completeRaceRewards(chassis: string, settle: (() => Promise<Reward | null>) | null, reason = ''): void {
+    this.rewards.finish(chassis, settle, reason);
+  }
+
   showResults(
     place: number, time: number, coins: number, score: number,
     laps: number, car: string, busted = false, style = 0, daily = false, weekend = false,
@@ -2164,6 +2244,8 @@ export class UI {
     this.speedlines.classList.remove('on');
     this.menu.classList.add('hidden'); // a city race comes back through the menu
     this.results.classList.remove('hidden');
+    this.rewards.show();
+    this.results.scrollTop = 0;
     this.refreshBest();
     this.refreshBank();
     this.refreshDaily();

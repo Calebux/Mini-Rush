@@ -21,7 +21,8 @@ export class Entities {
   private group = new THREE.Group();
   private pLo = 0;
 
-  constructor(scene: THREE.Scene, track: Track, seed: number) {
+  constructor(scene: THREE.Scene, track: Track, seed: number, enabled = true) {
+    if (!enabled) return;
     const rand = mulberry32(seed ^ 0xb10b);
 
     // coin arcs

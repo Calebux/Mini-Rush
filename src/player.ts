@@ -3,11 +3,12 @@ import { AssetLibrary } from './assets';
 import { CarSpec } from './cars';
 import { buildShooterArm, syncCarGroundFx } from './meshes';
 import {
-  ACCEL, BASE_SPEED, BRAKE, BRAKE_SPEED, CENTRIFUGAL, COAST_DECEL, COAST_SPEED,
+  BASE_SPEED, BRAKE, BRAKE_SPEED, CENTRIFUGAL, COAST_DECEL, COAST_SPEED,
   END_SPEED_BONUS, NITRO_SPEED, NITRO_TIME, OFFROAD_SPEED, PLAYER_X_LIMIT,
   ROAD_HALF_WIDTH, WALL_CRASH_DRIFT, WALL_CRASH_MIN_V
 } from './constants';
 import { Track } from './track';
+import { accelerationAt, approachSpeed, chassisResponse } from './handling';
 
 const GRAVITY = 26; // m/s² pulling the car back down after a ramp jump
 
@@ -286,14 +287,15 @@ export class Player {
         if (this.voltageLevel <= 0) target *= 0.35; // out of voltage!
       }
     }
+    const response = chassisResponse(this.spec.grip, this.gripMul);
     let rate: number;
-    if (this.v < target) rate = ACCEL * this.spec.accel * (this.nitroActive ? 1.8 : 1);
+    if (this.v < target) rate = accelerationAt(this.v, this.spec.accel, this.nitroActive);
     else if (driftWindow) rate = COAST_DECEL;
-    else if (braking) rate = BRAKE * 1.6;
+    else if (braking) rate = BRAKE * 1.6 * response.braking;
     else if (this.offroad || gas) rate = BRAKE;
     else rate = COAST_DECEL;
     if (powerDrift && this.v > target) rate = COAST_DECEL * 1.4;
-    this.v = THREE.MathUtils.damp(this.v, target, rate / Math.max(this.v, 8), dt * 8);
+    this.v = approachSpeed(this.v, target, rate, dt);
     this.s += this.v * dt;
 
     // vertical — a ramp launch arcs up under gravity and lands back on the road
@@ -309,18 +311,18 @@ export class Player {
 
     // lateral: direct drag + held keys + centrifugal push in corners.
     // +x is the driver's LEFT, so screen-right input subtracts.
-    const grip = this.spec.grip * this.gripMul;
+    const grip = response.traction;
     const dragMeters = (driving ? dragPx : 0) * (13 / window.innerWidth) * grip;
     const f = this.track.frame(this.s);
     // grippy cars steer harder AND shrug off more of the corner push
-    const cornerPush = f.curvature * this.v * this.v * CENTRIFUGAL * (2 - grip) * dt
+    const cornerPush = f.curvature * this.v * this.v * CENTRIFUGAL * response.cornerPush * dt
       * (powerDrift ? 0.4 : 1);
     this.xVel += cornerPush;
-    this.xVel -= keySteer * 55 * grip * (powerDrift ? 0.85 : 1) * dt;
-    this.xVel *= Math.exp(-6 * dt);
+    this.xVel -= keySteer * 55 * response.steering * (powerDrift ? 0.85 : 1) * dt;
+    this.xVel *= Math.exp(-response.settling * dt);
     // driftV shadows xVel but only ever hears the corner force — at the wall
     // it tells "thrown wide by speed" (crash) apart from "steered into it"
-    this.driftV = (this.driftV + cornerPush) * Math.exp(-6 * dt);
+    this.driftV = (this.driftV + cornerPush) * Math.exp(-response.settling * dt);
     const prevX = this.x;
     this.x += this.xVel * dt - dragMeters;
     this.wallHit = 0;

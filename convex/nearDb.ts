@@ -1,5 +1,6 @@
 // Database side of the NEAR layer (convex/near.ts holds the actions that sign).
 import { v } from 'convex/values';
+import { checkProgress, rewardPlace } from '../shared/raceRules';
 import { internalMutation, internalQuery, query } from './_generated/server';
 
 export const RACE_CAP = 400;          // RUSH per race payout
@@ -110,5 +111,48 @@ export const dealerLog = query({
       ? await ctx.db.query('dealerMoves').withIndex('by_token', (q) => q.eq('token', token)).order('desc').take(n)
       : await ctx.db.query('dealerMoves').withIndex('by_at').order('desc').take(n);
     return rows.map(({ dealer, token, oldPrice, price, reason, by, tx, at }) => ({ dealer, token, oldPrice, price, reason, by, tx, at }));
+  }
+});
+
+
+export const beginRace = internalMutation({
+  args: { account: v.string(), run: v.string(), distance: v.number() },
+  handler: async (ctx, { account, run, distance }) => {
+    if (!/^[a-zA-Z0-9-]{16,64}$/.test(run) || !Number.isSafeInteger(distance) || distance < 500 || distance > 16000) throw new Error('invalid race');
+    const existing = await ctx.db.query('nearRaces').withIndex('by_account_run', q => q.eq('account', account).eq('run', run)).first();
+    if (existing) return existing._id;
+    const previous = await ctx.db.query('nearRaces').withIndex('by_account_started', q => q.eq('account', account)).order('desc').first();
+    const now = Date.now();
+    if (previous && now - previous.startedAt < 5000) throw new Error('wait before restarting');
+    if (previous?.status === 'active') await ctx.db.patch(previous._id, { status: 'abandoned' });
+    return ctx.db.insert('nearRaces', { account, run, distance, startedAt: now, sampledAt: now,
+      progress: 0, elapsed: 0, samples: 0, status: 'active' });
+  }
+});
+export const raceProgress = internalMutation({
+  args: { account: v.string(), race: v.id('nearRaces'), progress: v.number(), elapsed: v.number(), finish: v.boolean(), place: v.optional(v.number()) },
+  handler: async (ctx, { account, race: id, progress, elapsed, finish, place }) => {
+    const race = await ctx.db.get(id);
+    if (!race || race.account !== account) throw new Error('unknown race');
+    if (finish && (race.status === 'pending' || race.status === 'paid')) return race;
+    if (race.status !== 'active') throw new Error('race is no longer active');
+    const now = Date.now();
+    checkProgress(race, progress, elapsed, now, finish);
+    // The first accepted finish fixes the tier; a later retry cannot claim a better one.
+    const tier = finish ? rewardPlace(place) : undefined;
+    await ctx.db.patch(id, { sampledAt: now, progress, elapsed, samples: race.samples + 1, status: finish ? 'pending' : 'active',
+      ...(finish ? { place: tier } : {}) });
+    return { ...race, place: tier };
+  }
+});
+export const completeRace = internalMutation({
+  args: { race: v.id('nearRaces'), tx: v.string() },
+  handler: async (ctx, { race, tx }) => {
+    const r = await ctx.db.get(race);
+    if (!r || r.status === 'paid') return;
+    if (r.status !== 'pending') throw new Error('race not reserved');
+    await ctx.db.patch(race, { status: 'paid', tx });
+    const p = await ctx.db.query('nearPlayers').withIndex('by_account', q => q.eq('account', r.account)).first();
+    if (p) await ctx.db.patch(p._id, { lastPaidAt: Date.now() });
   }
 });

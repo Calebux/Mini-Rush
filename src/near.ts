@@ -1,14 +1,16 @@
 /**
  * The player's NEAR side (testnet), kept invisible: on first launch the phone
  * makes a key, the game's backend creates `p….minirush-garage.testnet` for it
- * and drops in a welcome purse of RUSH. Race coins are minted as RUSH, and
+ * and eligible race sessions earn salvage plus RUSH from a fixed table by finishing place.
  * every purchase is a meta-transaction the player signs and the game pays
  * gas for — no wallet, no seed phrase, no NEAR needed.
  *
  * near-api-js is loaded on first use so it never weighs on the race bundle.
  * Everything fails soft: offline or without Convex the game plays as before.
  */
-import { grantCar } from './economy';
+import { syncChainCars } from './economy';
+import { setComponentInventory, type Component } from './components';
+import { rewardPlace } from '../shared/raceRules';
 
 export const GARAGE = (import.meta.env.VITE_NEAR_GARAGE as string | undefined) ?? 'minirush-garage.testnet';
 const RPC = (import.meta.env.VITE_NEAR_RPC as string | undefined) ?? 'https://test.rpc.fastnear.com';
@@ -42,7 +44,7 @@ const write = (k: string, v: string): void => { try { localStorage.setItem(k, v)
 export const nearEnabled = (): boolean => !!CONVEX_URL;
 export const nearAccount = (): string | null => read(ACCOUNT_STORE);
 
-async function convex<T>(kind: 'query' | 'action', path: string, args: unknown, timeoutMs = 30_000): Promise<T> {
+export async function convex<T>(kind: 'query' | 'action', path: string, args: unknown, timeoutMs = 30_000): Promise<T> {
   if (!CONVEX_URL) throw new Error('offline');
   const res = await fetch(`${CONVEX_URL}/api/${kind}`, {
     method: 'POST',
@@ -87,9 +89,17 @@ export function ensureAccount(): Promise<string | null> {
   return ensuring;
 }
 
-async function viewCall<T>(method: string, args: Record<string, unknown>): Promise<T> {
-  const { JsonRpcProvider } = await near();
-  return new JsonRpcProvider({ url: RPC }).callFunction({ contractId: GARAGE, method, args }) as Promise<T>;
+export async function viewCall<T>(method: string, args: Record<string, unknown>): Promise<T> {
+  const encoded = new TextEncoder().encode(JSON.stringify(args));
+  let raw = '';
+  for (const byte of encoded) raw += String.fromCharCode(byte);
+  const response = await fetch(RPC, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(8000), body: JSON.stringify({ jsonrpc: '2.0', id: 'minirush-view', method: 'query',
+      params: { request_type: 'call_function', finality: 'final', account_id: GARAGE, method_name: method, args_base64: btoa(raw) } }) });
+  if (!response.ok) throw new Error('NEAR connection unavailable');
+  const body = await response.json() as { result?: { result: number[] }; error?: { message: string } };
+  if (body.error || !body.result) throw new Error(body.error?.message ?? 'NEAR view failed');
+  return JSON.parse(new TextDecoder().decode(new Uint8Array(body.result.result))) as T;
 }
 
 export const listings = () => viewCall<Listing[]>('listings', {});
@@ -101,29 +111,11 @@ export const dealerLog = (limit = 40) => convex<DealerMove[]>('query', 'nearDb:d
 
 /** Cars held on chain become drivable in the garage. */
 export function syncCars(h: Holding[]): void {
-  for (const x of h) if (x.token_id.startsWith('car:') && Number(x.balance) > 0) grantCar(x.token_id.slice(4));
-}
-
-/** Mint this race's coins as RUSH. Fire and forget: a race never waits on the chain. */
-export async function payRace(coins: number): Promise<{ minted: number; tx: string } | null> {
-  if (!nearEnabled() || coins <= 0) return null;
-  try {
-    const account = await ensureAccount();
-    if (!account) return null;
-    const kp = await keyPair();
-    const nonce = Date.now();
-    const amount = Math.floor(coins);
-    const sig = kp.sign(new TextEncoder().encode(`minirush:pay:${account}:${amount}:${nonce}`));
-    let b64 = '';
-    for (const byte of sig.signature) b64 += String.fromCharCode(byte);
-    return await convex('action', 'near:payRace', { account, coins: amount, nonce, signature: btoa(b64) });
-  } catch {
-    return null;
-  }
+  syncChainCars(h.filter(x => x.token_id.startsWith('car:') && BigInt(x.balance) > 0n).map(x => x.token_id.slice(4)));
 }
 
 /** Sign a garage call and have the game relay it (the game pays gas). */
-async function relayed(method: string, args: object, deposit = 0n): Promise<{ tx: string; value: unknown }> {
+export async function relayed(method: string, args: object, deposit = 0n): Promise<{ tx: string; value: unknown }> {
   const account = await ensureAccount();
   if (!account) throw new Error('No connection to NEAR right now');
   const n = await near();
@@ -131,7 +123,7 @@ async function relayed(method: string, args: object, deposit = 0n): Promise<{ tx
   const me = new n.Account(account, RPC, kp.toString() as `ed25519:${string}`);
   const { signedDelegate } = await me.createSignedMetaTransaction({
     receiverId: GARAGE,
-    actions: [n.actions.functionCall(method, args, 30n * TGAS, deposit)]
+    actions: [n.actions.functionCall(method, args, 70n * TGAS, deposit)]
   });
   const bytes = n.encodeSignedDelegate(signedDelegate);
   let b64 = '';
@@ -141,7 +133,7 @@ async function relayed(method: string, args: object, deposit = 0n): Promise<{ tx
 
 export async function buy(tokenId: string, maxPrice: string): Promise<string> {
   const { tx } = await relayed('buy', { token_id: tokenId, max_price: maxPrice });
-  if (tokenId.startsWith('car:')) grantCar(tokenId.slice(4));
+  if (tokenId.startsWith('car:')) syncCars(await holdings());
   return tx;
 }
 
@@ -158,5 +150,94 @@ export async function useNitroCan(): Promise<boolean> {
     return true;
   } catch {
     return false;
+  }
+}
+
+
+export async function refreshComponents(createAccount = true): Promise<Component[]> {
+  const account = createAccount ? await ensureAccount() : nearAccount();
+  if (!account) { setComponentInventory(null, []); return []; }
+  try {
+    const parts = await viewCall<Component[]>('component_inventory', { account_id: account });
+    setComponentInventory(account, parts);
+    return parts;
+  } catch (err) { setComponentInventory(null, []); throw err; }
+}
+
+async function signMessage(message: string): Promise<string> {
+  const signature = (await keyPair()).sign(new TextEncoder().encode(message)).signature;
+  let raw = '';
+  for (const byte of signature) raw += String.fromCharCode(byte);
+  return btoa(raw);
+}
+export interface Reward { minted: number; alloy: number; circuit: number; tx: string; place?: number }
+interface Claim { account: string; race: string; progress: number; elapsed: number; place?: number }
+const PENDING = 'minirush.near.pending-races.v2';
+function pendingClaims(): Claim[] {
+  try { const raw = JSON.parse(read(PENDING) ?? '[]'); return Array.isArray(raw) ? raw : []; } catch { return []; }
+}
+export function hasPendingReward(): boolean { return pendingClaims().length > 0; }
+async function progressCall(claim: Claim, finish: boolean): Promise<Reward | null> {
+  const { account, race, progress, elapsed } = claim;
+  // Checkpoints never carry a place; the finish signs the podium tier it claims.
+  const place = finish ? rewardPlace(claim.place) : undefined;
+  const signature = await signMessage(`minirush:race:progress:${account}:${race}:${progress}:${elapsed}:${finish}${place === undefined ? '' : `:${place}`}`);
+  return convex('action', 'near:raceProgress', { account, race, progress, elapsed, finish, signature, ...(place === undefined ? {} : { place }) });
+}
+function removeClaim(race: string): void { write(PENDING, JSON.stringify(pendingClaims().filter(c => c.race !== race))); }
+export async function retryRaceReward(): Promise<Reward | null> {
+  let result: Reward | null = null;
+  let failure: unknown;
+  for (const claim of pendingClaims()) {
+    if (claim.account !== nearAccount()) continue;
+    try {
+      const reward = await progressCall(claim, true);
+      if (!reward) throw new Error('No reward receipt received. Retry this claim.');
+      result = reward; removeClaim(claim.race);
+    }
+    catch (err) { failure = err; }
+  }
+  if (!result && failure) throw failure;
+  return result;
+}
+
+/** Per-race state isolates delayed network responses from retries/new races. */
+export class RewardRace {
+  private ready: Promise<{ account: string; race: string } | null>;
+  private busy: Promise<unknown> = Promise.resolve();
+  private sending = false;
+  private lastSample = 0;
+  private completed = false;
+  constructor(distance: number) {
+    this.ready = (async () => {
+      const account = await ensureAccount();
+      if (!account) return null;
+      const run = crypto.randomUUID();
+      const signature = await signMessage(`minirush:race:begin:${account}:${run}:${distance}`);
+      const race = await convex<string>('action', 'near:beginRace', { account, run, distance, signature });
+      return { account, race };
+    })().catch(() => null);
+  }
+  sample(progress: number, elapsed: number): void {
+    if (this.completed || this.sending || elapsed - this.lastSample < 4) return;
+    this.lastSample = elapsed;
+    this.sending = true;
+    this.busy = this.ready.then(async r => {
+      if (r) await progressCall({ ...r, progress: Math.max(0, Math.floor(progress)), elapsed: Math.floor(elapsed) }, false);
+    }).catch(() => {}).finally(() => { this.sending = false; });
+  }
+  async finish(progress: number, elapsed: number, place = 0): Promise<Reward | null> {
+    this.completed = true;
+    await this.busy;
+    const r = await this.ready;
+    if (!r || elapsed < 40) return null;
+    const claim: Claim = { ...r, progress: Math.max(0, Math.floor(progress)), elapsed: Math.floor(elapsed), place: rewardPlace(place) };
+    const claims = pendingClaims();
+    if (!claims.some(c => c.race === claim.race)) claims.push(claim);
+    write(PENDING, JSON.stringify(claims));
+    const result = await progressCall(claim, true);
+    if (!result) throw new Error('No reward receipt received. Retry this claim.');
+    removeClaim(claim.race);
+    return result;
   }
 }

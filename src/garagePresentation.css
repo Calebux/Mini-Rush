@@ -1,0 +1,132 @@
+/* Workshop, garage and race report share a quiet material palette.
+   Keep these tokens local: the race HUD and home retain their own identity. */
+#workshop, #garage, #results {
+  --rg-deep: #242421;
+  --rg-deep-2: #151614;
+  --rg-glass: #191a18f5;
+  --gold: #d7c19b;
+  --gold-hi: #f1e9da;
+  --gold-ink: #191a17;
+  --cream: #f1efe9;
+  --muted: #b3b3aa;
+  --line: #eeead323;
+  color: var(--cream);
+  color-scheme: dark;
+  scrollbar-color: #77776b #191a18;
+}
+#workshop, #garage.overlay.stage {
+  background: linear-gradient(180deg, #11120fc9, transparent 28%, transparent 48%, #11120fba);
+}
+#workshop { font-family: system-ui, sans-serif; }
+#workshop .workshop-head h1 { font-style: normal; font-size: 23px; letter-spacing: -.6px; }
+#workshop .workshop-head small, #garage .stage-step { color: var(--muted); }
+#workshop-back, #garage .stage-back {
+  background: #1c1d19d9; border: 1px solid var(--line); border-radius: 6px; box-shadow: none;
+}
+#workshop .workshop-stage-label, #garage .garage-caption small { color: var(--muted); }
+#workshop .showroom-hint, #garage .showroom-hint { background: #171814c9; color: #c9c9bf; border-color: var(--line); border-radius: 4px; }
+#workshop .workshop-panel, #garage .garage-specs, #garage .car-roster-shell {
+  background: linear-gradient(145deg, #242520f5, #171815fa);
+  border: 1px solid var(--line); border-radius: 6px;
+  box-shadow: 0 18px 48px #0004, inset 0 1px #ffffff06;
+}
+#workshop .workshop-panel { border-top-color: #e9e4cf50; }
+#workshop .workshop-departments { gap: 4px; padding: 4px; background: #0c0d0b66; border: 1px solid var(--line); border-radius: 5px; }
+#workshop .workshop-departments button { border: 0; border-radius: 3px; letter-spacing: .5px; }
+#workshop .workshop-departments button[aria-pressed=true] { color: var(--cream); background: #373831; box-shadow: inset 0 1px #ffffff0d; }
+#workshop-name { font-size: 21px; letter-spacing: -.5px; }
+#workshop-presets button { border-radius: 4px; }
+#workshop-presets button[aria-pressed=true] { background: var(--cream); }
+#workshop-stats, #workshop .pw-build-stats {
+  padding: 12px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+}
+#workshop .pw-wallet { justify-content: space-between; gap: 8px; }
+#workshop .pw-wallet b { color: var(--cream); font-size: 14px; }
+#workshop :is(.pw-nav, .pw-slot-nav) button, #workshop-tabs button { letter-spacing: .4px; }
+#workshop .pw-nav { border-bottom: 1px solid var(--line); }
+#workshop .part-card { border-radius: 5px; background: #ffffff03; padding: 12px 10px; }
+#workshop .part-card[aria-pressed=true] {
+  background: #d7c19b0e; border-color: #d7c19b9c; box-shadow: inset 0 2px var(--gold);
+}
+#workshop .part-card strong { font-size: 12px; line-height: 1.3; }
+#workshop .part-card small { line-height: 1.45; font-weight: 500; }
+#workshop .part-symbol:not(.symbol-paint) { color: #dfdfd3; }
+#workshop .pw-detail { padding-top: 12px; margin-top: 5px; border-top: 1px solid var(--line); line-height: 1.55; }
+#workshop .pw-detail > strong { font-size: 17px; letter-spacing: -.3px; }
+#workshop .pw-detail .pw-stats { color: var(--cream); }
+#workshop .pw-track { color: var(--muted); font-weight: 600; }
+#workshop .pw-track[aria-pressed=true] { background: #d7c19b0d; color: var(--gold); }
+#workshop .pw-build div { border-radius: 4px; background: #ffffff03; }
+#workshop .pw-root select, #workshop .pw-root input { border-radius: 4px; }
+#workshop .workshop-actions button { border-color: var(--line); border-radius: 4px; letter-spacing: .5px; }
+#workshop .workshop-actions #workshop-save,
+#workshop .pw-actions .pw-action { background: var(--cream); border-color: var(--cream); color: var(--gold-ink); box-shadow: none; }
+#workshop .pw-actions :is([data-action=recycle], [data-action=cancel], [data-action=list]) {
+  background: transparent; border-color: var(--line); color: var(--cream);
+}
+#workshop-status { color: var(--cream); }
+#workshop .workshop-note { color: var(--muted); line-height: 1.6; }
+#workshop-installation { background: #25291f; border-color: #b7c49b60; border-left: 3px solid #b7c49b; border-radius: 4px; box-shadow: none; }
+#workshop-installation small { color: #c8d6ad; }
+#workshop-installation strong { color: var(--cream); }
+#workshop-installation span { color: #c3c7b8; }
+
+#garage .stage-title em, #garage .skin-label { color: var(--gold); }
+#garage .skin-dot.sel { border-color: var(--cream); }
+#garage .car-tabs { gap: 0; border-bottom: 1px solid var(--line); margin-bottom: 5px; }
+#garage .car-tab { background: transparent; border: 0; border-bottom: 2px solid transparent; border-radius: 0; color: var(--muted); min-height: 36px; }
+#garage .car-tab[aria-selected=true] { background: transparent; border-color: var(--gold); color: var(--cream); }
+#garage .car-roster-item { border-radius: 4px; background: #ffffff03; border-color: var(--line); }
+#garage .car-roster-item.selected { background: #eeead30a; border-color: #d7c19b99; box-shadow: inset 0 2px var(--gold); }
+#garage .car-roster-item strong i { box-shadow: none; }
+#garage #car-roster { scrollbar-color: #77776b transparent; }
+#garage #btn-workshop-garage {
+  background: #252620ed; border: 1px solid var(--line); border-left: 3px solid var(--gold); border-radius: 4px;
+  padding: 13px 14px;
+}
+#garage #btn-workshop-garage strong { letter-spacing: 1px; font-size: 11px; }
+#garage #btn-workshop-garage small { font-size: 10px; line-height: 1.5; }
+#garage .upg { background: #ffffff04; border-radius: 4px; padding: 10px 4px; }
+#garage .upg.maxed { border-color: #d7c19b80; }
+#garage .upg .pips { color: var(--gold); }
+#garage #btn-garage-done, #garage #btn-buy-car {
+  background: var(--cream); color: var(--gold-ink); border: 1px solid var(--cream); border-radius: 4px; letter-spacing: 1.2px;
+}
+#garage #garage-bank { color: var(--cream); }
+#workshop :is(button,input,select):focus-visible, #garage button:focus-visible, #race-rewards :is(button,select):focus-visible {
+  outline: 2px solid var(--cream); outline-offset: 3px;
+}
+@media (hover:hover) {
+  #workshop button:not(:disabled):hover, #garage button:not(:disabled):hover { filter: brightness(1.15); }
+}
+
+#results { background: radial-gradient(ellipse at 50% 20%, #3a3a2e55, transparent 65%), #10110ff2; }
+#results .console-eyebrow, #results .tally-row .k, #results .dock-link { color: var(--muted); }
+#results .dock-hero, #results .dock-hero:hover { background: var(--cream); color: var(--gold-ink); box-shadow: none; }
+#results .dock-btn { background: #242520; border-color: var(--line); color: var(--cream); }
+#results .dock-btn svg { color: var(--gold); }
+#results .dock-btn:hover { background: #35362d; border-color: #d7c19b80; }
+#results .standing.you { background: #eeead30a; border-color: #d7c19b66; }
+#race-rewards { background: linear-gradient(145deg, #242520f5, #171815fa); border-color: var(--line); border-radius: 6px; color: var(--cream); }
+#race-rewards .rr-payout b { color: var(--cream); }
+#race-rewards :is(.rr-status, .rr-tradeoff, .rr-progress-note, .rr-chassis, .rr-foot, .rr-payout span, .rr-materials span, .rr-target label) { color: var(--muted); }
+#race-rewards .rr-status a, #race-rewards .rr-foot button { color: var(--gold); }
+#race-rewards .rr-target, #race-rewards .rr-foot button { border-color: var(--line); }
+#race-rewards .rr-target select { background: var(--rg-deep-2); color: var(--cream); border-color: var(--line); }
+#race-rewards .rr-materials progress::-webkit-progress-value { background: var(--gold); }
+#race-rewards .rr-materials progress::-moz-progress-bar { background: var(--gold); }
+#race-rewards .rr-workshop { background: var(--cream); color: var(--gold-ink); border-color: var(--cream); }
+
+@media (max-width:420px) {
+  #workshop .workshop-head { gap: 8px; }
+  #workshop .workshop-head h1 { font-size: 18px; letter-spacing: -.5px; }
+  #workshop .workshop-head small { font-size: 7px; letter-spacing: 1.3px; }
+  #workshop-back { flex-shrink: 0; }
+  #workshop-balance { font-size: 10px; }
+}
+@media (max-height:720px) and (max-width:849px) {
+  #workshop-stats, #workshop .pw-build-stats { padding: 8px 0; }
+  #workshop .part-card { padding: 10px 8px; }
+  #garage #btn-workshop-garage { padding: 9px 12px; }
+  #garage .upg { padding: 7px 4px; }
+}

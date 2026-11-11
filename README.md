@@ -69,19 +69,15 @@ Query params for testing: `?len=500` (lap length in metres, default 1800),
   well as stepping the score multiplier. Risk buys speed, speed makes everything
   riskier. Contact wipes the chain. Style and boost used to be separate
   currencies, which meant a player could ignore either one.
-- **Ambient traffic** (`src/traffic.ts`) — a recycled pool of civilian cars fills
-  the lap. It is what near-misses are measured against and what makes speed read
-  as speed. Rows are spaced and never block adjacent lanes, so there is always a
-  line through; clipping one costs speed and your chain, and only a fast closing
-  hit does damage.
-  Lagos mixes four yellow-and-black danfo minibuses into the ten-vehicle pool,
-  with passenger windows and route boards. Their procedural model shares geometry
-  and materials across the fleet (`src/danfo.ts`).
-  Traffic keeps its distance across laps, waits in the spawn queue until it comes
-  into view, and avoids starting lane changes beside an approaching player or
-  into another vehicle. Danfos have a longer contact zone. Gentle clips retain
-  88% of speed; hard impacts retain 72%. A near miss pays once the player has
-  fully cleared the vehicle, and only if the pass stayed clear of contact.
+- **Closed race circuits** — civilian traffic and danfo buses no longer spawn
+  in circuit races. Opponents use the performance-car roster; class events keep
+  their eligibility rules, and Police Chase keeps its police units. Near-misses,
+  drafting and takedowns still work against racers. City free roam and passenger
+  driving retain their separate traffic system.
+- **Cinematic car market** — the existing renderer presents the actual cars in
+  a lit photo studio with automatic orbit, manual rotation and three camera
+  angles. The collection opens offline; dealer availability and RUSH purchases
+  require fresh NEAR testnet data. Previewing never equips or unlocks a car.
 - **Neon City** — two modes open from the menu. **Passenger**: accept a fare
   and the passenger is waiting on the pavement; stop beside them and they walk
   over and climb in (Mixamo clips on a rigged character, `src/city/passenger.ts`),
@@ -113,12 +109,22 @@ node scripts/smoke.mjs [shotsDir]  # Playwright: full race → results → retry
 Exits non-zero on console errors or if the results screen never appears.
 Screenshots (menu, countdown, mid-race, results) land in `shotsDir`.
 
-## Coins
+## Game economy
 
-Everything in the game is bought with coins earned by racing: cars in the
-garage, upgrades, paint and workshop parts. Coins are banked on the device
-(`src/economy.ts`) and have no cash value. The driver chip on the menu opens
-the driver card, where a player can pick the username the boards show.
+**Garage → Customs workshop → Performance & Parts** adds a NEAR testnet component economy:
+12 recipes across engine, gearbox, tires and nitro; two compatible chassis;
+unique component NFTs with maker provenance; crafting, installation, recycling
+and player-to-player sales. Each component changes handling through an explicit
+benefit and tradeoff. Read [the economy design and rollout notes](docs/near-economy.md).
+
+Eligible connected race sessions earn 2 alloy, 1 circuit and RUSH by finishing
+place (45 for a win, 36, 30, or 24 for any other finish), subject to contract
+budgets. The contract keeps a season ledger of everything minted, burned, crafted
+and traded; the public `/economy` page reads it live (`src/economyPage.ts`). These are separate from local coins, which still
+buy ordinary garage cars, upgrades, paint and cosmetic workshop parts. Both are
+test/game currencies with no cash value. The new contract and backend require
+coordinated deployment; race checks currently validate plausible client telemetry,
+not authoritative physics replay.
 
 ## Legacy Celo contracts
 

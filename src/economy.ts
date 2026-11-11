@@ -3,6 +3,8 @@
 // bought so far.
 const BANK_KEY = 'minirush.bank';
 const OWNED_KEY = 'minirush.owned';
+let chainCars: string[] = [];
+export function syncChainCars(ids: string[]): void { chainCars = ids; }
 
 export const bank = (): number => {
   const n = Number(localStorage.getItem(BANK_KEY));
@@ -16,9 +18,9 @@ export const deposit = (coins: number): void => {
 export function owned(): Set<string> {
   try {
     const raw = JSON.parse(localStorage.getItem(OWNED_KEY) ?? '[]') as string[];
-    return new Set(Array.isArray(raw) ? raw : []);
+    return new Set([...(Array.isArray(raw) ? raw : []), ...chainCars]);
   } catch {
-    return new Set();
+    return new Set(chainCars);
   }
 }
 
@@ -33,7 +35,10 @@ export function spend(amount: number): boolean {
 
 /** Unlock a car once it is paid for. */
 export function grantCar(id: string): void {
-  const o = owned();
+  // Preserve only locally purchased cars; chain ownership is refreshed separately.
+  let raw: unknown;
+  try { raw = JSON.parse(localStorage.getItem(OWNED_KEY) ?? '[]'); } catch { raw = []; }
+  const o = new Set<string>(Array.isArray(raw) ? raw.filter((x): x is string => typeof x === 'string') : []);
   o.add(id);
   localStorage.setItem(OWNED_KEY, JSON.stringify([...o]));
 }

@@ -98,7 +98,8 @@ export class Scenery {
     private track: Track,
     seed: number,
     map: MapSpec,
-    wet = false
+    wet = false,
+    ramps = true
   ) {
     const rand = mulberry32(seed ^ 0x5eed);
     this.kit = new EnvironmentKit(environmentTheme(map));
@@ -358,7 +359,7 @@ export class Scenery {
     }
 
     // launch ramps along long straightaways (jump over traffic or catch air)
-    for (let rs = 220; rs < track.length - 150; rs += 450 + rand() * 250) {
+    for (let rs = 220; ramps && rs < track.length - 150; rs += 450 + rand() * 250) {
       if (Math.abs(track.frame(rs).curvature) < 0.005) {
         const ramp = buildLaunchRamp();
         track.place(ramp, rs, 0); // centered in the lane

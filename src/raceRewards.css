@@ -1,0 +1,43 @@
+#race-rewards { width: min(100%, 440px); flex-shrink: 0; box-sizing: border-box; padding: 18px; text-align: left; color: #eef4fb; background: linear-gradient(135deg,#18293bf2,#0c1726f2); border: 1px solid #9fd4eb35; border-radius: 8px; }
+.rr-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 9px; letter-spacing: 1.4px; }
+.rr-heading strong { color: #b0bdcf; font-size: 8px; }
+[data-status=confirmed] .rr-heading strong { color: #87e4c1; }
+[data-status=pending] .rr-heading strong { color: #f6d488; }
+.rr-payout { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin: 17px 0 12px; }
+.rr-payout div { display: flex; flex-direction: column; gap: 4px; }
+.rr-payout b { font-size: 28px; font-variant-numeric: tabular-nums; color: #a4def2; }
+.rr-payout span { color: #b5c3d5; font-size: 9px; letter-spacing: 1.5px; }
+.rr-tiers { display: grid; grid-template-columns: repeat(4,1fr); gap: 6px; margin: 0 0 12px; padding: 0; list-style: none; }
+.rr-tiers li { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; padding: 7px 8px; border: 1px solid #b8d2e422; border-radius: 4px; color: #97abc2; }
+.rr-tiers span { font-size: 8px; letter-spacing: 1px; }
+.rr-tiers b { font-size: 12px; font-variant-numeric: tabular-nums; color: #c5d4e6; }
+.rr-tiers li[aria-current] { border-color: #87e4c188; background: #87e4c114; color: #87e4c1; }
+.rr-tiers li[aria-current] b { color: #eafff7; }
+.rr-status, .rr-tradeoff, .rr-progress-note { font: 11px/1.55 system-ui,sans-serif; color: #bac9dc; margin: 10px 0; }
+.rr-chassis { font: 9px system-ui,sans-serif; color: #97abc2; margin: 6px 0; }
+.rr-status a { color: #a4def2; white-space: nowrap; }
+.rr-target { border-top: 1px solid #b8d2e425; padding-top: 15px; margin-top: 15px; }
+.rr-target label { display: block; font-size: 9px; letter-spacing: 1.4px; margin-bottom: 9px; color: #b6c9df; }
+.rr-target select { box-sizing: border-box; width: 100%; min-width: 0; padding: 10px; min-height: 40px; background: #0b1726; color: #eef4fb; border: 1px solid #a4def244; border-radius: 5px; font: 650 12px system-ui,sans-serif; }
+.rr-materials { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-top: 14px; }
+.rr-materials div { display: flex; flex-direction: column; gap: 7px; }
+.rr-materials span { font-size: 8px; letter-spacing: 1px; color: #b5c3d5; }
+.rr-materials strong { font-size: 12px; font-variant-numeric: tabular-nums; }
+.rr-materials progress { width: 100%; height: 4px; appearance: none; border: 0; border-radius: 3px; background: #ffffff18; }
+.rr-materials progress::-webkit-progress-bar { background: #ffffff18; border-radius: 3px; }
+.rr-materials progress::-webkit-progress-value { background: #9bd7eb; border-radius: 3px; }
+.rr-materials progress::-moz-progress-bar { background: #9bd7eb; }
+.rr-workshop, .rr-retry { width: 100%; padding: 12px; min-height: 44px; border-radius: 5px; cursor: pointer; font: 800 11px system-ui,sans-serif; letter-spacing: 1px; }
+.rr-workshop { display: flex; justify-content: space-between; background: #a6dbe8; color: #0d1c2c; border: 1px solid #c1e9f3; }
+.rr-retry { background: #f6d48815; border: 1px solid #f6d48855; color: #f6d488; }
+.rr-foot { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-top: 12px; font-size: 7px; letter-spacing: .5px; color: #97abc2; }
+.rr-foot button { background: transparent; border: 1px solid #a4def233; padding: 7px; min-height: 32px; border-radius: 4px; color: #b4def0; cursor: pointer; font-size: 8px; }
+.rr-foot button:disabled { opacity: .5; cursor: default; }
+#race-rewards :is(button,select):focus-visible { outline: 2px solid #cbf1ff; outline-offset: 3px; }
+@media (min-width: 900px) and (min-height: 560px) {
+  #results { grid-template-columns: minmax(260px,390px) minmax(300px,410px); gap: 12px 50px; align-content: safe center; }
+  #results #race-rewards { grid-column: 2; grid-row: 4 / 8; width: 100%; align-self: start; }
+  #results .result-dock { grid-column: 1; grid-row: 7; align-self: start; }
+  #results #btn-bounty-results { grid-row: 8; }
+}
+@media (max-width: 999px) { #race-rewards { padding: 16px; } }

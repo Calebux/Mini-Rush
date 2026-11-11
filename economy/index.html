@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#060712" />
+  <meta name="description" content="MiniRush's race economy, read live from its NEAR contract: what racing pays, what crafting and trading burn, and what the dealer agents are charging." />
+  <link rel="icon" href="data:," />
+  <title>MiniRush Economy</title>
+  <link rel="stylesheet" href="/src/economyPage.css" />
+</head>
+<body data-scene="title">
+  <!-- The game's showroom renders here; #market-car-stage is the box the car is framed in. -->
+  <div id="stage-wrap" aria-hidden="true"></div>
+  <div id="market-car-stage" data-orbit="true" data-shot="front" aria-hidden="true"></div>
+  <div class="grade" aria-hidden="true"></div>
+  <div class="shutter top" aria-hidden="true"></div>
+  <div class="shutter bottom" aria-hidden="true"></div>
+
+  <header class="bar">
+    <a class="logo" href="../" aria-label="MiniRush, back to the game">MINI<em>RUSH</em></a>
+    <nav class="chapters" aria-label="Sections">
+      <a href="#s-title" data-for="title"><b>01</b>SUPPLY</a>
+      <a href="#s-loop" data-for="loop"><b>02</b>THE LOOP</a>
+      <a href="#s-dealers" data-for="dealers"><b>03</b>DEALER ROW</a>
+      <a href="#s-parts" data-for="parts"><b>04</b>PARTS BAY</a>
+      <a href="#s-rules" data-for="rules"><b>05</b>RULEBOOK</a>
+    </nav>
+    <span class="live" id="live" data-state="loading" role="status"><i></i><span id="updated">READING THE CONTRACT</span></span>
+    <a class="bar-cta" href="../">RACE ▸</a>
+  </header>
+
+  <main>
+    <section class="scene" id="s-title" data-scene="title" data-shot="front" data-car="rush-one">
+      <div class="col">
+        <p class="eyebrow"><b>01</b> / Season ledger · live from <a id="contract" target="_blank" rel="noopener">the garage contract</a></p>
+        <h1><span class="thin">The</span> <em>RUSH</em><br />economy</h1>
+        <p class="lede">Race to mint it. Craft, trade and deal to burn it. Every number on this screen is read straight from the garage contract on NEAR testnet.</p>
+        <div class="supply">
+          <small>RUSH in circulation</small>
+          <b id="supply">—</b>
+          <div class="split" id="split" role="img" aria-label="RUSH held by players and by dealers"></div>
+          <div class="key" id="split-key"></div>
+        </div>
+        <div class="plates" id="plates"></div>
+        <p class="notice" id="notice" hidden></p>
+      </div>
+      <a class="cue" href="#s-loop">FOLLOW THE RUSH <i>▾</i></a>
+    </section>
+
+    <section class="scene flip" id="s-loop" data-scene="loop" data-shot="side" data-car="viper" aria-labelledby="h-loop">
+      <div class="col">
+        <p class="eyebrow"><b>02</b> / The loop · season to date</p>
+        <h2 id="h-loop">Race. Build. <em>Burn.</em></h2>
+        <p class="lede">RUSH only enters the game across a finish line, and the podium pays more. It leaves when a part is crafted or a trade clears.</p>
+        <ol class="circuit">
+          <li class="stage earn">
+            <header><h3>Earned on track</h3><b id="earn-total"></b></header>
+            <ol class="podium" id="podium" aria-label="RUSH paid by finishing place"></ol>
+            <p id="salvage"></p>
+            <dl class="rows" id="earn-rows"></dl>
+          </li>
+          <li class="stage hold">
+            <header><h3>In garages and tills</h3><b id="hold-total"></b></header>
+            <dl class="rows" id="hold-rows"></dl>
+          </li>
+          <li class="stage burn">
+            <header><h3>Burned for good</h3><b id="burn-total"></b></header>
+            <div class="furnace" id="furnace" role="img"><i id="furnace-fill"></i></div>
+            <dl class="rows" id="burn-rows"></dl>
+            <p id="burn-note"></p>
+          </li>
+        </ol>
+        <div class="tach">
+          <header><span>Rewarded races today · UTC</span><b id="budget-count">—</b></header>
+          <div class="segs" id="budget-segs" role="img"></div>
+          <p id="budget-note"></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="scene" id="s-dealers" data-scene="dealers" data-shot="front" aria-labelledby="h-dealers">
+      <div class="col">
+        <p class="eyebrow"><b>03</b> / Dealer row · repriced on chain every 15 minutes</p>
+        <h2 id="h-dealers">Prices that <em>move.</em></h2>
+        <p class="lede">Three dealer agents run the stalls. Each one reads its own sales and stock, sets a price inside fixed limits, and signs a reason for every move.</p>
+        <article class="feature" id="feature" aria-live="polite"></article>
+        <div class="reel" id="reel" aria-hidden="true"><i></i></div>
+        <div class="rail" id="rail" aria-label="Dealer stalls"></div>
+        <p class="empty" id="stalls-empty" hidden></p>
+        <h3 class="minor">Price wire <small>the latest moves and why</small></h3>
+        <ol class="wire" id="moves"></ol>
+        <p class="empty" id="moves-empty" hidden></p>
+      </div>
+    </section>
+
+    <section class="scene flip" id="s-parts" data-scene="parts" data-shot="rear" data-car="rush-one" aria-labelledby="h-parts">
+      <div class="col">
+        <p class="eyebrow"><b>04</b> / Parts bay · numbered NFTs</p>
+        <h2 id="h-parts">Built by <em>players.</em></h2>
+        <p class="lede">Every part is crafted by a driver, remembers its maker, and trades player to player. Crafting burns its whole cost, and every part gives up one stat to gain another.</p>
+        <div class="plates" id="parts"></div>
+        <h3 class="minor">On the block <small>open offers</small></h3>
+        <ul class="offers" id="offers"></ul>
+        <p class="empty" id="offers-empty" hidden></p>
+        <h3 class="minor">The catalogue <small>what each build burns</small></h3>
+        <div class="slots" id="slots" role="group" aria-label="Part slot"></div>
+        <ul class="recipes" id="recipes"></ul>
+      </div>
+    </section>
+
+    <section class="scene" id="s-rules" data-scene="rules" data-shot="front" data-car="stockcar" aria-labelledby="h-rules">
+      <div class="col">
+        <p class="eyebrow"><b>05</b> / Rulebook</p>
+        <h2 id="h-rules">Enforced by <em>the contract.</em></h2>
+        <ol class="rules" id="rules"></ol>
+      </div>
+    </section>
+
+    <section class="scene finale" id="s-finale" data-scene="finale" data-shot="front" data-car="viper" aria-labelledby="h-finale">
+      <p class="eyebrow">Your turn</p>
+      <h2 id="h-finale">Earn your <em>first RUSH.</em></h2>
+      <a class="play" href="../">RACE ▸</a>
+      <p class="note">
+        MiniRush runs on NEAR testnet. RUSH, salvage, parts and cars are game items with no cash value.
+        Race rewards are checked by the game server against timed checkpoints, which screens out impossible
+        runs but is not proof a race was driven by hand.
+      </p>
+    </section>
+  </main>
+
+  <footer class="ticker" aria-label="Dealer prices">
+    <b>PRICE WIRE</b>
+    <div class="tape"><ul id="tape"></ul></div>
+  </footer>
+  <script type="module" src="/src/economyPage.ts"></script>
+</body>
+</html>

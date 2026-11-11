@@ -12,7 +12,9 @@ export interface GhostData {
   pts: number[]; // s0, x0, s1, x1, ...
 }
 
-const INDEX_KEY = 'minirush.ghosts';
+// Bounded launch/braking changes lap times. Keep historical recordings intact,
+// but only compare local best ghosts made under the same handling rules.
+const INDEX_KEY = 'minirush.ghosts.h2';
 const MAX_GHOSTS = 8;
 const HZ = 10;
 const MAX_SAMPLES = 3600; // 6 min cap — beyond that stop recording
@@ -20,7 +22,7 @@ const MAX_POINTS = MAX_SAMPLES * 2;
 
 export const ghostKey = (
   seed: number, mapId: string, modeId: string, laps: number, len: number
-): string => `minirush.ghost.${seed}.${mapId}.${modeId}.${laps}.${len}`;
+): string => `minirush.ghost.h2.${seed}.${mapId}.${modeId}.${laps}.${len}`;
 
 export function loadGhost(key: string): GhostData | null {
   try {

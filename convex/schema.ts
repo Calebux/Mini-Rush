@@ -132,6 +132,15 @@ export default defineSchema({
   }).index('by_account', ['account']).index('by_key', ['publicKey'])
     .index('by_created', ['createdAt']).index('by_paid', ['lastPaidAt']),
 
+  nearRaces: defineTable({
+    account: v.string(), run: v.string(), distance: v.number(),
+    startedAt: v.number(), sampledAt: v.number(), progress: v.number(), elapsed: v.number(), samples: v.number(),
+    status: v.union(v.literal('active'), v.literal('pending'), v.literal('paid'), v.literal('abandoned')),
+    // Podium tier claimed at the finish (1-3, 0 = plain finish); fixed by the first finish call.
+    place: v.optional(v.number()),
+    tx: v.optional(v.string())
+  }).index('by_account_run', ['account', 'run']).index('by_account_started', ['account', 'startedAt']),
+
   // What each dealer agent decided, newest last: the price, why, and the sales
   // it was looking at. The same reason is written on chain with the price.
   dealerMoves: defineTable({

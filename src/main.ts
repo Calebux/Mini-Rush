@@ -6,6 +6,9 @@ import './neonHome.css'; // the Neon Night theme overrides the older sheets
 import './raceHud.css';
 import './consolePresentation.css';
 import './market.css';
+import './partsWorkshop.css';
+import './raceRewards.css';
+import './garagePresentation.css';
 
 // Finish an interrupted coin purchase before any menu/race can read the bank.
 try { recoverPurchase(); } catch { /* Workshop displays the recoverable storage error. */ }
@@ -17,6 +20,7 @@ new Game(document.getElementById('app')!);
 void import('./near').then(async (n) => {
   if (!(await n.ensureAccount())) return;
   n.syncCars(await n.holdings().catch(() => []));
+  await n.refreshComponents().catch(() => {});
 });
 // ?diag=1 — layout numbers from a real device, for a bug a desktop can't show
 if (new URLSearchParams(location.search).get('diag') === '1') {

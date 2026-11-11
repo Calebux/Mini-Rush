@@ -1,0 +1,62 @@
+/* Performance extends the existing Customs panel, part cards and showroom. */
+#workshop-customize[hidden], #workshop-performance[hidden], #workshop-balance[hidden] { display: none; }
+.workshop-departments, .pw-nav, .pw-slot-nav { display: flex; gap: 5px; overflow-x: auto; touch-action: pan-x; }
+.workshop-departments { margin-bottom: 14px; border-bottom: 1px solid var(--line); }
+.workshop-departments button, .pw-nav button, .pw-slot-nav button {
+  flex: 1; padding: 8px 6px; min-height: 38px; border: 0; border-bottom: 2px solid transparent; background: transparent;
+  color: var(--muted); font: 800 9px sans-serif; text-transform: uppercase; cursor: pointer;
+}
+.workshop-departments button[aria-pressed=true], .pw-nav button[aria-pressed=true], .pw-slot-nav button[aria-pressed=true] { border-color: var(--gold); color: var(--gold); }
+.pw-root { min-width: 0; color: var(--cream); }
+.pw-loadout { display: flex; align-items: center; gap: 12px; font: 800 9px sans-serif; letter-spacing: 1px; color: var(--muted); }
+.pw-loadout select { flex: 1; min-width: 0; }
+.pw-root select, .pw-root input { padding: 8px; min-height: 38px; border: 1px solid var(--line); border-radius: 7px; color: var(--cream); background: var(--rg-deep-2); font: 700 11px sans-serif; }
+.pw-wallet { display: flex; flex-wrap: wrap; gap: 12px; padding: 12px 0; font: 700 9px sans-serif; color: var(--muted); }
+.pw-wallet b { color: var(--gold); font-size: 12px; font-variant-numeric: tabular-nums; }
+.pw-build-stats { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin: 0 0 10px; }
+.pw-build-stats div { display: grid; grid-template-columns: 1fr auto; gap: 6px; font: 9px sans-serif; }
+.pw-build-stats span { color: var(--muted); }
+.pw-build-stats i { grid-column: 1/-1; height: 3px; border-radius: 5px; background: linear-gradient(to right,var(--gold) var(--stat),#ffffff14 var(--stat)); }
+.pw-slot-nav { padding: 5px 0 9px; }
+.pw-grid { display: flex; gap: 8px; overflow-x: auto; padding: 3px 2px 7px; touch-action: pan-x; }
+.pw-card { min-height: 100px; }
+.pw-detail { padding-top: 8px; font: 11px/1.4 sans-serif; }
+.pw-detail > strong { font-size: 13px; }
+.pw-detail p { margin: 7px 0; color: var(--muted); }
+.pw-detail .pw-stats, .pw-detail .pw-price, .pw-detail .pw-cost { color: var(--gold-hi); }
+.pw-actions { grid-template-columns: 1fr; margin: 8px 0; }
+.pw-actions .pw-action { background: linear-gradient(135deg,var(--gold-hi),var(--gold)); color: var(--gold-ink); }
+.pw-actions [data-action=recycle], .pw-actions [data-action=cancel] { background: transparent; color: var(--gold); }
+.pw-root button:focus-visible, .pw-root input:focus-visible, .pw-root select:focus-visible, .workshop-departments button:focus-visible { outline: 2px solid var(--gold-hi); outline-offset: 2px; }
+.pw-status { min-height: 16px; font: 11px/1.4 sans-serif; color: var(--cream); margin: 7px 0; overflow-wrap: anywhere; }
+.pw-status a { color: var(--gold-hi); }
+.pw-guide { color: var(--muted); font: 10px/1.5 sans-serif; margin: 10px 0; }
+.pw-guide summary { cursor: pointer; }
+.pw-guide p { margin: 7px 0; }
+.pw-build { display: grid; grid-template-columns: repeat(2,1fr); gap: 7px; margin: 10px 0; }
+.pw-build div { padding: 8px; border: 1px solid var(--line); border-radius: 7px; }
+.pw-build small { display: block; font: 700 8px sans-serif; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.pw-build strong { font: 700 10px sans-serif; }
+.pw-sell { display: grid; grid-template-columns: 1fr 90px; gap: 6px; align-items: center; border-top: 1px solid var(--line); padding-top: 10px; margin-top: 10px; }
+.pw-sell label { font: 8px sans-serif; letter-spacing: 1px; color: var(--muted); }
+.pw-sell input { width: 100%; min-width: 0; box-sizing: border-box; }
+.pw-sell .pw-actions { grid-column: 1/-1; }
+.pw-provenance { overflow-wrap: anywhere; font-size: 9px; }
+.pw-foot, .pw-pagination { display: flex; align-items: center; justify-content: space-between; gap: 8px; font: 8px sans-serif; color: var(--muted); }
+.pw-foot { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 8px; }
+.pw-foot button, .pw-pagination button, .pw-pending button { min-height: 36px; padding: 7px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--gold); font: 800 9px sans-serif; cursor: pointer; }
+.pw-root button:disabled { opacity: .43; cursor: default; }
+.pw-empty, .pw-pending { font: 11px/1.5 sans-serif; color: var(--muted); padding: 18px 0; }
+@media (min-width: 850px) { #workshop .workshop-panel { max-height: calc(100dvh - 130px); overflow-y: auto; } }
+.pw-track { border: 1px solid var(--line); border-radius: 5px; background: transparent; color: var(--gold-hi); padding: 8px 10px; min-height: 36px; font: 800 9px sans-serif; cursor: pointer; }
+.pw-track[aria-pressed=true] { background: #4d91ff14; }
+#workshop-installation { position: relative; width: 100%; margin: 0 0 14px; box-sizing: border-box; padding: 13px 16px; border: 1px solid #93dfef88; border-radius: 9px; background: #0b192cf0; box-shadow: 0 6px 30px #0005; text-align: left; pointer-events: none; z-index: 2; }
+#workshop-installation[hidden] { display: none; }
+#workshop-installation small { display: block; color: #8fdded; font: 700 8px sans-serif; letter-spacing: 1.5px; }
+#workshop-installation strong { display: block; margin: 6px 0; color: #f0f7ff; font: 800 16px sans-serif; }
+#workshop-installation span { color: #b8cfdf; font: 10px/1.5 sans-serif; }
+@media (max-width:849px) { #workshop-installation { padding: 10px 12px; } #workshop-installation strong { font-size: 13px; } }
+@media (prefers-reduced-motion:no-preference) {
+  #workshop-installation:not([hidden]) { animation: component-confirm .3s ease-out; }
+  @keyframes component-confirm { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+}

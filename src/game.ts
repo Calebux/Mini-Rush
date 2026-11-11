@@ -3,7 +3,8 @@ import './presentation.css';
 import { AssetLibrary, disposeCarInstance } from './assets';
 import { AudioManager } from './audio';
 import { BOUNTY_MODE, bountyMapIndex, bountySeed } from './bounty';
-import { CARS } from './cars';
+import { CARS, type CarSpec } from './cars';
+import { TestDrive, TEST_LENGTH, TEST_SEED, type TestSetup } from './testDrive';
 import { separate } from './collision';
 import {
   BASE_SPEED, districtIndexAt, HEAT_COOL, HEAT_GRACE, HEAT_LIMIT, PIT_SCRUB, PLAYER_X_LIMIT,
@@ -60,7 +61,8 @@ import {
 } from './weekend';
 import { decodeGhost, encodeGhost } from './ghostShare';
 import { Challenge, challengeCode, createChallenge, loadChallenge } from './challenge';
-import { payRace, useNitroCan } from './near';
+import { RewardRace, refreshComponents, useNitroCan } from './near';
+import { applyComponents } from './components';
 
 type State = 'boot' | 'menu' | 'countdown' | 'racing' | 'finished';
 
@@ -170,9 +172,11 @@ export class Game {
   private gunCooldown = 0;
   private ammoWarnAt = -10;
   // menu-family camera: which page is up, turntable angle, flyby distance
-  private uiScene: 'menu' | 'garage' | 'tour' | 'workshop' = 'menu';
+  private uiScene: 'menu' | 'garage' | 'tour' | 'workshop' | 'market' = 'menu';
+  private marketCar = 'rush-one';
   private showroom: Showroom | null = null;
   private workshopPreview: Build | null = null;
+  private workshopChassis: string | null = null;
   private garageLiftPx = 0;
   private garageLiftAt = 0;   // viewport height garageLiftPx was measured for
   private viewOffset = 0;     // lens shift currently applied to the camera
@@ -315,9 +319,19 @@ export class Game {
     this.ui.setMode(this.modeIndex);
     this.ui.onPlay = () => this.startRace();
     this.ui.onRetrySame = () => this.retrySameTrack();
+    this.ui.onTestDrive = () => this.openTestDrive();
+    this.testDrive.onStart = setup => this.startTestDrive(setup);
+    this.testDrive.onExit = () => this.exitTestDrive();
+    this.testDrive.onPause = () => this.togglePause();
     this.ui.onLaps = (n) => (this.laps = n);
     this.ui.onCar = (i) => this.setCar(i);
-    this.ui.onWorkshopPreview = build => { this.workshopPreview = build; };
+    this.ui.onWorkshopPreview = (build, chassis) => {
+      this.showroom?.clearInstallation(); this.workshopPreview = build; this.workshopChassis = chassis ?? null;
+    };
+    this.ui.onMarketPreview = id => { this.marketCar = id; };
+    this.ui.onComponentInstalled = (recipe, chassis) => {
+      if (this.uiScene === 'workshop' && this.workshopChassis === chassis) this.showroom?.installComponent(recipe);
+    };
     this.ui.onMap = (i) => this.setMap(i);
     this.ui.onMode = (i) => this.setMode(i);
     this.ui.onPage = (p) => {
@@ -397,6 +411,7 @@ export class Game {
     this.ui.onPause = () => this.togglePause();
     this.ui.onResume = () => this.togglePause();
     this.ui.onRestart = () => {
+      if (this.practice) { this.startTestDrive(this.practice.setup); return; }
       this.paused = false;
       this.retrySameTrack();
     };
@@ -570,6 +585,7 @@ export class Game {
     const score = Math.round(placeBonus(r.place, r.field) + Math.max(0, ((LAPS * LAP_METRES) / 18 - r.time) * 4));
     const standings = r.results.map((x) => ({ name: x.name, car: x.you ? car : 'VIPER GT', time: x.time, estimated: x.estimated, you: x.you }));
     track('race');
+    this.ui.completeRaceRewards(CARS[this.carIndex].id, null, 'City GP pays local coins. NEAR salvage is available in connected circuit races.');
     this.ui.showResults(r.place, r.time, coins, score, LAPS, car, false, 0, false, false, 0, true, standings);
     void this.audio.playMusic('menu');
   }
@@ -766,7 +782,7 @@ export class Game {
 
   /** Lap length to build: a mode with its own (HARDCORE's long circuit) overrides the pick. */
   private lapLength(): number {
-    return MODES[this.modeIndex].trackLength ?? this.trackLength;
+    return this.practice ? TEST_LENGTH : MODES[this.modeIndex].trackLength ?? this.trackLength;
   }
 
   private buildRace(): void {
@@ -779,7 +795,7 @@ export class Game {
     });
 
     // weather
-    this.weather = rollWeather(map.id, seed);
+    this.weather = this.practice ? { type: 'clear', label: 'CLEAR', icon: '☀️', gripMul: 1, fogMul: 1, tint: 0xffffff } : rollWeather(map.id, seed);
     const fogNear = map.fogNear * this.weather.fogMul;
     const fogFar = map.fogFar * this.weather.fogMul;
     (this.scene.fog as THREE.Fog).near = fogNear;
@@ -858,7 +874,7 @@ export class Game {
     }
     this.wet = raining || !!theme.neon;
     setUnderglow(theme.night ? 1 : 0.2);
-    this.scenery = new Scenery(this.scene, this.track, seed, map, raining);
+    this.scenery = new Scenery(this.scene, this.track, seed, map, raining, !this.practice);
     this.sunOffset.set(-35, 36, -30);
     if (theme.coast) {
       const f = this.track.frame(65), side = this.scenery.group.userData.shoreSide as number;
@@ -870,26 +886,24 @@ export class Game {
     this.sunDisc.lookAt(0, 0, 0);
     this.sunGlow.position.copy(this.sunDisc.position).multiplyScalar(1.01);
     this.sunGlow.lookAt(0, 0, 0);
-    this.entities = new Entities(this.scene, this.track, seed);
+    this.entities = new Entities(this.scene, this.track, seed, !this.practice);
     this.player = new Player(this.scene, this.assets, this.track, this.carSpec(this.carIndex));
-    // Civilian traffic: the substrate near-misses and takedowns need, and the
-    // thing that makes speed legible. A no-traffic mode (HARDCORE) leaves the
-    // road to the racers.
+    // Closed circuits belong to the race grid. City free-roam has its own traffic.
     this.traffic = new TrafficManager(
-      this.scene, this.assets, this.track, seed, mode.noTraffic ? 0 : 14,
+      this.scene, this.assets, this.track, seed, 0,
       CARS[this.carIndex].model, map.id
     );
-    // A class mode fields the rest of that shelf (less workshop builds where
-    // it bars them); everything else races the civilian traffic shells. The AI
-    // is not buying anything, so a free-cars-only mode still fields the shelf.
+    // Use actual performance cars for opponents, never the bus/traffic pool.
+    // Class events retain their class restrictions and pursuit retains police.
     const rivalPool = mode.requiresClass
       ? CARS.filter((c) => carInField(mode, c) && c.id !== CARS[this.carIndex].id)
-      : [];
+      : CARS.filter(c => c.class !== 'junk' && c.id !== CARS[this.carIndex].id);
     this.rivals = new RivalManager(
       this.scene, this.assets, this.track, CARS[this.carIndex].model,
-      mode.rivals, mode.pursuit, rivalPool, mode.pro
+      mode.rivals, mode.pursuit, rivalPool, mode.pro, !!(mode.tumble || mode.heist)
     );
     this.rivals.paceMul = this.player.speedMul;
+    this.rivals.accelMul = this.carSpec(this.carIndex).accel;
     // an AI boost you can hear coming, loudest when it's on your bumper
     this.rivals.onNitro = (r) => {
       const d = Math.abs(r.s - this.player.s);
@@ -922,9 +936,14 @@ export class Game {
   }
 
   /** The car spec to race/park: upgrades applied, active paint-job color swapped in. */
-  private carSpec(i: number) {
-    if (CARS[i].model === 300) return workshopSpec(CARS[i]);
-    return { ...applyUpgrades(CARS[i]), color: activeColor(CARS[i].id, CARS[i].color) };
+  private carSpec(i: number): CarSpec {
+    if (this.practice && i === this.carIndex) {
+      const fitted = this.practice.fitted, base = CARS[i];
+      return this.practice.setup === 'stock'
+        ? { ...fitted, speed: base.speed, accel: base.accel, grip: base.grip, nitro: base.nitro } : fitted;
+    }
+    if (CARS[i].model === 300) return applyComponents(workshopSpec(CARS[i]));
+    return applyComponents({ ...applyUpgrades(CARS[i]), color: activeColor(CARS[i].id, CARS[i].color) });
   }
 
   /** Garage pick: persist, and swap the parked car live while in the menu. */
@@ -984,6 +1003,11 @@ export class Game {
 
   private resetGrid(): void {
     this.traffic?.reset(0);
+    if (this.practice) {
+      this.player.reset({ s: 0, x: 0 });
+      this.rivals.reset([]);
+      return;
+    }
     // Police Chase: you get a head start. The first units line up in your
     // mirrors, staggered back across both lanes; the rest lie in wait down
     // the road and attack as you arrive.
@@ -1003,11 +1027,56 @@ export class Game {
     this.rivals.reset(this.rivals.rivals.map((_, i) => slot(i)));
   }
 
-  private startRace(): void {
-    if (!localStorage.getItem('minirush.controls-guide')) {
+  private testDrive = new TestDrive();
+  private practice: { map: number; mode: number; seed: number; raceSeed: number; fitted: CarSpec; setup: TestSetup } | null = null;
+
+  private openTestDrive(): void {
+    const car = CARS[this.carIndex];
+    if (this.practice || this.state !== 'menu' || this.preparingRace || (car.price > 0 && !owned().has(car.id))) return;
+    this.practice = { map: this.mapIndex, mode: this.modeIndex, seed: this.seedCounter,
+      raceSeed: this.raceSeed, fitted: this.carSpec(this.carIndex), setup: 'fitted' };
+    this.testDrive.open(this.practice.fitted);
+  }
+
+  private startTestDrive(setup: TestSetup): void {
+    if (!this.practice || this.preparingRace) return;
+    this.practice.setup = setup;
+    this.modeIndex = MODES.findIndex(m => m.id === 'timeattack');
+    this.mapIndex = 0;
+    this.seedCounter = TEST_SEED;
+    this.cine.t = this.cine.flash = 0;
+    this.ui.beginTestDrive();
+    void this.startRace();
+  }
+
+  private exitTestDrive(): void {
+    const saved = this.practice;
+    if (!saved) return;
+    this.testDrive.close();
+    this.practice = null;
+    this.rewardRace = null;
+    this.paused = false;
+    this.state = 'menu';
+    this.audio.stopEngine(); this.audio.stopSiren();
+    void this.audio.playMusic('menu');
+    this.mapIndex = saved.map; this.modeIndex = saved.mode; this.seedCounter = saved.seed;
+    this.input.uiGas = this.input.uiBrake = false;
+    this.disposeRace(); this.buildRace(); this.raceSeed = saved.raceSeed;
+    this.ui.returnFromTestDrive();
+  }
+
+  private rewardRace: RewardRace | null = null;
+  private preparingRace = false;
+
+  private async startRace(): Promise<void> {
+    if (!this.practice && !localStorage.getItem('minirush.controls-guide')) {
       this.ui.showFirstRunGuide();
       return;
     }
+    if (this.preparingRace) return;
+    this.preparingRace = true;
+    if (!this.practice) await refreshComponents(false).catch(() => {});
+    this.preparingRace = false;
     this.paused = false;
     this.ui.hidePause();
     this.audio.play('start'); // race-start fanfare on the START RACE launch
@@ -1016,10 +1085,12 @@ export class Game {
     this.raceLaps = MODES[this.modeIndex].lapsLocked ?? this.laps;
     this.player.damageCool = MODES[this.modeIndex].pursuit ? HEAT_COOL : 3.5;
     this.player.raceLength = this.raceLaps * this.track.length;
+    this.rewardRace = this.practice ? null : new RewardRace(Math.ceil(this.player.raceLength));
+    this.ui.resetRaceRewards();
     this.rivals.raceLength = this.raceLaps * this.track.length;
     this.lapsDone = -1;
     this.state = 'countdown';
-    this.countdownT = 3.0;
+    this.countdownT = this.practice ? 1 : 3.0;
     this.lastCount = -1;
     this.audio.play('ignition');
     this.audio.startEngine();
@@ -1056,8 +1127,8 @@ export class Game {
 
     // ghost of your best run on this exact circuit (no cop-chase hauntings —
     // a spectral cruiser reads as a second cop)
-    this.ghostRec = new GhostRecorder();
-    this.ghostData = mode.pursuit ? null : loadGhost(this.currentGhostKey());
+    this.ghostRec = this.practice ? null : new GhostRecorder();
+    this.ghostData = this.practice || mode.pursuit ? null : loadGhost(this.currentGhostKey());
     if (this.ghostObj) {
       this.scene.remove(this.ghostObj);
       this.ghostObj = null;
@@ -1077,12 +1148,13 @@ export class Game {
       this.ui.popText(`GHOST: ${this.ghostData.time.toFixed(1)}s — BEAT IT`, '#9adfff');
     }
     // the Weekend GP puts the weekend's fastest players on track with you
-    if ((this.weekend || this.challenge) && this.weekendGhosts.length > 0) {
+    if (!this.practice && (this.weekend || this.challenge) && this.weekendGhosts.length > 0) {
       this.rivalGhosts = this.weekendGhosts.map((g) => ({ data: g.data, obj: placeGhost(g.data, 0xffc531) }));
       this.ui.popText(`RACING: ${this.weekendGhosts.map((g) => g.tag).join(', ')}`, '#ffc531');
     }
 
     this.ui.showRace();
+    if (this.practice) this.testDrive.begin(this.practice.setup, this.carSpec(this.carIndex), this.player.raceLength);
   }
 
   private currentGhostKey(): string {
@@ -1111,6 +1183,7 @@ export class Game {
   }
 
   private togglePause(): void {
+    if (this.practice && this.state === 'finished') return;
     if (!this.paused && this.state !== 'countdown' && this.state !== 'racing') return;
     this.paused = !this.paused;
     if (this.paused) {
@@ -1209,6 +1282,13 @@ export class Game {
 
   private finishRace(): void {
     if (this.state === 'finished') return;
+    if (this.practice) {
+      this.state = 'finished'; this.paused = true;
+      this.audio.stopEngine(); this.audio.play('finish');
+      this.ui.endTestDriveRun();
+      this.testDrive.finish(this.raceTime);
+      return;
+    }
     this.state = 'finished';
     this.finishT = 0;
     this.playerTime = this.raceTime;
@@ -1256,11 +1336,14 @@ export class Game {
     this.coins += payout;
     if (payout > 0) setTimeout(() => this.ui.popText(`+${payout} COINS`, '#fcff52'), 1600);
     deposit(this.coins); // race coins bank for the garage
-    // ...and the same coins are minted to the player as RUSH on NEAR
-    const earned = this.coins;
-    void payRace(earned).then((r) => {
-      if (r && this.state !== 'racing') this.ui.popText(`+${r.minted} RUSH · ON NEAR`, '#22e6ff');
-    });
+    // NEAR rewards follow fixed server rules, independent of local coin pickups.
+    // A podium only counts against a real grid: solo runs and pursuits pay the plain finish rate.
+    const rewardSession = this.rewardRace, rewardDistance = Math.ceil(this.player.raceLength), rewardTime = this.raceTime;
+    const rewardPlace = !MODES[this.modeIndex].pursuit && this.rivals.rivals.length >= 3 ? this.playerPlace : 0;
+    this.ui.completeRaceRewards(CARS[this.carIndex].id,
+      !this.busted && rewardSession && rewardTime >= 40 ? () => rewardSession.finish(rewardDistance, rewardTime, rewardPlace) : null,
+      this.busted ? 'Finish the race without being busted to earn salvage.'
+        : rewardTime < 40 ? 'This race was under 40 seconds. Complete a longer connected circuit race for salvage.' : '');
 
     // Record local stats
     recordLocalRace({
@@ -1450,9 +1533,10 @@ export class Game {
   renderFrame(forceWorld = false): void {
     if (!forceWorld && this.state === 'menu' && this.uiScene !== 'tour') {
       this.showroom ??= new Showroom(this.assets);
-      const spec = this.workshopPreview ? workshopSpec(CARS.find(c => c.model === 300)!, this.workshopPreview) : this.carSpec(this.carIndex);
+      const spec = this.uiScene === 'market' ? CARS.find(c => c.id === this.marketCar)!
+        : this.workshopPreview ? workshopSpec(CARS.find(c => c.model === 300)!, this.workshopPreview) : this.carSpec(this.workshopChassis ? Math.max(0, CARS.findIndex(c => c.id === this.workshopChassis)) : this.carIndex);
       this.showroom.setCar(spec);
-      this.showroom.render(this.renderer, this.uiScene === 'workshop', this.uiScene === 'garage');
+      this.showroom.render(this.renderer, this.uiScene === 'workshop', this.uiScene === 'garage', this.uiScene === 'market');
       return;
     }
     if (this.postfx) this.postfx.composer.render();
@@ -1531,13 +1615,13 @@ export class Game {
           // A nitro can held on NEAR is cracked open at the line: burned on
           // chain, +1 tank in the car once the burn lands.
           const racer = this.player;
-          void useNitroCan().then((used) => {
+          if (!this.practice) void useNitroCan().then((used) => {
             if (!used || this.player !== racer || this.state !== 'racing') return;
             racer.nitroTanks++;
             this.ui.popText('NITRO CAN CRACKED · +1 TANK', '#7fd4ff');
           });
           this.audio.play('go');
-          this.ui.startTutorial();
+          if (!this.practice) this.ui.startTutorial();
           setTimeout(() => this.ui.hideCountdown(), 600);
         }
         this.player.update(dt, elapsed, 0, 0, false);
@@ -1551,15 +1635,20 @@ export class Game {
 
       case 'racing': {
         this.raceTime += dt;
+        this.rewardRace?.sample(this.player.s, this.raceTime);
         // A finger held off to one side keeps steering, like a held arrow
         // key; the drag alone stops the moment the thumb does, and a corner
         // keeps pushing.
         const held = this.input.touchSteer;
         const touchHold = Math.abs(held) < 0.15 ? 0 : Math.sign(held) * (Math.abs(held) - 0.15) / 0.85;
         this.player.update(
-          dt, elapsed, dragPx, THREE.MathUtils.clamp(this.input.keySteer + touchHold, -1, 1), true,
+          dt, elapsed, dragPx, THREE.MathUtils.clamp(this.input.keySteer + touchHold, -1, 1),
+          !this.practice || this.testDrive.telemetry.started || this.input.gas,
           this.input.braking, this.input.gas
         );
+        if (this.practice) this.testDrive.update({ time: this.raceTime, dt, speed: this.player.v,
+          distance: this.player.s, gas: this.input.gas, braking: this.input.braking,
+          offroad: this.player.offroad, drifting: this.player.drifting, nitro: this.player.nitroActive });
         // engine pitch rides the speedo; nitro shoves it into the red
         this.audio.engine(
           0.55 + (this.player.v / 55) * (this.player.nitroActive ? 1.15 : 0.95),
@@ -1651,6 +1740,7 @@ export class Game {
       }
 
       case 'finished': {
+        if (this.practice) break;
         this.finishT += real;
         this.player.update(dt, elapsed, 0, 0, false);
         this.rivals.update(dt, elapsed, this.raceTime, this.player.s, true);

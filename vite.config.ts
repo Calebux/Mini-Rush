@@ -8,11 +8,12 @@ export default defineConfig({
   base: './',
   build: {
     target: 'es2022',
-    // the game, plus the public player-stats page served at /stats
+    // the game, plus the public pages served at /stats (players) and /economy (live ledger)
     rollupOptions: {
       input: {
         main: resolve(root, 'index.html'),
-        stats: resolve(root, 'stats/index.html')
+        stats: resolve(root, 'stats/index.html'),
+        economy: resolve(root, 'economy/index.html')
       }
     }
   },

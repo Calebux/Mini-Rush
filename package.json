@@ -1,7 +1,7 @@
 {
   "name": "minirush",
   "version": "0.1.0",
-  "description": "MiniRush Outbreak GP — mobile-first zombie racing for the web",
+  "description": "MiniRush Outbreak GP \u2014 mobile-first zombie racing for the web",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -11,7 +11,14 @@
     "smoke": "node scripts/smoke.mjs",
     "check:workshop": "node scripts/workshop-check.mjs",
     "check:workshop-edge": "node scripts/workshop-edge-check.mjs",
-    "stress": "node scripts/stress.mjs"
+    "stress": "node scripts/stress.mjs",
+    "check:parts": "node scripts/check-parts-workshop.mjs",
+    "check:race-rules": "node --experimental-strip-types scripts/check-race-rules.mjs",
+    "check:economy-server": "tsc --ignoreConfig --noEmit --target ES2022 --module ESNext --moduleResolution bundler --types node --skipLibCheck --strict convex/near.ts convex/nearDb.ts convex/schema.ts",
+    "check:market": "node scripts/check-cinematic-market.mjs",
+    "check:race-workshop": "node scripts/check-race-workshop.mjs",
+    "check:test-drive": "node scripts/check-test-drive.mjs",
+    "check:handling-rivals": "node scripts/check-handling-rivals.mjs"
   },
   "dependencies": {
     "@types/three": "^0.185.1",

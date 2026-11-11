@@ -64,7 +64,40 @@ export class AssetLibrary {
   passenger: { scene: THREE.Group; clips: THREE.AnimationClip[]; height: number } | null = null;
 
   private loader = new GLTFLoader();
-  private base = `${import.meta.env.BASE_URL}assets/models/`;
+  private base: string;
+  private wheelJob: Promise<void> | null = null;
+  private carJobs = new Map<number, Promise<void>>();
+
+  /** `root` is where /assets lives relative to the page: pages in a subfolder pass '../'. */
+  constructor(root: string = import.meta.env.BASE_URL) {
+    this.base = `${root}assets/models/`;
+  }
+
+  /**
+   * Load only the model one garage car needs, for pages that show a single car
+   * on a stage (/economy). Procedural cars and already-loaded slots resolve at once.
+   */
+  ensureCar(spec: CarSpec): Promise<void> {
+    const model = Number.isSafeInteger(spec.model) ? spec.model : -1;
+    if (model >= 200) return Promise.resolve();
+    let job = this.carJobs.get(model);
+    if (!job) {
+      this.wheelJob ??= this.wheel ? Promise.resolve()
+        : this.tryLoad('car_wheel.glb', 0.58).then((m) => void (this.wheel ??= m));
+      job = this.wheelJob.then(async () => {
+        if (model < 0) {
+          this.playerCar ??= await this.tryLoad('car_player.glb', 3.9, 'max', false, CAR_COLORS[0]).then(m => m && this.addWheels(m));
+        } else if (model >= 100) {
+          const paint = [0x4dd8ff, 0xd8ff2f, 0xff4a1f, 0x2fd8ff, 0x6f7cff][model - 100];
+          this.superCars[model - 100] ??= await this.tryLoad(`car_super_${model - 99}.glb`, 4.0, 'max', false, paint).then(m => m && this.addWheels(m));
+        } else {
+          this.trafficCars[model] ??= await this.tryLoad(`car_traffic_${model + 1}.glb`, 3.8).then(m => m && this.addWheels(m));
+        }
+      });
+      this.carJobs.set(model, job);
+    }
+    return job;
+  }
 
   async load(): Promise<void> {
     // wheel first: car bodies from kits like GGBot's PSX pack ship wheel-less

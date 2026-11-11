@@ -1,22 +1,27 @@
 //! MiniRush garage — the game's items on NEAR.
 //!
-//! One NEP-245 multi-token contract holds everything a player owns:
+//! The multi-token ledger holds RUSH, dealer stock and stackable materials:
 //!   * `rush`        — the coin races pay out (fungible, minted by the game)
 //!   * `car:<id>`    — cars (one per unit, bought from a dealer)
-//!   * `part:<id>`   — upgrade parts (engine / tires / tank tiers)
+//!   * `part:<id>`   — legacy dealer parts and consumables
+//!
+//! `components.rs` adds individually owned component NFTs, crafting,
+//! installation, player sales, recycling and idempotent race salvage rewards.
 //!
 //! Cars and parts are sold from dealer stalls. Each stall belongs to a dealer
 //! account run by an AI agent off-chain; the agent reprices its stock from
 //! demand and writes the price *and its reason* here, so every price a player
 //! sees can be traced to a signed decision on chain.
 
+mod components;
+use components::Workshop;
 use near_sdk::json_types::U128;
 use near_sdk::serde_json::json;
 use near_sdk::store::{IterableMap, IterableSet, LookupMap};
 use near_sdk::{env, log, near, require, AccountId, BorshStorageKey, PanicOnDefault};
 
 pub const RUSH: &str = "rush";
-/// Upper bound on one race payout, so a leaked game key can't print money in one call.
+/// Per-call administrative mint limit. Race emissions have separate daily budgets.
 pub const MAX_MINT_PER_CALL: u128 = 5_000;
 pub const MAX_PRICE: u128 = 1_000_000;
 pub const MAX_REASON: usize = 280;
@@ -88,6 +93,7 @@ pub struct Garage {
     balances: LookupMap<String, u128>,
     owned: LookupMap<AccountId, Vec<String>>,
     listings: IterableMap<String, Listing>,
+    workshop: Workshop,
 }
 
 fn bal_key(token_id: &str, account: &AccountId) -> String {
@@ -113,6 +119,7 @@ impl Garage {
             balances: LookupMap::new(Key::Balances),
             owned: LookupMap::new(Key::Owned),
             listings: IterableMap::new(Key::Listings),
+            workshop: Workshop::default(),
         };
         g.tokens.insert(RUSH.to_string(), TokenInfo { kind: "coin".into(), name: "RUSH".into() });
         g
@@ -144,6 +151,7 @@ impl Garage {
     /// The game pays race coins (and can grant starter items) through this.
     pub fn mint(&mut self, receiver_id: AccountId, token_id: String, amount: U128, memo: Option<String>) {
         self.assert_owner();
+        require!(!token_id.starts_with("material:"), "materials come from race rewards");
         require!(self.tokens.contains_key(&token_id), "unknown token");
         if token_id == RUSH {
             require!(amount.0 <= MAX_MINT_PER_CALL, "payout too large");
@@ -172,7 +180,7 @@ impl Garage {
     pub fn dealer_list(&mut self, token_id: String, price: U128, stock: u32, reason: String) {
         let me = self.assert_dealer();
         let info = self.tokens.get(&token_id).expect("unknown token");
-        require!(info.kind != "coin", "coins are not for sale");
+        require!(info.kind == "car" || info.kind == "part", "only dealer cars and consumables");
         Self::check_price(price.0, &reason);
         require!(stock <= MAX_STOCK, "too much stock");
         if let Some(l) = self.listings.get(&token_id) {
@@ -387,7 +395,7 @@ impl Garage {
         self.balances.insert(bal_key(token_id, account), before.checked_add(amount).expect("overflow"));
         let s = self.supply.get(token_id).copied().unwrap_or(0);
         // supply counts every unit in existence; transfers credit and debit it evenly
-        self.supply.insert(token_id.to_string(), s + amount);
+        self.supply.insert(token_id.to_string(), s.checked_add(amount).expect("supply overflow"));
         if before == 0 && amount > 0 {
             let mut ids = self.owned.get(account).cloned().unwrap_or_default();
             ids.push(token_id.to_string());

@@ -1608,6 +1608,7 @@
         <div class="stat-stack">
           <span class="mstat" id="best-line">Best score: 0</span>
           <span class="mstat" id="bank-line">⬤ 0 coins</span>
+          <span class="mstat hidden" id="rush-line"></span>
           <span class="mstat hidden" id="streak-line"></span>
         </div>
         <div id="vol-row">
@@ -1617,7 +1618,7 @@
           <input type="range" id="vol-slider" min="0" max="100" aria-label="Volume" />
         </div>
       </div>
-      <nav class="home-links" aria-label="More options"><button id="btn-board" type="button">BOARD</button><button id="btn-market-home" type="button">CAR MARKET ↗</button><button id="btn-how" type="button">HOW TO PLAY</button></nav>
+      <nav class="home-links" aria-label="More options"><button id="btn-board" type="button">BOARD</button><button id="btn-market-home" type="button">CAR MARKET ↗</button><a id="link-economy" href="economy/">ECONOMY ↗</a><button id="btn-how" type="button">HOW TO PLAY</button></nav>
     </div>
   </div>
 
@@ -1665,7 +1666,7 @@
       </div>
       <div id="car-roster" aria-label="Car list"></div>
     </div>
-    <button id="btn-workshop-garage" type="button"><span><strong>BUILD SOMETHING YOURS.</strong><small>Customs workshop · RUSH ONE · free chassis · 20 parts</small></span><b aria-hidden="true">↗</b></button>
+    <button id="btn-workshop-garage" type="button"><span><strong>BUILD SOMETHING YOURS.</strong><small>Customs workshop · style, performance & player parts</small></span><b aria-hidden="true">↗</b></button>
     <div class="stage-card garage-specs" tabindex="0" aria-label="Car specifications, upgrades and purchase options">
       <div id="car-stats">
         <div class="cstat"><span>SPD</span><div class="bar"><i id="st-spd"></i></div></div>
@@ -1687,6 +1688,7 @@
       </div>
       <button class="btn stage-cta" id="btn-garage-done" type="button">START&nbsp;RACE</button>
       <button class="btn stage-cta buy hidden" id="btn-buy-car" type="button">BUY&nbsp;·&nbsp;2,600&nbsp;COINS</button>
+      <button id="btn-test-drive" type="button">TEST DRIVE / COMPARE BUILDS ↗</button>
     </div>
   </div>
 
@@ -1709,10 +1711,11 @@
       <div class="tally-row" data-row="time"><span class="k">TIME</span><span class="v" id="r-time">0.0</span></div>
       <div class="tally-row" data-row="style"><span class="k">STYLE</span><span class="v" id="r-style">0</span></div>
       <div class="tally-row" data-row="takedowns"><span class="k">TAKEDOWNS</span><span class="v" id="r-takedowns">0</span></div>
-      <div class="tally-row" data-row="coins"><span class="k">COINS</span><span class="v" id="r-coins">0</span></div>
+      <div class="tally-row" data-row="coins"><span class="k">LOCAL COINS</span><span class="v" id="r-coins">0</span></div>
       <div class="tally-row total" data-row="score"><span class="k">SCORE</span><span class="v" id="r-score">0</span></div>
     </div>
     <div class="hint" id="r-coin-note"></div>
+    <section id="race-rewards" aria-label="Race salvage and next upgrade"></section>
     <!-- one hero action, a pair of ways on, then the optional extras -->
     <div class="result-dock">
       <button class="dock-hero" id="btn-retry" type="button">
@@ -1879,6 +1882,8 @@
     </header>
     <div id="workshop-car-stage" tabindex="0" role="img" aria-label="Custom car preview. Drag or use arrow keys to rotate."><span class="workshop-stage-label">RUSH ONE / ORIGINAL SERIES</span><span class="showroom-hint">DRAG TO ROTATE ↔</span></div>
     <section class="workshop-panel" aria-label="Build configuration">
+      <nav class="workshop-departments" aria-label="Workshop departments"><button type="button" data-workshop-section="style" aria-pressed="true">CUSTOMIZE</button><button type="button" data-workshop-section="performance" aria-pressed="false">PERFORMANCE & PARTS</button></nav>
+      <div id="workshop-customize">
       <div class="workshop-build-row"><label>BUILD NAME<input id="workshop-name" maxlength="24" autocomplete="off" spellcheck="false" /></label><div id="workshop-presets" aria-label="Three saved build slots"></div></div>
       <div id="workshop-stats" aria-label="Performance index, stock equals 100"></div>
       <div id="workshop-tabs" aria-label="Part categories"></div>
@@ -1886,6 +1891,8 @@
       <p id="workshop-status" role="status" aria-live="polite"></p>
       <div class="workshop-actions"><button id="workshop-buy" type="button">PART OWNED</button><button id="workshop-save" type="button">SAVE & EQUIP</button></div>
       <p class="workshop-note">Earn coins by racing. Parts unlock across all 3 builds. Saved on this device. Coins have no cash value. Cars are bought with coins in the Garage.</p>
+      </div>
+      <div id="workshop-performance" class="pw-root" hidden></div>
     </section>
   </div>
   <script type="module" src="/src/main.ts"></script>

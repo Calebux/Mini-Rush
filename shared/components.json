@@ -1,0 +1,14 @@
+[
+  {"id":"street-turbo","name":"Street spool","slot":"engine","rush":60,"alloy":6,"circuit":2,"speed":4,"accel":-5,"grip":0,"nitro":0,"detail":"More top end; slower launch."},
+  {"id":"sprint-block","name":"Sprint block","slot":"engine","rush":60,"alloy":6,"circuit":2,"speed":-4,"accel":8,"grip":0,"nitro":0,"detail":"Quick off the line; gives up top speed."},
+  {"id":"endurance-core","name":"Endurance core","slot":"engine","rush":60,"alloy":6,"circuit":2,"speed":0,"accel":-5,"grip":0,"nitro":8,"detail":"Longer boost; gentler acceleration."},
+  {"id":"short-ratio","name":"City close-ratio","slot":"gearbox","rush":50,"alloy":5,"circuit":2,"speed":-3,"accel":6,"grip":0,"nitro":0,"detail":"Built for short straights and repeated launches."},
+  {"id":"long-ratio","name":"Freeway overdrive","slot":"gearbox","rush":50,"alloy":5,"circuit":2,"speed":4,"accel":-6,"grip":0,"nitro":0,"detail":"Carries speed; takes longer to get there."},
+  {"id":"boost-ratio","name":"Boost-matched box","slot":"gearbox","rush":50,"alloy":5,"circuit":2,"speed":-3,"accel":0,"grip":0,"nitro":6,"detail":"Trades cruising speed for boost duration."},
+  {"id":"street-slick","name":"Street slicks","slot":"tires","rush":40,"alloy":4,"circuit":1,"speed":-3,"accel":0,"grip":8,"nitro":0,"detail":"More steering authority; more rolling resistance."},
+  {"id":"slide-compound","name":"Slide compound","slot":"tires","rush":40,"alloy":4,"circuit":1,"speed":0,"accel":0,"grip":-7,"nitro":6,"detail":"Looser corners; longer boosts."},
+  {"id":"low-drag","name":"Low-drag compound","slot":"tires","rush":40,"alloy":4,"circuit":1,"speed":3,"accel":0,"grip":-6,"nitro":0,"detail":"Carries straight-line speed; demands careful cornering."},
+  {"id":"long-bottle","name":"Endurance bottle","slot":"nitro","rush":50,"alloy":4,"circuit":3,"speed":0,"accel":-5,"grip":0,"nitro":10,"detail":"Long boost windows; slower launch."},
+  {"id":"light-bottle","name":"Lightweight bottle","slot":"nitro","rush":50,"alloy":4,"circuit":3,"speed":0,"accel":6,"grip":0,"nitro":-8,"detail":"Lively acceleration; shorter boosts."},
+  {"id":"aero-bottle","name":"Aero bottle","slot":"nitro","rush":50,"alloy":4,"circuit":3,"speed":3,"accel":0,"grip":0,"nitro":-6,"detail":"More sustained speed; less time on boost."}
+]

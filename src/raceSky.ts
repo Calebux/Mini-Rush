@@ -33,16 +33,27 @@ export function raceSkyMaterial(theme: EnvironmentTheme): THREE.ShaderMaterial {
       void main() {
         vec3 dir = normalize(vDirection);
         float h = clamp(dir.y, 0.0, 1.0);
-        vec3 c = mix(bottom, top, pow(h, .45));
         float sun = max(dot(dir, sunDirection), 0.0);
-        c += vec3(1.0, .77, .46) * pow(sun, 32.0) * .16 * daylight;
+        // Day: haze on the horizon, the map's sky colour above it, a deeper zenith overhead.
+        // A chase camera only ever sees the lowest third of the dome, so the colour has to
+        // arrive early; one slow blend left every daytime map looking overcast.
+        vec3 day = mix(bottom, top, smoothstep(0.0, .2, h));
+        day = mix(day, top * vec3(.46, .64, .95), smoothstep(.12, .8, h));
+        day += vec3(1.0, .74, .44) * (pow(sun, 6.0) * .2 + pow(sun, 48.0) * .3);
+        vec3 c = mix(mix(bottom, top, pow(h, .45)), day, daylight);
         if (clouds > .001 && dir.y > .02) {
           // A fixed world-space layer stays stable when the camera turns.
           vec2 p = dir.xz / (dir.y + .32) * 3.1 + vec2(12.0, 4.0);
           float n = noise(p) * .58 + noise(p * 2.07) * .28 + noise(p * 4.13) * .14;
-          float cloud = smoothstep(.47, .72, n) * smoothstep(.02, .18, dir.y);
-          vec3 shade = mix(vec3(.52, .59, .65), vec3(.95, .91, .83), n);
-          c = mix(c, shade, cloud * clouds);
+          // Fair weather breaks into separate clouds with blue between; rain closes the gaps.
+          float heavy = smoothstep(.6, .9, clouds);
+          float edge = mix(.56, .4, heavy);
+          float cloud = smoothstep(edge, edge + .16, n) * smoothstep(.03, .2, dir.y);
+          // Lit from the sun side: the same field sampled a step towards the sun is thinner there.
+          float toSun = noise(p + sunDirection.xz * .22) * .58 + noise((p + sunDirection.xz * .22) * 2.07) * .28;
+          float lit = clamp(.55 + (n - toSun / .86) * 2.4 + sun * .25, 0.0, 1.0);
+          vec3 shade = mix(mix(vec3(.60, .67, .77), vec3(.50, .54, .60), heavy), mix(vec3(1.0, .98, .94), vec3(.86, .87, .88), heavy), lit);
+          c = mix(c, shade, cloud * min(1.0, clouds * 1.6));
         }
         gl_FragColor = vec4(c, 1.0);
         #include <tonemapping_fragment>

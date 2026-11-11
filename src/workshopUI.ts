@@ -1,16 +1,35 @@
+import { PartsWorkshop } from './partsWorkshop';
 import { CARS } from './cars';
+import { type ComponentInstallation, type Recipe } from './components';
 import { bank } from './economy';
 import { Build, PARTS, SLOTS, Slot, ownsPart, part, purchasePart, recoverPurchase, saveBuild, workshopSpec, workshopStore } from './workshop';
 import './workshop.css';
 
 const $ = (id: string) => document.getElementById(id)!;
 export class WorkshopUI {
+  private parts: PartsWorkshop;
+  private section: 'style' | 'performance' = 'style';
   private build!: Build;
   private index = 0;
   private slot: Slot = 'body';
   private selected = 'street';
   private returnFocus: HTMLElement | null = null;
-  constructor(private preview: (build: Build | null) => void, private closePage: () => void, private equip: () => void) {
+  private installation: HTMLElement;
+  private installTimer = 0;
+  constructor(private preview: (build: Build | null, chassis?: string) => void, private closePage: () => void, private equip: () => void, private onInstalled: (recipe: Recipe, chassis: string) => void = () => {}) {
+    this.installation = document.createElement('div'); this.installation.id = 'workshop-installation';
+    this.installation.hidden = true; this.installation.setAttribute('role', 'status'); this.installation.setAttribute('aria-live', 'polite');
+    $('workshop-performance').before(this.installation);
+    this.parts = new PartsWorkshop($('workshop-performance'), chassis => {
+      if (this.section !== 'performance' || $('workshop').classList.contains('hidden')) return;
+      this.preview(null, chassis);
+      this.clearInstallation();
+      $('workshop-car-stage').querySelector('.workshop-stage-label')!.textContent = `${chassis === 'viper' ? 'VIPER GT' : 'RUSH ONE'} / PERFORMANCE BUILD`;
+      $('workshop-car-stage').setAttribute('aria-label', `${chassis === 'viper' ? 'VIPER GT' : 'RUSH ONE'} preview. Drag or use arrow keys to rotate.`);
+    }, report => this.showInstallation(report));
+    document.querySelectorAll<HTMLButtonElement>('[data-workshop-section]').forEach(button => {
+      button.onclick = () => this.showSection(button.dataset.workshopSection as 'style' | 'performance');
+    });
     $('workshop-back').onclick = () => this.close();
     $('workshop-buy').onclick = () => {
       const error = purchasePart(this.selected); this.render();
@@ -35,13 +54,47 @@ export class WorkshopUI {
       $('workshop-presets').append(b);
     }
   }
-  open(): void {
+  open(chassis = 'rush-one', recipe?: string): void {
+    this.parts.setChassis(chassis === 'viper' ? 'viper' : 'rush-one');
     this.returnFocus = document.activeElement as HTMLElement;
     let error = ''; try { recoverPurchase(); } catch { error = 'Storage unavailable. Purchases and saving may not work.'; }
     const s = workshopStore(); this.index = s.active; this.build = structuredClone(s.builds[this.index]); this.selected = this.build.parts[this.slot];
-    $('workshop').classList.remove('hidden'); this.render(); this.status(error || 'Preview any part. Only owned parts can be equipped.'); $('workshop-back').focus();
+    if (recipe) this.parts.selectRecipe(recipe);
+    $('workshop').classList.remove('hidden'); this.showSection(recipe ? 'performance' : 'style'); this.status(error || 'Preview any part. Only owned parts can be equipped.'); $('workshop-back').focus();
   }
-  private close(): void { $('workshop').classList.add('hidden'); this.preview(null); this.closePage(); this.returnFocus?.focus(); }
+  private clearInstallation(): void { window.clearTimeout(this.installTimer); this.installation.hidden = true; }
+  private showInstallation(report: ComponentInstallation): void {
+    if (this.section !== 'performance' || $('workshop').classList.contains('hidden')) return;
+    this.installation.replaceChildren();
+    const title = document.createElement('strong'); title.textContent = `${report.recipe.name} installed`;
+    const caption = document.createElement('small'); caption.textContent = `BUILD CONFIRMED · ${report.chassis === 'viper' ? 'VIPER GT' : 'RUSH ONE'}`;
+    const stats = document.createElement('span');
+    stats.textContent = (['speed','accel','grip','nitro'] as const).filter(key => report.before[key] !== report.after[key]).map(key => `${({ speed: 'Speed', accel: 'Launch', grip: 'Grip', nitro: 'Boost' })[key]} ${Math.round(report.before[key]*100)} → ${Math.round(report.after[key]*100)}`).join(' · ') || 'Loadout updated · performance unchanged';
+    this.installation.append(caption, title, stats); this.installation.hidden = false;
+    const behavior = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth';
+    $('workshop').scrollTo({ top: 0, behavior });
+    $('workshop').querySelector('.workshop-panel')?.scrollTo({ top: 0, behavior });
+    window.clearTimeout(this.installTimer); this.installTimer = window.setTimeout(() => { this.installation.hidden = true; }, 6500);
+    this.onInstalled(report.recipe, report.chassis);
+  }
+  private showSection(section: 'style' | 'performance'): void {
+    this.clearInstallation();
+    this.section = section;
+    $('workshop-customize').hidden = section !== 'style';
+    $('workshop-performance').hidden = section !== 'performance';
+    $('workshop-balance').hidden = section !== 'style';
+    document.querySelectorAll<HTMLButtonElement>('[data-workshop-section]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.workshopSection === section)));
+    if (section === 'performance') void this.parts.open();
+    else {
+      $('workshop-car-stage').querySelector('.workshop-stage-label')!.textContent = 'RUSH ONE / ORIGINAL SERIES';
+      $('workshop-car-stage').setAttribute('aria-label', 'Custom car preview. Drag or use arrow keys to rotate.');
+      this.render();
+    }
+  }
+  private close(): void {
+    this.clearInstallation(); $('workshop').classList.add('hidden'); this.preview(null); this.closePage();
+    if (this.returnFocus?.isConnected && this.returnFocus.getClientRects().length) this.returnFocus.focus({ preventScroll: true });
+  }
   private status(s: string): void { $('workshop-status').textContent = s; }
   private render(): void {
     ($('workshop-name') as HTMLInputElement).value = this.build.name;
