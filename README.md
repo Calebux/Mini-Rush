@@ -1,161 +1,354 @@
-# MiniRush — Outbreak GP 🧟🏁
+# MiniRush
 
-🔗 **Play now:** [minirush.site](https://minirush.site/) · [mini-rush.vercel.app](https://mini-rush.vercel.app/)
+**Race. Build. Trade. Race again.** A browser racing game with a player-owned car and parts economy on NEAR testnet.
 
-A mobile-first 3D racing game for the web.
-Race three AI rivals point-to-point through zombie-infested streets: drag to
-steer, tap to fire nitro, splat everything green for combo points, and grab
-coins along the way.
+[Play MiniRush](https://minirush.site/) · [Live economy](https://minirush.site/economy/) · [Player stats](https://minirush.site/stats/) · [What is still unfinished](#what-is-still-unfinished)
 
-Built with Three.js + Vite + TypeScript. No frameworks, targets 60 fps on a
-phone browser.
+![MiniRush homepage: rotating showroom, race selection, Race Friends and the live price wire](docs/screenshots/home.jpg)
 
-## Play it
+MiniRush combines arcade driving, private live multiplayer, a multi-car garage,
+custom builds, craftable performance parts and dealers that buy and sell from
+real inventories. The core loop is **race → earn salvage → craft or trade → fit
+a build → test it → race again**. Players can start without a wallet extension,
+seed phrase or sign-up. The deployed economy uses `minirush-garage.testnet`;
+this is a testnet game, not a mainnet launch.
 
-```bash
+Built with **Three.js, TypeScript, Vite, Convex and Rust/NEAR**. The frontend uses
+ordinary DOM controls alongside the 3D renderer, without a UI framework.
+
+## Screenshots
+
+These are actual game captures, not mockups. Market supply, prices and balances
+are snapshots, not promises of current availability. [Capture details and refresh instructions](docs/screenshots/README.md).
+
+| Car market and owner resales | Crafting and performance parts |
+| --- | --- |
+| ![LAGOS GOLD limited edition in the cinematic car market](docs/screenshots/car-market.jpg) | ![Performance workshop with chassis selection, crafting recipes and stat tradeoffs](docs/screenshots/performance-parts.jpg) |
+| **Multi-car garage** | **Customs workshop** |
+| ![Garage roster, owned-car filter and test-drive controls](docs/screenshots/garage.jpg) | ![RUSH ONE custom chassis and configurable parts](docs/screenshots/customs.jpg) |
+| **Live multiplayer race** | **Shared race results** |
+| ![Two-player Lagos race with live opponent status and race HUD](docs/screenshots/live-race.png) | ![Server-recorded finishing order and rematch in Race Friends](docs/screenshots/race-results.png) |
+
+![The public economy page showing live testnet supply and the rotating car stage](docs/screenshots/economy.jpg)
+
+<details>
+<summary>Race Friends on mobile</summary>
+
+<img src="docs/screenshots/race-friends-mobile.png" width="390" alt="Two drivers in the mobile private-race lobby with an invite code and ready button" />
+
+</details>
+
+## Try the game
+
+| What to try | Where to go |
+| --- | --- |
+| A normal race | Home → **Race**; change the event under **Modes** |
+| Race another person live | Home → **Race Friends** → **Create a race** → copy the invite; both drivers choose **I'm ready** |
+| See your cars | **Garage → Owned cars**; **All cars** shows the broader roster |
+| Customize RUSH ONE | **Garage → Customs workshop → Customize** |
+| Craft, install or sell parts | **Garage → Customs workshop → Performance & Parts** |
+| Fill an NPC buy order | **Performance & Parts → Trade → Dealer orders** |
+| Buy a numbered car from another player | **Car Market → choose a limited edition → From Owners** |
+| Compare stock and fitted handling | **Garage → Test drive / Compare builds** |
+| Inspect the economy without playing | [Economy page](https://minirush.site/economy/), or the homepage **Price Wire** |
+
+**Current guest policy:** guests can race, buy, craft and trade. Shopping does
+not currently require Google sign-in. A garage key is created and kept in this
+browser when the backend is available. Clearing browser storage can lose access
+to that garage; cross-device recovery is not implemented.
+
+## Features built
+
+### Driving and world
+
+- **Closed, seeded circuits** with selectable laps, grid starts, lap tracking,
+  race standings, a heading-up minimap and results. Ordinary circuit races have
+  no civilian traffic or buses; opponents come from the performance-car roster.
+- **Arcade handling:** acceleration, braking, coasting, corner forces, off-road
+  slowdown, grip-dependent steering, wet-weather grip, ramp jumps and landings.
+- **Power drifting and nitro:** brake plus steer to charge a drift, release for
+  a short boost, and earn more nitro through the style gauge. Near misses,
+  drafting/slipstream boosts and takedowns reward the appropriate race styles.
+- **Racecraft and combat:** rivals check passing space, follow, defend and brake
+  for corners; combat modes add intentional contact, wrecks or weapons.
+- **20 selectable environments/circuits:** Lagos, Kaduna, Beijing, Mumbai,
+  Neon City, London, Tokyo, Rio de Janeiro, Cairo, Nairobi, Seoul, Accra,
+  São Paulo, Norway, Iceland, Canada, New Zealand, Finland, Cartoon Oval and
+  Lone Star GP. City architecture, road layouts, vegetation and weather vary.
+- **Presentation:** chase, low-bumper, TV and driver cameras; impact cinematics,
+  drift smoke, boost effects, weather, engine sounds and music. NEON FM adds
+  internet radio. Adaptive render resolution and quality tiers support a range
+  of devices; physical-phone performance is still a separate testing task.
+- **Controls:** touch steering and pedals, keyboard, gamepad navigation and
+  driving, camera switching, fullscreen, pause in solo play, and reduced-motion
+  support for showroom/interface animations.
+
+### Race modes and events
+
+The circuit roster currently contains **12 modes**, plus open-city activities,
+daily events and the separate live multiplayer flow.
+
+| Mode | Current experience |
+| --- | --- |
+| Grand Prix | Player plus three AI rivals |
+| Burnout | Eight-car contact racing, nitro takedowns and wrecks |
+| Police Chase | Escape four pursuing units over three laps; manage heat |
+| Gun Run | Six-car armed race with tire shots and ammo pickups |
+| Time Attack | One-lap solo run against your saved best ghost |
+| Eliminator | Eight-car aggressive sprint; periodic last-place elimination is not implemented |
+| Pack Attack | Six racers, tight gaps and late braking |
+| Armored Heist | Attack the lead target for loot and a wreck bonus |
+| Hyper Cup | Six-car, two-lap hypercar class event |
+| Voltage Surge | Continuous nitro access with a draining battery |
+| Hardcore | Seven pro rivals on a longer circuit; restricted entry |
+| Weekend GP | Eight laps against pro AI and recorded player ghosts; weekend board, midweek practice |
+
+Other ways to play:
+
+- **Race Friends:** two live human drivers in a private room, invite link or
+  eight-character code, ready checks, loading barrier and shared countdown.
+  Both drive stock Viper GTs on Lagos. Live position updates, shared results,
+  rematches, short-refresh recovery and disconnect/DNF handling are implemented.
+  This mode is non-contact and awards no coins, RUSH, salvage or prizes.
+- **Daily Run:** a shared daily circuit and score board, with local streak rewards.
+- **Recorded challenges:** share a completed run through a `?c=` link; another
+  player races its ghost on the same circuit and setup. These are replays, unlike
+  live **Race Friends** invites (`?race=`).
+- **Neon City free roam:** a road network, civilian traffic, exploration tokens,
+  unlocks, map activities and street races.
+- **Passenger driving:** accept fares, collect animated passengers, follow GPS
+  routes and reach drop-offs against the clock.
+- **City GP / Bounty Board:** an eight-car, two-lap checkpoint race through Neon
+  City. Weekly fastest-win boards support organizer-configured prizes and manual
+  verification/fulfilment; there is no automatic on-chain prize payout. The
+  standalone City GP mode card is a development preview.
+- **Progression and sharing:** local bests and ghosts, daily/weekend/bounty boards,
+  driver names, badges, race statistics, map passport unlocks, referral bonuses
+  and shareable run receipts.
+
+### Garage and customization
+
+- Own more than one car, browse by class and switch between **Owned cars** and
+  **All cars**. Local purchases and on-chain entitlements feed the drivable roster.
+- Inspect cars in rotating home, garage and market stages with manual orbit and
+  camera presets. These screens and the workshop/results share the game's card styling.
+- Build the original **RUSH ONE** chassis: bodywork, wheels, wing, paint, tyres
+  and power options; live preview; named builds; three saved preset slots;
+  **Save & equip**. Cosmetic choices and performance tuning are distinguished.
+- Ordinary car upgrades, paint and cosmetic workshop parts use local earned
+  coins. Interrupted local purchases recover from a browser journal.
+- **Test drive / Compare builds** provides a fixed dry Lagos proving ground with
+  fitted and stock runs. Reports show lap time, 0–100, peak speed, braking,
+  off-road time and nitro use. Practice does not spend consumables or earn rewards.
+
+### NEAR economy, ownership and markets
+
+| System | What is implemented |
+| --- | --- |
+| Multi-token ledger | RUSH, stackable materials, dealer cars and supplies; NEP-245 core transfer/balance/supply functionality |
+| Race salvage | Eligible connected circuit finishes earn RUSH, alloy and circuits under account/global budgets |
+| Crafting | 12 recipes across engine, gearbox, tires and nitro; crafting burns RUSH and materials |
+| Component NFTs | Individually numbered parts with owner, original maker, recipe and crafting timestamp; NFT transfer, metadata and enumeration methods |
+| Loadouts | Four slots on VIPER GT and RUSH ONE; explicit benefits and tradeoffs; fresh ownership/loadout reads before normal races |
+| Recycling | Burn a part to recover half its crafting materials, rounded down; no RUSH refund |
+| Player parts market | List, cancel and buy components; ownership/payment settle together; stale-offer protection and a burned trade fee |
+| NPC dealers | Mama T, Oga Motors and Tuner Ade have accounts, inventories and RUSH budgets; scheduled repricing records a reason |
+| Funded dealer orders | Dealers reserve existing RUSH to buy player-crafted parts; players deliver exact serials; acquired stock can be resold |
+| Limited-edition cars | LAGOS GOLD: 50-car run at 1.5 test NEAR; ISLAND NIGHT: 25-car run at 0.75 test NEAR; numbered NFT ownership |
+| Owner car resales | **From Owners** listings for edition cars, asking prices, cancellation, purchase and a 2% resale royalty retained by the game |
+| Testnet top-up | A limited, one-time **Get test NEAR** grant per garage, subject to backend daily caps and available game funds |
+| Activity and recovery | Status and receipts for tracked relayed actions, retry/recovery for pending claims, and confirmed balance refreshes |
+| Economy visibility | Live supply, mint/burn totals, crafting, recycling, trade volume, dealer stock/funds, price-change reasons and edition revenue |
+| Homepage Price Wire | Edition and dealer prices plus owner-listing count; pause, reduced motion and stale/offline labels |
+
+Eligible circuit rewards currently pay **45 / 36 / 30 / 24 RUSH** by fixed
+payout tier, plus **2 alloy and 1 circuit**. A podium bonus requires a grid of at
+least three rivals; solo/pursuit finishes receive the plain finish rate. Race
+sessions must meet duration/progress checks. Practice, Race Friends and City GP
+do not use this circuit-salvage reward path.
+
+Component sales burn a 2% RUSH fee, with a minimum of 1 RUSH. Edition cars use
+test NEAR instead: primary proceeds and the 2% resale royalty stay with the game.
+Local coins, on-chain RUSH/materials and test NEAR are separate balances. RUSH is
+earned, not sold. None of this testnet economy promises cash value or redemption.
+
+**Dealer behavior is bounded, not magic:** the component buyer uses deterministic
+inventory/budget rules. Car repricing supports an optional LLM endpoint with a
+rules fallback. Dealer wallets spend existing funds; the existence of this policy
+does not establish long-term economic balance. Prices and stock can evolve
+without a developer patch; crafting recipes are still code-defined.
+
+### Making the chain unobtrusive
+
+The default flow creates a browser-held garage key and sponsors supported
+contract actions, so racing, crafting and ordinary trading need no wallet popup.
+Paid edition purchases are signed by the garage and sent directly, using its own
+test NEAR. The market still shows explicit prices, balances and pending states;
+chain failures are recoverable UI states rather than fabricated successes.
+
+NEAR Auth/Google integration exists as an **optional preview**. It is disabled
+on the live site: the shared testnet client's hosted-origin/callback allowlist
+has not been resolved for `minirush.site`. Local authentication and optional
+identity-to-garage proof work do **not** provide cross-device account recovery.
+
+## What is still unfinished
+
+These are the remaining work items, not features advertised as shipped.
+
+| Priority | Gap | Next concrete step |
+| --- | --- | --- |
+| Before competitive rewards | Authoritative race validation | Move decisive race progress/results to server simulation or verified replay. Current telemetry checks cannot prove a real race occurred; solo reward placement is client-reported. |
+| Next multiplayer milestone | Public matchmaking and larger grids | Add a queue, four-player rooms, connection/load testing and clear latency handling. Current live rooms support two friends only, without contact or rewards. |
+| Account continuity | Hosted Google sign-in and garage recovery | Resolve hosted Auth0 origin/callback configuration, then implement secure identity-bound recovery. Browser keys remain device-local today. |
+| Hackathon integration gap | NEAR Intents | Design and implement an actual intent-based transaction flow. The current marketplace uses direct contract calls and sponsored relays, not NEAR Intents. |
+| Economy readiness | Balance and abuse resistance | Simulate emission/sink/dealer solvency over time; strengthen bot/Sybil controls and account-funding/gas budgets. |
+| Versioning and interoperability | Stable recipes/rules and external NFT compatibility | Version recipes and competitive records; verify third-party wallet/marketplace behavior. Optional NFT approvals and royalty-standard extensions are not implemented. |
+| Recovery polish | Failed/expired claim cleanup | Add a safe discard path for permanently failed claims and better handling of ambiguous paid-purchase results. |
+| Device and scale validation | Real-device performance and multiplayer load | Profile physical Android/iOS devices, slow connections and multiple simultaneous rooms. Browser screenshots are not performance certification. |
+| Mode completeness | Eliminator's knockout rule | Implement periodic last-place elimination; the present mode is an aggressive sprint. |
+| Separate future launch | Mainnet readiness | Prune old on-chain race reward records without enabling replay; revisit the 0.01 NEAR account grant; measure storage/gas and build size; complete security review, network configuration and production auth. |
+
+**Already completed:** the testnet contract upgrade, migration rehearsal, limited
+edition launch, coordinated backend/frontend deployment and real testnet
+purchase/resale checks. Those are not outstanding deployment tasks. Testnet is
+the hackathon target; mainnet is a separate decision.
+
+## Run locally
+
+Use **Node.js 24**, npm and a modern browser with WebGL support. Chrome is needed
+for the repository's browser checks; Rust/Cargo are needed only for contract work.
+
+```sh
 npm install
-npm run dev        # → http://localhost:5173 (already --host for phone testing)
-npm run build      # typecheck + static bundle in dist/ — deploy anywhere
+npm run dev:auth
+# http://localhost:3000 — use localhost exactly for the optional auth preview
+
+# Alternative LAN-accessible development server:
+npm run dev
+
+# Typecheck and build the static frontend:
+npm run build
+npm run preview -- --host localhost --port 4173 --strictPort
 ```
 
-Desktop testing: ↑ or W to accelerate, ← → or A/D to steer, ↓ or S to brake,
-quick tap / Space for nitro, C to cycle camera (chase / low bumper / high TV —
-also the 📷 button). Mobile: hold the gas pedal (bottom-right) to accelerate,
-drag to steer, hold the brake pedal (bottom-left), tap for nitro. Release the
-gas and the car coasts down to a roll.
+For connected features, copy `.env.example` to `.env.local` if you do not already
+have local configuration, and set `VITE_CONVEX_URL` to your Convex deployment.
+`npx convex dev --once` initializes/updates your development backend. A frontend
+without a configured backend still supports local racing, but cannot provide live
+rooms, shared boards or the complete connected economy.
 
-Power drift: hold brake while steering at racing speed. The HUD shows charge
-and prompts a release after half a second; release brake on the road for a
-0.65-second speed boost. Holding for 1.75 seconds earns the perfect-drift
-callout. Leaving the road, jumping, wrecking or firing nitro cancels the release
-reward. Drifting still feeds the style gauge to earn nitro.
+| Configuration | Purpose |
+| --- | --- |
+| `VITE_CONVEX_URL` | Public frontend URL for your Convex deployment |
+| `VITE_NEAR_GARAGE`, `VITE_NEAR_RPC` | Optional public overrides for the testnet garage/RPC |
+| Backend `NEAR_GARAGE`, `NEAR_RPC` | Contract/network used by Convex actions |
+| Backend `NEAR_GAME_KEY`, `NEAR_DEALER_KEYS` | Secret signing credentials; set in Convex, never in frontend variables or Git |
+| Backend `NEAR_DEALER_AGENTS_ENABLED` | Run dealers on only one deployment if development and production share dealer keys |
+| `VITE_SHOP_SIGN_IN=required` and backend `SHOP_SIGN_IN=required` | Optional sign-in gate; both sides must agree; default is off |
 
-Query params for testing: `?len=500` (lap length in metres, default 1800),
-`?seed=7` (deterministic circuit), `?laps=4`, `?map=beijing` (city id or index),
-`?mode=burnout` (mode id or index).
+See [.env.example](.env.example) and [NEAR setup, auth and rollout notes](docs/near-economy.md)
+for the remaining settings. Deploy the contract, backend and frontend together
+when adding contract-dependent features; a plain static build does not create or
+upgrade contracts.
 
-## Gameplay
+### Controls
 
-- **Three modes** (`src/modes.ts`):
-  - **Grand Prix** 🏁 — clean-ish racing against 3 rivals
-  - **Burnout** 🔥 — 8-car grid, no rules. Rivals hunt your lane; three hard
-    hits inside a few seconds barrel-rolls the victim (you included). Contact
-    while your nitro burns is an **instant TAKEDOWN** (+150 each)
-  - **Outbreak** 🧟 — solo lap through a triple-density horde; pure
-    splat-combo score attack, laps locked to 1
-  - **Cop Chase** 🚓 — outrun THE HEAT for 2 laps. The cop speed-matches
-    onto your bumper; every touch is heat, and three quick hits = **BUSTED**
-    (heat cools after ~3.5s clean). Full throttle stays just ahead of it —
-    lift and it rams you every half second. You're armed: tap fires out the
-    **rear window**, knocking the cruiser back (ammo slowly self-reloads)
-  - **Gun Run** 🔫 — 6-car brawl, Doom-style pistol on the HUD. Tap to shoot
-    up your lane: rivals take a **TIRE SHOT** and roll (+150), zombies splat
-    at range into the combo chain. 8 rounds to start, canister pickups are
-    ammo crates (+4); nitro fires from the pill button (or N key)
-- **Closed street circuit** — a seeded Catmull-Rom loop (~1.8 km/lap) dressed
-  with downtown blocks and red/white racing barriers; pick **1, 2 or 4 laps**
-  on the menu (or `?laps=`). Zombies and pickups respawn every lap. The
-  circuit previewed on the menu/tour page is the exact circuit you race.
-- Race from a rows-of-two grid start (you start at the back — overtaking
-  is earned)
-- **Drag to steer** — corners throw the car outward; going off-road drops you
-  to crawl speed
-- **Zombies** — drive over them: 15 pts × a combo that grows with every splat
-  (combo resets after 4 s without one)
-- **Coins** +10 each; **nitro tank pickups** stock tap-to-fire boosts
-  (46 m/s burst, FOV kick)
-- **The style economy is the core loop** (`src/style.ts`) — near-misses, drifts
-  and takedowns fill one gauge, and a full gauge pays out a **nitro tank** as
-  well as stepping the score multiplier. Risk buys speed, speed makes everything
-  riskier. Contact wipes the chain. Style and boost used to be separate
-  currencies, which meant a player could ignore either one.
-- **Closed race circuits** — civilian traffic and danfo buses no longer spawn
-  in circuit races. Opponents use the performance-car roster; class events keep
-  their eligibility rules, and Police Chase keeps its police units. Near-misses,
-  drafting and takedowns still work against racers. City free roam and passenger
-  driving retain their separate traffic system.
-- **Cinematic car market** — the existing renderer presents the actual cars in
-  a lit photo studio with automatic orbit, manual rotation and three camera
-  angles. The collection opens offline; dealer availability and RUSH purchases
-  require fresh NEAR testnet data. Previewing never equips or unlocks a car.
-- **Neon City** — two modes open from the menu. **Passenger**: accept a fare
-  and the passenger is waiting on the pavement; stop beside them and they walk
-  over and climb in (Mixamo clips on a rigged character, `src/city/passenger.ts`),
-  then the GPS routes you along the roads to the drop-off against the clock
-  (`src/city/fares.ts`, `src/city/roads.ts`). **Free roam**: hidden tokens
-  unlock garage cars and street races start from the map
-  (`src/city/activities.ts`). Civilian traffic loops the grid, and the east
-  freeway crosses a bridge to a second island. Races elsewhere carry a round,
-  heading-up minimap (`src/raceMap.ts`).
-- **Impact cinematics** — takedowns and wrecks dilate time to 0.3×, drop the
-  camera into the impact and white out the frame, then hand control straight
-  back. Boost drives radial streaks, a chromatic fringe and a warm push in the
-  grade pass.
-- **Bumping** — trade paint with rivals to shove them off line
-- **World Outbreak Tour** — pick a city on the menu: Lagos, Beijing, Mumbai,
-  Neon City or London (`src/maps.ts`). Each city has its own cel palette, fog mood, track
-  shape (flowing vs technical) and three districts along the lap — e.g.
-  Hutongs → Temple Gardens → CBD. A shared lighting/material palette stays
-  consistent across the lap while the local architecture and vegetation change.
-- **Score** = zombie points + coins + place bonus (400/250/120/0) + time bonus
+| Action | Keyboard / desktop | Touch |
+| --- | --- | --- |
+| Accelerate | W / ↑ | Hold gas pedal |
+| Steer | A / D or ← / → | Drag or hold steering input |
+| Brake / drift | S / ↓; steer while braking to drift | Brake pedal plus steering |
+| Nitro / weapon | Space; N for nitro in armed modes | Tap / nitro control; armed modes change the tap action |
+| Camera | C | Camera button |
+| Pause | P / Esc, solo play | Pause button, solo play |
 
-## Smoke test
+Live races cannot pause. Keep the tab active; a disconnect longer than 20 seconds
+marks a driver DNF. Race Friends rooms expire after 45 minutes and each race has
+a four-minute limit. Both drivers must opt into a rematch.
 
-```bash
-npm run build && npm run preview   # serve dist on :4173
-node scripts/smoke.mjs [shotsDir]  # Playwright: full race → results → retry
+Developer query parameters include `?seed=7`, `?laps=4`, `?len=1800`,
+`?map=lagos`, `?mode=burnout` and `?q=1`. Ordinary lap length is clamped to
+600–5,000 metres; some events lock the route, laps or car rules.
+
+## Verification
+
+```sh
+npm run build
+npm run check:economy-server
+npm run check:race-rules
+npm run check:friend-rules
 ```
 
-Exits non-zero on console errors or if the results screen never appears.
-Screenshots (menu, countdown, mid-race, results) land in `shotsDir`.
+With the local game running and Chrome installed:
 
-## Game economy
+```sh
+npm run check:market -- http://localhost:3000
+npm run check:parts -- http://localhost:3000
+npm run check:test-drive -- http://localhost:3000
+npm run check:editions -- http://localhost:3000
+npm run check:friends -- http://localhost:3000
+```
 
-**Garage → Customs workshop → Performance & Parts** adds a NEAR testnet component economy:
-12 recipes across engine, gearbox, tires and nitro; two compatible chassis;
-unique component NFTs with maker provenance; crafting, installation, recycling
-and player-to-player sales. Each component changes handling through an explicit
-benefit and tradeoff. Read [the economy design and rollout notes](docs/near-economy.md).
+`check:friends` uses real development Convex rooms and blocks NEAR transactions.
+Avoid editing code during it: hot reload interrupts races. The rule checks cover
+seat ownership, room capacity, loading/start barriers, progress bounds, replay,
+finish order, rematch isolation, disconnects and expiry. The two-browser check
+also exercises actual driving, refresh recovery, mobile layout and shared results.
+Other browser suites use isolated backend/chain fixtures; inspect each script's
+header before treating a fixture result as on-chain verification.
 
-Eligible connected race sessions earn 2 alloy, 1 circuit and RUSH by finishing
-place (45 for a win, 36, 30, or 24 for any other finish), subject to contract
-budgets. The contract keeps a season ledger of everything minted, burned, crafted
-and traded; the public `/economy` page reads it live (`src/economyPage.ts`). These are separate from local coins, which still
-buy ordinary garage cars, upgrades, paint and cosmetic workshop parts. Both are
-test/game currencies with no cash value. The new contract and backend require
-coordinated deployment; race checks currently validate plausible client telemetry,
-not authoritative physics replay.
+Contract and auth/recovery checks:
 
-## Legacy Celo contracts
+```sh
+cargo test --manifest-path contracts/near/Cargo.toml
+npm run check:garage-recovery
+npm run check:identity-proof
+npm run check:dealer-orders -- http://localhost:3000
+npm run check:handling-rivals -- http://localhost:3000
+```
 
-[`contracts/`](contracts/) still holds the Foundry project for **MiniRushTracker**,
-the Celo tracker the game used earlier. Nothing in `src/`
-references it any more; it is kept for history and is not part of the build.
+Real testnet integration and migration scripts are documented in
+[the economy notes](docs/near-economy.md); they create accounts and send testnet
+transactions. `scripts/stress.mjs` is a legacy real-CELO transaction script,
+**not** a harmless game load test.
 
-## Art & sound
+Refresh the read-only documentation screenshots with:
 
-Cel-shaded PS2-era arcade style with real 3D models (CC0/free asset packs,
-credits in `public/assets/models/CREDITS.txt`), procedural fallback art where
-kits aren't loaded, and hot-swappable models/sounds by filename — see
-**`public/assets/README.md`** for the full asset list and credits.
+```sh
+node scripts/capture-readme.mjs
+# Optional: node scripts/capture-readme.mjs http://localhost:3000
+```
 
-The home, garage, route select and results screens share a restrained studio
-presentation (`src/consolePresentation.css`). The garage uses physical
-materials and generated softbox reflections; car paint and metallic rims have
-separate material roles. These changes reuse the existing models and add no
-downloaded art. Desktop and responsive browser checks do not establish console
-parity or performance on a physical Android device.
+## Repository map
 
-Browser checks (with the dev server running): `scripts/check-presentation.mjs`,
-`scripts/check-driving.mjs`, `scripts/check-danfo.mjs`, `scripts/visual-world.mjs`
-and `scripts/visual-cars.mjs`. They save screenshots under `output/` and are not a
-substitute for profiling on a physical phone.
+| Path | Responsibility |
+| --- | --- |
+| `src/game.ts`, `src/player.ts`, `src/rivals.ts` | Race loop, driving and AI racecraft |
+| `src/city/` | Open-city roads, traffic, activities, fares and City GP |
+| `src/ui.ts`, `src/market.ts`, `src/workshopUI.ts`, `src/partsWorkshop.ts` | Menus, garage, market and build flows |
+| `src/friendRace.ts`, `shared/friendRace.ts`, `convex/friends.ts` | Live multiplayer UI, shared rules and room backend |
+| `src/near.ts`, `src/garageActivity.ts` | Garage account access, transactions and recovery UI |
+| `convex/` | Rooms, boards, reward validation, relays and dealer automation |
+| `contracts/near/` | Rust garage contract, token ledger, components, orders and editions |
+| `shared/components.json` | Shared crafting catalogue and stat changes |
+| `economy/`, `src/economyPage.ts`, `src/homePriceWire.ts` | Public ledger presentation and price wire |
+| `scripts/` | Browser/contract integration checks and asset tooling |
+| `docs/` | Design, operating notes and screenshot assets |
 
-## Licence
+Further reading: [economy and rollout](docs/near-economy.md),
+[customs, handling and test drive](docs/customs-workshop.md),
+[Weekend GP](docs/weekend-gp.md), [recorded challenges](docs/challenges.md),
+[weekly bounty](docs/bounty.md), [asset guide](public/assets/README.md).
+Older milestone notes in the design documents may describe pre-deployment work;
+the dated rollout status at the top of the economy notes takes precedence.
 
-Source code is **MIT** — see [`LICENSE`](LICENSE).
+## Art, history and licence
 
-The art and audio under `public/assets/` are third-party and keep their own
-licences, recorded with their packs and terms in [`CREDITS.md`](CREDITS.md).
-Every asset slot has a procedural fallback, so the game runs complete without
-any of them.
+MiniRush uses imported 3D assets, procedural cars/scenery and generated lighting.
+Asset packs retain their own licences: see [CREDITS.md](CREDITS.md),
+[model credits](public/assets/models/CREDITS.txt) and [the asset guide](public/assets/README.md).
+Source code is [MIT licensed](LICENSE).
+
+The non-NEAR Foundry contracts under `contracts/` are retained from the earlier
+Celo tracker. They are not the current game economy. The old Outbreak/zombie
+branding and removed horde mode do not describe the current racing loop.
