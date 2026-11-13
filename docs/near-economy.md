@@ -2,6 +2,12 @@
 
 ## Race Friends — private multiplayer
 
+Deployed to production Convex and https://minirush.site on 2026-11-13.
+The live-domain check joined two independent browsers, verified their shared
+start and live progress, checked the mobile lobby, then closed the test room.
+Complete race results, refresh recovery, rematch and disconnect/DNF behavior
+passed against development Convex. No NEAR transactions were sent by these checks.
+
 The homepage **Race Friends** button opens a two-driver room. Create a race,
 copy its invite (or share the eight-character code), and have both drivers
 choose **I'm ready**. Guests can join without a wallet or sign-in. Both get a
@@ -51,7 +57,7 @@ and optional sign-in-required deployments.
 
 Production Convex (`precious-dalmatian-332`) and the frontend at
 https://minirush.site are now deployed. The production release is
-https://mini-rush-f3yf7bdd3-calebuxs-projects.vercel.app and uses the same testnet
+https://mini-rush-eann6lo0i-calebuxs-projects.vercel.app and uses the same testnet
 garage. Sign-in stays off
 on both sides, because the hosted Auth0 callback is still rejected. Dealer
 automation is enabled only on production; development sets
