@@ -30,6 +30,7 @@ function numberRoundel(): T.CanvasTexture {
  */
 export function buildStockCar(spec: CarSpec): T.Group {
   const paint = new T.MeshPhysicalMaterial({ color: spec.color, metalness: .2, roughness: .32, clearcoat: .5, clearcoatRoughness: .16 });
+  paint.userData.isPaint = true;
   const black = new T.MeshStandardMaterial({ color: 0x14181e, roughness: .6 });
   const carbon = new T.MeshPhysicalMaterial({ color: 0x1c2026, metalness: .3, roughness: .32, clearcoat: .7 });
   const glass = new T.MeshPhysicalMaterial({ color: 0x0f1b24, metalness: .5, roughness: .08, clearcoat: 1 });

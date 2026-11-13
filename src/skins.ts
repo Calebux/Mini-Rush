@@ -1,7 +1,8 @@
 // Car skins: alternate paint jobs purchased with coins. Each car can have
 // multiple color variants. Active skin swaps the car's color (underglow +
 // toon material). Same spend/own pattern as economy.ts.
-import { spend } from './economy';
+import { bank, owned } from './economy';
+import { CARS } from './cars';
 import { checkLocalPurchase } from './shopSession';
 
 export interface Skin {
@@ -9,6 +10,9 @@ export interface Skin {
   color: number;
   price: number;
 }
+export interface SkinDesign { color: number; accent: number; pattern: 'solid' | 'stripes'; finish: 'gloss' | 'satin' }
+/** Legacy junkyard shells use one baked atlas for body, glass and lamps. */
+export const supportsSkinDesign = (car: { model: number }): boolean => car.model === -1 || car.model >= 100;
 
 // Skins per car id — the first entry is always the stock color (free, already owned).
 export const CAR_SKINS: Record<string, Skin[]> = {
@@ -94,10 +98,19 @@ export const CAR_SKINS: Record<string, Skin[]> = {
 };
 
 const ACTIVE_KEY = 'minirush.skins';
+const JOURNAL = `${ACTIVE_KEY}.purchase`;
+// Keep existing indices stable: earlier purchases retain their identities.
+for (const car of CARS) if (!CAR_SKINS[car.id]) CAR_SKINS[car.id] = [
+  { name: 'Stock', color: car.color, price: 0 },
+  { name: 'Midnight', color: 0x242b3d, price: 80 },
+  { name: 'Pearl', color: 0xe5e8df, price: 100 },
+  { name: 'Lagos Gold', color: 0xdfad4c, price: 140 }
+];
 
 interface SkinStore {
   active: Record<string, number>;  // carId → skinIndex
   owned: Record<string, number[]>; // carId → owned indices
+  designs?: Record<string, Record<number, SkinDesign>>;
 }
 
 function load(): SkinStore {
@@ -106,7 +119,8 @@ function load(): SkinStore {
     if (!raw || typeof raw !== 'object') return { active: {}, owned: {} };
     return {
       active: raw.active && typeof raw.active === 'object' ? raw.active : {},
-      owned: raw.owned && typeof raw.owned === 'object' ? raw.owned : {}
+      owned: raw.owned && typeof raw.owned === 'object' ? raw.owned : {},
+      designs: raw.designs && typeof raw.designs === 'object' ? raw.designs : {}
     };
   } catch {
     return { active: {}, owned: {} };
@@ -121,33 +135,68 @@ function save(store: SkinStore): void {
 export function activeSkinIndex(carId: string): number {
   const skins = CAR_SKINS[carId];
   const index = Math.floor(load().active[carId] ?? 0);
-  return skins && index >= 0 && index < skins.length ? index : 0;
+  return skins && index >= 0 && index < skins.length && skinOwned(carId, index) ? index : 0;
 }
 
 /** Whether a specific skin is owned. Index 0 (stock) is always owned. */
 export function skinOwned(carId: string, index: number): boolean {
+  if (!Number.isSafeInteger(index) || !CAR_SKINS[carId]?.[index]) return false;
   if (index === 0) return true;
-  return (load().owned[carId] ?? []).includes(index);
+  const entries = load().owned[carId];
+  return Array.isArray(entries) && entries.includes(index);
+}
+
+export function skinDesign(carId: string, index: number, fallback?: number): SkinDesign {
+  const preset = CAR_SKINS[carId]?.[index];
+  const base: SkinDesign = { color: index === 0 && fallback !== undefined ? fallback : preset?.color ?? 0xffffff,
+    accent: 0xf0eee3, pattern: 'solid', finish: 'gloss' };
+  const saved = index > 0 ? load().designs?.[carId]?.[index] : undefined;
+  return validDesign(saved) ? { ...saved } : base;
+}
+function validDesign(d: unknown): d is SkinDesign {
+  if (!d || typeof d !== 'object') return false;
+  const p = d as SkinDesign;
+  return [p.color, p.accent].every(c => Number.isSafeInteger(c) && c >= 0 && c <= 0xffffff)
+    && ['solid','stripes'].includes(p.pattern) && ['gloss','satin'].includes(p.finish);
+}
+export function recoverSkinPurchase(): void {
+  const raw = localStorage.getItem(JOURNAL); if (!raw) return;
+  const tx = JSON.parse(raw);
+  if (!Number.isSafeInteger(tx.balance) || tx.balance < 0 || typeof tx.store !== 'string') throw new Error('Invalid skin purchase journal');
+  localStorage.setItem(ACTIVE_KEY, tx.store);
+  localStorage.setItem('minirush.bank', String(tx.balance));
+  localStorage.removeItem(JOURNAL);
+}
+/** A purchased skin is an editable design slot for this chassis, saved locally. */
+export function saveSkinDesign(carId: string, index: number, design: SkinDesign): string | null {
+  try {
+    recoverSkinPurchase();
+    const car = CARS.find(c => c.id === carId), skin = CAR_SKINS[carId]?.[index];
+    if (!car || !skin || !Number.isSafeInteger(index) || !validDesign(design)) return 'Choose a valid skin.';
+    if (!supportsSkinDesign(car)) return 'Custom skins are not available for this car yet.';
+    if (car.price > 0 && !owned().has(carId)) return 'Own this car before buying its skins.';
+    const have = skinOwned(carId, index);
+    if (!have && !checkLocalPurchase()) return 'Sign in to buy this skin.';
+    const cost = have ? 0 : skin.price, balance = bank();
+    if (balance < cost) return `Earn ${cost - balance} more coins by racing.`;
+    const store = load();
+    const previous = Array.isArray(store.owned[carId]) ? store.owned[carId] : [];
+    store.owned[carId] = [...new Set([...previous, index])]; store.active[carId] = index;
+    if (index > 0) { store.designs ??= {}; store.designs[carId] ??= {}; store.designs[carId][index] = { ...design }; }
+    localStorage.setItem(JOURNAL, JSON.stringify({ balance: balance - cost, store: JSON.stringify(store) }));
+    recoverSkinPurchase(); return null;
+  } catch { return 'Could not save. Reopen the game to recover any interrupted purchase.'; }
 }
 
 /** Buy and equip a skin. Returns false if can't afford or already owned. */
 export function buySkin(carId: string, index: number): boolean {
-  const skins = CAR_SKINS[carId];
-  if (!skins || index < 0 || index >= skins.length) return false;
   if (skinOwned(carId, index)) return false;
-  if (!checkLocalPurchase()) return false;
-  if (!spend(skins[index].price)) return false;
-  const store = load();
-  if (!store.owned[carId]) store.owned[carId] = [];
-  store.owned[carId] = Array.from(new Set([...store.owned[carId], index]));
-  store.active[carId] = index;
-  save(store);
-  return true;
+  return saveSkinDesign(carId, index, skinDesign(carId, index)) === null;
 }
 
 /** Set the active skin (must be owned). */
 export function equipSkin(carId: string, index: number): void {
-  if (!skinOwned(carId, index) && index !== 0) return;
+  if (!skinOwned(carId, index)) return;
   const store = load();
   store.active[carId] = index;
   save(store);
@@ -162,5 +211,5 @@ export function activeColor(carId: string, fallback = 0xffffff): number {
   const skins = CAR_SKINS[carId];
   if (!skins) return fallback;
   const idx = activeSkinIndex(carId);
-  return skins[idx]?.color ?? skins[0].color;
+  return skinDesign(carId, idx, fallback).color;
 }

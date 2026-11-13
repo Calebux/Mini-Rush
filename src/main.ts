@@ -2,6 +2,7 @@ import { Game } from './game';
 import { trackVisibleViewport, watchAndroidHost } from './host';
 import { track } from './usage';
 import { recoverPurchase } from './workshop';
+import { recoverSkinPurchase } from './skins';
 import { installGarageActivity } from './garageActivity';
 import { SIGN_IN_REQUIRED } from './shopSession';
 import { installHomePriceWire } from './homePriceWire';
@@ -16,9 +17,11 @@ import './garageActivity.css';
 import './cardSystem.css';
 import './homePriceWire.css';
 import './workshopCinematic.css';
+import './skinStudio.css';
 
 // Finish an interrupted coin purchase before any menu/race can read the bank.
 try { recoverPurchase(); } catch { /* Workshop displays the recoverable storage error. */ }
+try { recoverSkinPurchase(); } catch { /* Skin studio reports storage failures on save. */ }
 trackVisibleViewport(); // keeps the bottom controls inside what the browser shows
 watchAndroidHost(); // keeps the bottom controls clear of the Android nav bar
 new Game(document.getElementById('app')!);

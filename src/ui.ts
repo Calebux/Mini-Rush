@@ -22,7 +22,8 @@ import {
 } from './convexBoard';
 import { shareUrl } from './referral';
 import { RunCard, shareRun } from './share';
-import { activeColor, activeSkinIndex, buySkin, CAR_SKINS, equipSkin, skinOwned } from './skins';
+import { activeColor, type SkinDesign } from './skins';
+import { SkinStudio } from './skinStudio';
 import { favoriteMode, getStats, winRate } from './stats';
 import { currentStreak, weekProgress } from './streak';
 import {
@@ -221,6 +222,8 @@ export class UI {
   onRestart: () => void = () => {};
   onLaps: (n: number) => void = () => {};
   onCar: (index: number) => void = () => {};
+  onSkinPreview: (id: string, design: SkinDesign | null) => void = () => {};
+  private skinStudio?: SkinStudio;
   onMap: (index: number) => void = () => {};
   onMode: (index: number) => void = () => {};
   onPage: (page: 'menu' | 'garage' | 'tour' | 'workshop' | 'market') => void = () => {};
@@ -1576,49 +1579,13 @@ export class UI {
     this.onCar(this.carIndex);
   }
 
-  /** Paint-job dots under the car. Tap an owned skin to equip, a locked one to buy. */
+  /** Separate cosmetic drafts from the saved racing loadout. */
   private renderSkins(carOwned: boolean): void {
-    const row = $('skin-row');
-    row.innerHTML = '';
-    const car = CARS[this.carIndex];
-    const skins = CAR_SKINS[car.id];
-    // skins only make sense once the car itself is owned
-    if (!carOwned || !skins || skins.length <= 1) return;
-
-    const label = document.createElement('span');
-    label.className = 'skin-label';
-    label.textContent = 'SKIN';
-    row.appendChild(label);
-
-    const active = activeSkinIndex(car.id);
-    skins.forEach((skin, i) => {
-      const dot = document.createElement('button');
-      const owned = skinOwned(car.id, i);
-      dot.className = 'skin-dot' + (i === active ? ' sel' : '') + (owned ? '' : ' locked');
-      dot.type = 'button';
-      dot.setAttribute('aria-label', owned ? `Equip ${skin.name} paint` : `Buy ${skin.name} paint for ${skin.price} coins`);
-      dot.setAttribute('aria-pressed', String(i === active));
-      const hex = `#${skin.color.toString(16).padStart(6, '0')}`;
-      dot.style.background = hex;
-      dot.style.color = hex; // drives the currentColor glow
-      dot.title = owned ? skin.name : `${skin.name} · ⬤ ${skin.price}`;
-      dot.addEventListener('click', async () => {
-        dot.blur();
-        if (!owned && !(await requireShopSession())) return;
-        if (owned) {
-          equipSkin(car.id, i);
-          this.audio.play('select');
-        } else if (buySkin(car.id, i)) {
-          this.audio.play('buy');
-          this.refreshBank();
-        } else {
-          return; // can't afford
-        }
-        this.renderCar();
-        this.onCar(this.carIndex); // rebuild the preview with the new paint
-      });
-      row.appendChild(dot);
+    this.skinStudio ??= new SkinStudio($('skin-row'), (id, design) => this.onSkinPreview(id, design), () => {
+      this.audio.play('buy'); this.refreshBank(); this.renderCar(); this.onCar(this.carIndex);
     });
+    const car = CARS[this.carIndex];
+    this.skinStudio.show(car.model === 300 ? workshopSpec(car) : car, carOwned);
   }
 
   /** One board line: rank, driver, detail, and the figure it is ranked on. */

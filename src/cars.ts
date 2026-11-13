@@ -12,9 +12,11 @@
  * is bought with coins, like upgrades, paint and workshop parts.
  */
 import type { Build } from './workshop';
+import type { SkinDesign } from './skins';
 export type CarClass = 'hyper' | 'fast' | 'junk';
 
 export interface CarSpec {
+  skin?: SkinDesign;
   build?: Build;
   id: string;
   name: string;

@@ -159,6 +159,10 @@ export class Showroom {
       // Contact-shadow planes must not make a small car look far away.
       const bounds = this.specimen?.bounds ?? this.bounds;
       let frameWidth = r.width, frameHeight = Math.max(60, r.height - (market ? 55 : 110));
+      if (garage && w < 850 && this.stage.closest('.skin-editing')) {
+        frameHeight = Math.max(60, r.height - 45);
+        this.camera.setViewOffset(w, h, w / 2 - (r.left + r.width / 2), h / 2 - (r.top + r.height / 2 + 10), w, h);
+      }
       if (this.specimen) {
         // Keep inspection models beside the title and below the header on phones.
         const inset = r.width * (w < 850 ? .4 : .18);

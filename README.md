@@ -38,6 +38,15 @@ are snapshots, not promises of current availability. [Capture details and refres
 
 </details>
 
+<details>
+<summary>Skin Studio: colours, racing stripes and finishes</summary>
+
+![A saved custom VIPER GT skin in the local Skin Studio](docs/screenshots/skin-studio.png)
+
+Local browser test capture with fixture coins; no on-chain purchase.
+
+</details>
+
 ## Try the game
 
 | What to try | Where to go |
@@ -47,6 +56,7 @@ are snapshots, not promises of current availability. [Capture details and refres
 | Race another person live | Home → **Race Friends** → **Create a race** → copy the invite; both drivers choose **I'm ready** |
 | See your cars | **Garage → Owned cars**; **All cars** shows the broader roster |
 | Customize RUSH ONE | **Garage → Customs workshop → Customize** |
+| Buy and personalize a skin | **Garage → select a car → Skin Studio → select a skin** |
 | Craft, install or sell parts | **Garage → Customs workshop → Performance & Parts** |
 | Fill an NPC buy order | **Performance & Parts → Trade → Dealer orders** |
 | Buy a numbered car from another player | **Car Market → choose a limited edition → From Owners** |
@@ -144,6 +154,15 @@ Other ways to play:
   can be paused and respects reduced-motion preferences.
 - Ordinary car upgrades, paint and cosmetic workshop parts use local earned
   coins. Interrupted local purchases recover from a browser journal.
+- **Skin Studio:** preview a skin, choose body and stripe colours, switch between
+  solid paint and twin racing stripes, and select gloss or satin. **Buy & equip**
+  unlocks an editable skin slot for that car; later edits are free. **Cancel
+  preview** leaves the racing loadout unchanged, and **Equip factory** restores
+  the original look (Customs paint on RUSH ONE). Supports VIPER GT, RUSH ONE,
+  STOCK 88 and all five Hypercars. Legacy junkyard liveries are not editable;
+  their skin purchases are blocked. Skins are cosmetic, device-local purchases
+  with earned coins, not on-chain NFTs. Private friend races retain their fixed
+  opponent colours.
 - **Test drive / Compare builds** provides a fixed dry Lagos proving ground with
   fitted and stock runs. Reports show lap time, 0–100, peak speed, braking,
   off-road time and nitro use. Practice does not spend consumables or earn rewards.

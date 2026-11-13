@@ -26,7 +26,7 @@ import { carFits, carInField, MODES } from './modes';
 import { mapUnlocked, stamp } from './passport';
 import { boardPlayerId, boardsEnabled, postWeekendRun, topWeekendRuns } from './convexBoard';
 import { captureReferrer, creditReferral } from './referral';
-import { activeColor } from './skins';
+import { activeSkinIndex, skinDesign, type SkinDesign } from './skins';
 import { applyUpgrades } from './upgrades';
 import { Rival } from './rivals';
 import { InputManager } from './input';
@@ -156,6 +156,7 @@ export class Game {
   private laps = 2;
   private raceLaps = 2; // laps actually raced (mode may lock the pick)
   private carIndex = 0;
+  private skinPreview: { id: string; design: SkinDesign } | null = null;
   private mapIndex = 0;
   private modeIndex = 0;
   private takedowns = 0;
@@ -328,6 +329,7 @@ export class Game {
     this.testDrive.onPause = () => this.togglePause();
     this.ui.onLaps = (n) => (this.laps = n);
     this.ui.onCar = (i) => this.setCar(i);
+    this.ui.onSkinPreview = (id, design) => { this.skinPreview = design ? { id, design: { ...design } } : null; };
     this.ui.onWorkshopPreview = (build, chassis) => {
       this.showroom?.clearInstallation(); this.workshopPreview = build; this.workshopChassis = chassis ?? null;
     };
@@ -948,8 +950,10 @@ export class Game {
       return this.practice.setup === 'stock'
         ? { ...fitted, speed: base.speed, accel: base.accel, grip: base.grip, nitro: base.nitro } : fitted;
     }
-    if (CARS[i].model === 300) return applyComponents(workshopSpec(CARS[i]));
-    return applyComponents({ ...applyUpgrades(CARS[i]), color: activeColor(CARS[i].id, CARS[i].color) });
+    const base = CARS[i].model === 300 ? workshopSpec(CARS[i]) : applyUpgrades(CARS[i]);
+    const index = activeSkinIndex(base.id);
+    const skin = index > 0 ? skinDesign(base.id, index, base.color) : undefined;
+    return applyComponents({ ...base, color: skin?.color ?? base.color, skin });
   }
 
   /** Garage pick: persist, and swap the parked car live while in the menu. */
@@ -1618,7 +1622,8 @@ export class Game {
       this.showroom ??= new Showroom(this.assets);
       const spec = this.uiScene === 'market' ? { ...CARS.find(c => c.id === this.marketCar)!, ...(this.marketPaint === null ? {} : { color: this.marketPaint }) }
         : this.workshopPreview ? workshopSpec(CARS.find(c => c.model === 300)!, this.workshopPreview) : this.carSpec(this.workshopChassis ? Math.max(0, CARS.findIndex(c => c.id === this.workshopChassis)) : this.carIndex);
-      this.showroom.setCar(spec);
+      const preview = this.uiScene === 'garage' && this.skinPreview?.id === spec.id ? this.skinPreview.design : null;
+      this.showroom.setCar(preview ? { ...spec, color: preview.color, skin: preview } : spec);
       this.showroom.render(this.renderer, this.uiScene === 'workshop', this.uiScene === 'garage', this.uiScene === 'market');
       return;
     }

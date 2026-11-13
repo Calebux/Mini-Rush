@@ -6,6 +6,7 @@ import { buildCar, CAR_COLORS, carGroundFx, polishCar } from './meshes';
 import { finishVehicle, repaintVehicle, toonify } from './toon';
 import { buildStockCar } from './stockCar';
 import { buildWorkshopCar } from './workshopCar';
+import { applySkinFinish } from './skinFinish';
 
 /** Release instance-owned resources, never the cached GLB or shared contact texture. */
 export function disposeCarInstance(root: THREE.Group): void {
@@ -205,6 +206,7 @@ export class AssetLibrary {
   cloneCar(spec: CarSpec): THREE.Group {
     if (spec.model === 300 || spec.model === 200) {
       const g = spec.model === 300 ? buildWorkshopCar(spec) : buildStockCar(spec);
+      applySkinFinish(g, spec.skin);
       g.add(carGroundFx(spec.color));
       return g;
     }
@@ -216,11 +218,12 @@ export class AssetLibrary {
         : model >= 100
           ? this.superCars[model - 100] ?? null
           : this.trafficCars[model] ?? null;
-    if (!src) return buildCar(0, spec.color);
+    if (!src) { const g = buildCar(0, spec.color); applySkinFinish(g, spec.skin); return g; }
     const g = src.clone(true);
     // clones share the loaded model's materials, so the garage colour — and
     // any skin bought for this car — has to be painted on per instance
     g.userData.ownMaterials = repaintVehicle(g, spec.color, g.userData.loadPaint as number | undefined);
+    applySkinFinish(g, spec.skin);
     g.add(carGroundFx(spec.color));
     polishCar(g);
     return g;

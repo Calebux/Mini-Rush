@@ -14,6 +14,7 @@
     "smoke": "node scripts/smoke.mjs",
     "check:workshop": "node scripts/workshop-check.mjs",
     "check:workshop-cinematic": "node scripts/check-workshop-cinematic.mjs",
+    "check:skins": "node scripts/check-skin-studio.mjs",
     "check:workshop-edge": "node scripts/workshop-edge-check.mjs",
     "stress": "node scripts/stress.mjs",
     "check:parts": "node scripts/check-parts-workshop.mjs",

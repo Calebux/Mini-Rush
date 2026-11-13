@@ -10,6 +10,7 @@ not mockups. Prices, inventory, balances and supply are historical snapshots.
 | `race-friends-mobile.png` | Live-domain multiplayer verification, at 390 × 844 |
 | `first-build-choice.png` | Local frontend, real testnet craft of component #2 during the [economy demo](../hackathon-demo.md), at 1440 × 900 |
 | `workshop-inspection.png`, `workshop-customize.png` | Local cinematic workshop at 1600 × 1000, captured by `check-workshop-cinematic.mjs`; all POSTs blocked, so account balances are unavailable |
+| `skin-studio.png` | Local Skin Studio at 1600 × 1000, captured by `check-skin-studio.mjs` with isolated fixture coins and all POSTs blocked; a saved cosmetic design, not an on-chain purchase |
 
 The six live-site captures use public reads and the existing test garage. The
 capture script blocks HTTP actions, mutations and transaction broadcasts; it

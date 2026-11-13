@@ -41,6 +41,35 @@ rules, testing and deployment status.
 
 ## Customize storage and economy
 
+### Skin Studio
+
+In **Garage**, select a supported car and choose a card in **Skin Studio**.
+Preview body colour, accent colour, twin racing stripes and gloss/satin finishes
+on the actual car. **Buy & equip** spends the displayed earned-coin price once;
+**Save & equip** updates an owned skin without another charge. Each purchased
+skin is a separate editable design slot for that chassis. **Cancel preview**
+discards the draft, and racing always uses the saved design. Previewing a locked
+car's skin is free, but the car must be owned before buying or equipping it.
+
+VIPER GT, RUSH ONE, STOCK 88 and the five Hypercars have paintable bodywork.
+Junkyard models use baked textures, so skin purchases are disabled for them.
+RUSH ONE's **Factory** skin uses its existing Customs paint; another skin
+overrides that paint while preserving the saved bodywork and performance build.
+Private friend races keep their fixed player colours.
+
+Designs and ownership remain in `minirush.skins`; the original skin indices
+are preserved for existing purchases. Purchases recover through a local journal
+before the game starts. Clearing browser storage loses these cosmetics. This
+feature does not mint, sell or transfer NFTs and adds no performance advantage.
+
+Run `npm run check:skins -- http://localhost:3000` for preview isolation,
+purchase/affordability, free edits, cancellation, reloads, per-car separation,
+interrupted-write recovery, shader errors, mobile layouts and actual racing.
+The check blocks all POST requests and uses isolated local coin fixtures;
+screenshots are written to `/tmp/minirush-skin-studio/`.
+
+### Custom builds
+
 Builds and part ownership use `minirush.workshop.v1` in this browser's local storage. An interrupted coin purchase is completed from a journal before the game reads the bank on the next boot. Clearing browser/app storage removes these builds and local unlocks.
 
 The Customize tab is a local earned-coin parts shop. Its purchases and saved builds are separate from the on-chain component inventory in Performance & Parts. Coins have no cash value. Server-verified entitlements, recovery across devices and anti-cheat are separate work before presenting this as a secure real-money marketplace.

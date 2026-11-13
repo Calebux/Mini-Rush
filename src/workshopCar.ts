@@ -20,6 +20,7 @@ export function buildWorkshopCar(spec: CarSpec): T.Group {
   const p = (spec.build ?? freshBuild()).parts;
   const wide = p.body === 'wide';
   const paint = new T.MeshPhysicalMaterial({ color: spec.color, metalness: .48, roughness: .24, clearcoat: 1, clearcoatRoughness: .10 });
+  paint.userData.isPaint = true;
   const black = new T.MeshStandardMaterial({ color: 0x14181e, roughness: .6 });
   const carbon = new T.MeshPhysicalMaterial({ color: 0x11151c, metalness: .45, roughness: .3, clearcoat: .8, side: T.DoubleSide });
   const glass = new T.MeshPhysicalMaterial({ color: 0x07121b, metalness: .25, roughness: .18, clearcoat: 1 });

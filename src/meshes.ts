@@ -137,6 +137,7 @@ export function buildCar(colorIndex = 0, paintOverride?: number): THREE.Group {
   outer.add(g);
   const paint = paintOverride ?? CAR_COLORS[colorIndex % CAR_COLORS.length];
   const paintMat = new THREE.MeshPhongMaterial({ color: paint, specular: 0x555b62, shininess: 65 });
+  paintMat.userData.isPaint = true;
   const trim = mat(0x1c2130);
 
   const body = new THREE.Mesh(profileGeometry(BODY_PROFILE, 1.7), paintMat);
