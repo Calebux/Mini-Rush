@@ -4,7 +4,8 @@ import type { CarSpec } from './cars';
 import { buildGarage } from './garageSet';
 import { buildMarketStudio } from './marketStudio';
 import { ComponentReveal } from './componentReveal';
-import type { Recipe } from './components';
+import { componentRecipe, type Recipe } from './components';
+import { PartSpecimen } from './partSpecimen';
 import { lightCars, studioEnvironment } from './lighting';
 
 /** One renderer, a separate scene in the garage: menu lighting never changes a race. */
@@ -28,6 +29,8 @@ export class Showroom {
   private targetAngle: number | null = null;
   private reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   private installation: ComponentReveal | null = null;
+  private specimen: PartSpecimen | null = null;
+  private specimenKey = '';
   constructor(private assets: AssetLibrary) {
     // A physical studio set with broad softbox reflections across the paint.
     this.scene.background = new T.Color(0x0c0e16);
@@ -48,7 +51,7 @@ export class Showroom {
     this.boundStages.add(el);
     const manual = () => {
       this.targetAngle = null;
-      if (el.id === 'home-car-stage') el.dataset.orbit = 'false';
+      if (el.id === 'home-car-stage' || el.id === 'workshop-car-stage') el.dataset.orbit = 'false';
       if (el.id === 'market-car-stage') {
         el.dataset.orbit = 'false';
         document.querySelector('.mk-motion')?.setAttribute('aria-pressed', 'false');
@@ -114,13 +117,20 @@ export class Showroom {
     }
     this.stage = document.getElementById(market ? 'market-car-stage' : garage ? 'garage-car-stage' : workshop ? 'workshop-car-stage' : 'home-car-stage');
     if (!this.stage) return;
+    const recipe = workshop && this.stage.dataset.view === 'part' ? componentRecipe(this.stage.dataset.part ?? '') : undefined;
+    if ((recipe?.id ?? '') !== this.specimenKey) {
+      this.specimen?.dispose(); this.specimen = recipe ? new PartSpecimen(recipe) : null;
+      this.specimenKey = recipe?.id ?? '';
+      if (this.specimen) this.scene.add(this.specimen.root);
+    }
+    if (this.car) this.car.visible = !this.specimen;
     this.bindStage(this.stage);
     const now = performance.now(), dt = Math.min(.05, (now - this.lastFrame) / 1000); this.lastFrame = now;
     if (this.installation && (!workshop || !this.installation.update(dt))) {
       this.installation.dispose(); this.installation = null;
     }
-    if (market || this.stage.id === 'home-car-stage') {
-      const shot = `${this.stage.id}/${this.stage.dataset.shot}/${this.stage.dataset.take ?? ''}`;
+    if (market || workshop || this.stage.id === 'home-car-stage') {
+      const shot = `${this.stage.id}/${this.stage.dataset.shot}/${this.stage.dataset.take ?? ''}/${this.stage.dataset.view ?? ''}`;
       if (shot !== this.shot) {
         this.shot = shot;
         const wanted = this.stage.dataset.shot === 'side' ? Math.PI / 2 : this.stage.dataset.shot === 'rear' ? 2.55 : .65;
@@ -144,28 +154,37 @@ export class Showroom {
     this.camera.setViewOffset(w, h, w / 2 - (r.left + r.width / 2), h / 2 - (r.top + r.height / 2), w, h);
     this.camera.position.set(Math.sin(this.angle) * radius, radius * .25, Math.cos(this.angle) * radius);
     this.camera.lookAt(0, .65, 0); this.camera.updateProjectionMatrix();
-    if (garage || market) {
+    if (garage || market || this.specimen) {
       // Fit the actual car into the clear UI rectangle at every rotation.
       // Contact-shadow planes must not make a small car look far away.
-      const center = this.bounds.getCenter(new T.Vector3());
+      const bounds = this.specimen?.bounds ?? this.bounds;
+      let frameWidth = r.width, frameHeight = Math.max(60, r.height - (market ? 55 : 110));
+      if (this.specimen) {
+        // Keep inspection models beside the title and below the header on phones.
+        const inset = r.width * (w < 850 ? .4 : .18);
+        frameWidth = r.width - inset; frameHeight = Math.max(80, r.height - 100);
+        this.camera.setViewOffset(w, h, w / 2 - (r.left + inset + frameWidth / 2),
+          h / 2 - (r.top + 36 + frameHeight / 2), w, h);
+      }
+      const center = bounds.getCenter(new T.Vector3());
       const direction = new T.Vector3(Math.sin(this.angle), market ? .17 : .24, Math.cos(this.angle)).normalize();
       this.camera.position.copy(center).add(direction);
       this.camera.lookAt(center);
       const inverse = this.camera.quaternion.clone().invert();
       const tan = Math.tan(T.MathUtils.degToRad(this.camera.fov / 2));
-      const horizontal = tan * r.width / h * .88;
-      const vertical = tan * Math.max(60, r.height - (market ? 55 : 110)) / h * .9;
+      const horizontal = tan * frameWidth / h * .88;
+      const vertical = tan * frameHeight / h * .9;
       let distance = 5;
-      for (const x of [this.bounds.min.x, this.bounds.max.x])
-        for (const y of [this.bounds.min.y, this.bounds.max.y])
-          for (const z of [this.bounds.min.z, this.bounds.max.z]) {
+      for (const x of [bounds.min.x, bounds.max.x])
+        for (const y of [bounds.min.y, bounds.max.y])
+          for (const z of [bounds.min.z, bounds.max.z]) {
             const corner = new T.Vector3(x, y, z).sub(center).applyQuaternion(inverse);
             distance = Math.max(distance, corner.z + Math.abs(corner.x) / horizontal,
               corner.z + Math.abs(corner.y) / vertical);
           }
       // Short phone layouts need a wider lens, not a camera behind the
       // workshop walls. Keep the same projected car size inside the room.
-      if (garage && distance > 11) {
+      if ((garage || this.specimen) && distance > 11) {
         this.camera.fov = T.MathUtils.radToDeg(2 * Math.atan(tan * distance / 11));
         this.camera.updateProjectionMatrix();
         distance = 11;

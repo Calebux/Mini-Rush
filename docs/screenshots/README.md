@@ -9,6 +9,7 @@ not mockups. Prices, inventory, balances and supply are historical snapshots.
 | `live-race.png`, `race-results.png` | A real two-browser Race Friends integration run against the development backend, at 1280 × 850 |
 | `race-friends-mobile.png` | Live-domain multiplayer verification, at 390 × 844 |
 | `first-build-choice.png` | Local frontend, real testnet craft of component #2 during the [economy demo](../hackathon-demo.md), at 1440 × 900 |
+| `workshop-inspection.png`, `workshop-customize.png` | Local cinematic workshop at 1600 × 1000, captured by `check-workshop-cinematic.mjs`; all POSTs blocked, so account balances are unavailable |
 
 The six live-site captures use public reads and the existing test garage. The
 capture script blocks HTTP actions, mutations and transaction broadcasts; it
@@ -49,6 +50,12 @@ backend and inspect its images under `/tmp/minirush-friends/` before copying the
 desired race/results captures here. That check creates temporary development
 rooms and blocks NEAR transactions. The mobile lobby image came from a separate
 production verification run.
+
+To check the cinematic workshop and capture its desktop/phone layouts, run
+`npm run check:workshop-cinematic -- http://localhost:3000`. It writes images to
+`/tmp/minirush-cinematic-workshop/` and blocks all POST requests. The README's
+new workshop images come from `street-slick-desktop.png` and
+`customize-desktop.png`; they show the local implementation, not a deployed update.
 
 Screenshots retain the licences of their underlying artwork; see
 [asset credits](../../CREDITS.md). They are not a blanket MIT licence grant for

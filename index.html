@@ -1902,7 +1902,12 @@
       <div><h1>THE CUSTOMS SHOP</h1><small>BUILT BY YOU. DRIVEN BY YOU.</small></div>
       <span id="workshop-balance">0 COINS</span>
     </header>
-    <div id="workshop-car-stage" tabindex="0" role="img" aria-label="Custom car preview. Drag or use arrow keys to rotate."><span class="workshop-stage-label">RUSH ONE / ORIGINAL SERIES</span><span class="showroom-hint">DRAG TO ROTATE ↔</span></div>
+    <div id="workshop-car-stage" tabindex="0" role="group" aria-label="Workshop preview. Drag or use arrow keys to rotate." data-orbit="true" data-shot="front" data-view="car">
+      <span class="workshop-stage-label">RUSH ONE / ORIGINAL SERIES</span>
+      <div id="workshop-spotlight" aria-live="polite"></div>
+      <div class="ws-stage-controls"><div id="workshop-view-controls" hidden><button type="button" data-part-view="part" aria-pressed="true">INSPECT PART</button><button type="button" data-part-view="car" aria-pressed="false">VIEW CAR</button></div><button type="button" class="ws-motion" data-home-motion aria-pressed="true">Ⅱ PAUSE CAMERA</button></div>
+      <span class="showroom-hint">DRAG TO ROTATE ↔</span>
+    </div>
     <section class="workshop-panel" aria-label="Build configuration">
       <nav class="workshop-departments" aria-label="Workshop departments"><button type="button" data-workshop-section="style" aria-pressed="true">CUSTOMIZE</button><button type="button" data-workshop-section="performance" aria-pressed="false">PERFORMANCE & PARTS</button></nav>
       <div id="workshop-customize">
@@ -1910,6 +1915,7 @@
       <div id="workshop-stats" aria-label="Performance index, stock equals 100"></div>
       <div id="workshop-tabs" aria-label="Part categories"></div>
       <div id="workshop-parts" aria-label="Compatible parts"></div>
+      <div id="workshop-style-detail"></div>
       <p id="workshop-status" role="status" aria-live="polite"></p>
       <div class="workshop-actions"><button id="workshop-buy" type="button">PART OWNED</button><button id="workshop-save" type="button">SAVE & EQUIP</button></div>
       <p class="workshop-note">Earn coins by racing. Parts unlock across all 3 builds. Saved on this device. Coins have no cash value. Cars are bought with coins in the Garage.</p>

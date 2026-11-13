@@ -15,6 +15,7 @@ import './garagePresentation.css';
 import './garageActivity.css';
 import './cardSystem.css';
 import './homePriceWire.css';
+import './workshopCinematic.css';
 
 // Finish an interrupted coin purchase before any menu/race can read the bank.
 try { recoverPurchase(); } catch { /* Workshop displays the recoverable storage error. */ }

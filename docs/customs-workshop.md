@@ -21,6 +21,21 @@ the same live car stage. It reuses the current game theme, part cards, stat bars
 and controls. Choose VIPER GT or RUSH ONE to inspect that chassis and its installed
 components. Switching tabs preserves the unsaved cosmetic preview.
 
+Recipes and owned/traded parts share illustrated cards and a dedicated 3D
+inspection stage. Select **Inspect part** to orbit a component or **View car**
+to return to the current chassis. Tires, engines, gearboxes and nitro bottles
+have display models; the three tire compounds have different tread patterns.
+Driving notes explain every recipe's advantages and sacrifices beside its
+actual stat changes. Cosmetic cards distinguish body kits, wheel designs,
+wings and paint finishes without implying extra performance.
+
+Browsing never buys or installs a component. Confirmed installation returns to
+the car and plays the existing assembly reveal. Dragging or arrow keys stop
+auto orbit; **Pause camera** and system reduced-motion settings are supported.
+Run `npm run check:workshop-cinematic -- http://localhost:3000` for the isolated
+inspection, mobile layout, session-refresh and motion checks. All POSTs are
+blocked; screenshots are written to `/tmp/minirush-cinematic-workshop/`.
+
 See [the NEAR economy notes](near-economy.md) for component ownership, reward
 rules, testing and deployment status.
 

@@ -6,6 +6,7 @@ import { craftingProgress, craftingTarget, trackRecipe } from './craftingTarget'
 import { orderPayout, type ComponentOrder } from '../shared/dealerOrders';
 import { ensureAccount, explorerTx, holdings, nearAccount, refreshComponents, relayed, viewCall, hasPendingReward, retryRaceReward, hasPendingAction, type Holding } from './near';
 import { shopOpen, requireShopSession } from './shopSession';
+import { partArt, recipeDossier, recipeStory, spotlightPart } from './partPresentation';
 
 const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 const short = (s: string) => s.split('.')[0];
@@ -96,17 +97,17 @@ export class PartsWorkshop {
       <footer class="pw-foot"><span>TEST BUILD</span><button type="button" data-garage-activity>ACTIVITY</button><button type="button" data-action="refresh" ${this.busy || this.loading ? 'disabled' : ''}>REFRESH</button></footer>`;
     if (focusKey) this.root.querySelector<HTMLElement>(focusKey)?.focus({ preventScroll: true });
   }
-  private symbol(slot: string): string { return ({ engine: 'ϟ', gearbox: '⚙', tires: '◎', nitro: '↯' } as Record<string, string>)[slot] ?? 'ϟ'; }
   private craftView(): string {
     const recipes = RECIPES.filter(r => r.slot === this.slot);
     const selected = recipes.find(r => r.id === this.selectedRecipe) ?? recipes[0];
     this.selectedRecipe = selected.id;
+    if (this.root.getClientRects().length) spotlightPart(recipeStory(selected), selected);
     const progress = craftingProgress(selected, this.held), enough = progress.ready;
     const order = this.orders?.filter(o => o.recipe_id === selected.id && o.dealer !== nearAccount() && o.remaining > 0 && o.expires_ms > Date.now())
       .sort((a, b) => orderPayout(b.price) - orderPayout(a.price))[0];
     return `<div class="pw-slot-nav" aria-label="Component slots">${COMPONENT_SLOTS.map(s => `<button type="button" data-slot="${s}" aria-pressed="${s === this.slot}">${s}</button>`).join('')}</div>
-      <div class="pw-grid" aria-label="Component recipes">${recipes.map(r => `<button type="button" class="part-card pw-card" data-recipe="${r.id}" aria-pressed="${r.id === selected.id}"><span class="part-symbol">${this.symbol(r.slot)}</span><strong>${r.name}</strong><small>${r.rush} RUSH</small></button>`).join('')}</div>
-      <section class="pw-detail" aria-label="Selected recipe"><strong>${selected.name}</strong><p>${selected.detail}</p><p class="pw-stats">${componentStats(selected)}</p>
+      <div class="pw-grid" aria-label="Component recipes">${recipes.map((r, i) => `<button type="button" class="part-card pw-card ws-card" style="--part-accent:${recipeStory(r).accent}" data-recipe="${r.id}" aria-pressed="${r.id === selected.id}"><span class="ws-card-index">0${i + 1} / ${r.slot}</span>${partArt(r.slot, recipeStory(r).accent, r.id)}<strong>${r.name}</strong><span class="ws-card-role">${recipeStory(r).tag}</span><small>${r.rush} RUSH <i>${r.id === selected.id ? 'SELECTED' : 'INSPECT ↗'}</i></small></button>`).join('')}</div>
+      <section class="pw-detail" aria-label="Selected recipe"><strong>${selected.name}</strong>${recipeDossier(selected)}<p class="pw-stats ws-sr">${componentStats(selected)}</p>
       <p class="pw-cost">${selected.rush} RUSH · ${selected.alloy} ALLOY · ${selected.circuit} CIRCUITS</p>
       <div class="pw-material-progress" aria-label="Materials needed">${progress.resources.map(r => `<div><span>${r.label}</span><strong>${this.connected ? r.balance : '—'} / ${r.cost}</strong><progress max="${r.cost}" value="${this.connected ? Math.min(r.balance, r.cost) : 0}" aria-label="${r.label} collected"></progress></div>`).join('')}</div>
       <p class="pw-progress-note">${!this.connected ? 'Connect to check your materials. You can race while the workshop is unavailable.' : enough ? 'Materials ready. Crafting spends these resources.' : `Still need ${progress.resources.filter(r => r.missing > 0).map(r => `${r.missing} ${r.id === 'material:circuit' && r.missing === 1 ? 'circuit' : r.label}`).join(', ')}. About ${progress.races} eligible ${progress.races === 1 ? 'race' : 'races'} at the finish rate; daily limits apply.`}</p>
@@ -146,19 +147,20 @@ export class PartsWorkshop {
     this.selectedPart = selected.id;
     return `<div class="pw-grid" aria-label="${market ? 'Player listings' : 'Owned components'}">${parts.map(p => {
       const r = componentRecipe(p.recipe_id);
-      return r ? `<button type="button" class="part-card pw-card" data-select-part="${esc(p.id)}" aria-pressed="${p.id === selected.id}"><span class="part-symbol">${this.symbol(r.slot)}</span><strong>${r.name}</strong><small>${p.price !== null ? `${Number(p.price)} RUSH` : p.installed_on ? 'INSTALLED' : 'OWNED'} · #${esc(p.id.split(':')[1] ?? p.id)}</small></button>` : '';
+      return r ? `<button type="button" class="part-card pw-card ws-card" style="--part-accent:${recipeStory(r).accent}" data-select-part="${esc(p.id)}" aria-pressed="${p.id === selected.id}"><span class="ws-card-index">SERIAL #${esc(p.id.split(':')[1] ?? p.id)}</span>${partArt(r.slot, recipeStory(r).accent, r.id)}<strong>${r.name}</strong><small>${p.price !== null ? `${Number(p.price)} RUSH` : p.installed_on ? 'INSTALLED' : 'OWNED'}</small></button>` : '';
     }).join('')}</div>${this.partCard(selected, market)}`;
   }
   private partCard(p: Component, market: boolean): string {
     const r = componentRecipe(p.recipe_id);
     if (!r) return '';
+    if (this.root.getClientRects().length) spotlightPart(recipeStory(r), r);
     const mine = p.owner === nearAccount();
     const listed = p.price !== null;
     const fee = Math.max(1, Math.floor(Number(p.price) * .02));
     const title = p.installed_on ? `Installed · ${p.installed_on === 'viper' ? 'VIPER GT' : 'RUSH ONE'}` : listed ? 'Listed for sale' : 'On your bench';
     const order = this.deliveryOrder(p);
     return `<section class="pw-detail" data-part="${esc(p.id)}"><strong>${r.name} #${esc(p.id.split(':')[1] ?? p.id)}</strong>
-      <p class="pw-stats">${componentStats(r)}</p><p class="pw-provenance">Made by ${esc(short(p.maker))} · Owned by ${esc(short(p.owner))}</p>
+      ${recipeDossier(r)}<p class="pw-stats ws-sr">${componentStats(r)}</p><p class="pw-provenance">Made by ${esc(short(p.maker))} · Owned by ${esc(short(p.owner))}</p>
       ${listed ? `<p class="pw-price">${Number(p.price).toLocaleString()} RUSH <small>· Seller receives ${Number(p.price) - fee}</small></p>` : ''}
       ${market ? `<div class="workshop-actions pw-actions">${mine ? this.button('cancel', 'CANCEL YOUR LISTING', p.id) : this.button('buy', 'BUY PART', p.id, this.balance('rush') < Number(p.price))}</div>` : `
         <p class="pw-tag">${title}</p>

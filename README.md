@@ -23,9 +23,9 @@ are snapshots, not promises of current availability. [Capture details and refres
 
 | Car market and owner resales | Crafting and performance parts |
 | --- | --- |
-| ![LAGOS GOLD limited edition in the cinematic car market](docs/screenshots/car-market.jpg) | ![Performance workshop with chassis selection, crafting recipes and stat tradeoffs](docs/screenshots/performance-parts.jpg) |
+| ![LAGOS GOLD limited edition in the cinematic car market](docs/screenshots/car-market.jpg) | ![Street slicks in the 3D parts inspection stage with illustrated recipes and handling tradeoffs](docs/screenshots/workshop-inspection.png) |
 | **Multi-car garage** | **Customs workshop** |
-| ![Garage roster, owned-car filter and test-drive controls](docs/screenshots/garage.jpg) | ![RUSH ONE custom chassis and configurable parts](docs/screenshots/customs.jpg) |
+| ![Garage roster, owned-car filter and test-drive controls](docs/screenshots/garage.jpg) | ![RUSH ONE widebody preview with illustrated customization cards](docs/screenshots/workshop-customize.png) |
 | **Live multiplayer race** | **Shared race results** |
 | ![Two-player Lagos race with live opponent status and race HUD](docs/screenshots/live-race.png) | ![Server-recorded finishing order and rematch in Race Friends](docs/screenshots/race-results.png) |
 
@@ -136,6 +136,12 @@ Other ways to play:
 - Build the original **RUSH ONE** chassis: bodywork, wheels, wing, paint, tyres
   and power options; live preview; named builds; three saved preset slots;
   **Save & equip**. Cosmetic choices and performance tuning are distinguished.
+- **Cinematic parts inspection:** rotating 3D tires, engines, gearboxes and nitro
+  bottles; **Inspect part / View car** controls; illustrated customization and
+  inventory cards; driving notes and explicit gains/costs for all 12 recipes.
+  Street slicks, Slide compound and Low-drag compound have distinct tread and
+  wheel treatments. Browsing never equips or spends resources. Camera motion
+  can be paused and respects reduced-motion preferences.
 - Ordinary car upgrades, paint and cosmetic workshop parts use local earned
   coins. Interrupted local purchases recover from a browser journal.
 - **Test drive / Compare builds** provides a fixed dry Lagos proving ground with

@@ -1,0 +1,63 @@
+/* Colour identifies driving character; materials belong to the existing garage. */
+#workshop .workshop-head h1 { font-size: clamp(18px,2vw,26px); letter-spacing: -.8px; }
+#workshop .workshop-head small { letter-spacing: 2.4px; }
+#workshop #workshop-car-stage { --part-accent: #d7c19b; }
+#workshop-spotlight { position: absolute; left: 0; top: 52px; width: min(420px,60%); pointer-events: none; text-shadow: 0 3px 20px #000a; }
+#workshop-spotlight > small { display: block; font: 800 9px/1.5 sans-serif; letter-spacing: 2.2px; color: var(--part-accent); }
+#workshop-spotlight > strong { display: block; margin: 10px 0; font: italic 900 clamp(28px,4vw,64px)/.95 system-ui,sans-serif; text-transform: uppercase; letter-spacing: -2px; text-wrap: balance; }
+#workshop-spotlight p { margin: 10px 0; color: #e4e5da; font: 500 14px/1.5 system-ui,sans-serif; }
+#workshop-spotlight > span { display: block; max-width: 220px; font: 700 8px/1.7 sans-serif; color: #b3b3aa; letter-spacing: 1px; }
+.ws-stage-controls { display: flex; flex-wrap: wrap; gap: 8px; position: absolute; bottom: 12px; left: 0; z-index: 2; }
+#workshop-view-controls { display: flex; gap: 3px; padding: 3px; background: #171914e6; border: 1px solid #eeead330; border-radius: 5px; }
+#workshop-view-controls[hidden] { display: none; }
+.ws-stage-controls button { min-height: 36px; padding: 8px 12px; background: #171914d9; color: #d9d8cc; border: 1px solid #eeead330; border-radius: 3px; cursor: pointer; font: 800 8px/1.4 sans-serif; letter-spacing: .8px; }
+#workshop-view-controls button { border-color: transparent; background: transparent; }
+#workshop-view-controls [aria-pressed=true] { background: var(--part-accent); color: #141710; }
+.ws-stage-controls button:focus-visible { outline: 2px solid var(--part-accent); outline-offset: 2px; }
+.ws-stage-controls button:disabled { opacity: .55; cursor: default; }
+#workshop #workshop-car-stage .showroom-hint { bottom: 62px; right: 0; color: #c5c6b8; font-size: 8px; letter-spacing: 1px; }
+#workshop .ws-card { position: relative; overflow: hidden; min-width: 108px; max-width: 170px; flex: 1 0 108px; padding: 10px; gap: 6px; background: linear-gradient(150deg,#30322b,#161a17); isolation: isolate; }
+#workshop .ws-card::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 70% 30%,var(--part-accent),transparent 70%); opacity: .07; z-index: -1; }
+#workshop .ws-card[aria-pressed=true] { border-color: var(--part-accent); box-shadow: inset 0 2px var(--part-accent),0 5px 18px #0003; background: linear-gradient(150deg,#34382f,#1c211b); }
+.ws-card-index { color: #9caa9c; font: 700 6px/1.6 sans-serif; letter-spacing: 1px; text-transform: uppercase; }
+.ws-part-art { display: block; width: 100%; height: 80px; overflow: visible; filter: drop-shadow(0 8px 5px #0006); }
+#workshop .ws-card strong { font: 800 12px/1.25 system-ui,sans-serif; letter-spacing: -.15px; }
+.ws-card-role { color: var(--part-accent); font: 700 6px/1.5 sans-serif; letter-spacing: .7px; }
+#workshop .ws-card small { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px; color: #c3c5b8; border-top: 1px solid #eeead318; padding-top: 7px; font: 600 8px/1.5 sans-serif; }
+.ws-card small i { font: 700 6px/1.4 sans-serif; color: var(--part-accent); letter-spacing: .5px; }
+#workshop .pw-detail > strong { font-size: 19px; }
+.ws-dossier { position: relative; margin: 12px 0; padding: 14px 0 0 13px; border-left: 2px solid var(--part-accent); background: linear-gradient(90deg,#ffffff03,transparent); }
+.ws-dossier > small { font: 800 8px/1.5 sans-serif; letter-spacing: 1.3px; color: var(--part-accent); }
+.ws-dossier h3 { margin: 7px 0; font: italic 850 23px/1.1 system-ui,sans-serif; letter-spacing: -.7px; }
+#workshop .ws-dossier p { margin: 9px 0; color: #bfc3b7; font: 11px/1.65 system-ui,sans-serif; max-width: 43ch; }
+.ws-tradeoffs { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; padding: 8px 0; }
+.ws-tradeoffs span { display: grid; gap: 5px; font: 700 7px/1.4 sans-serif; letter-spacing: 1px; color: #b5b9ae; }
+.ws-tradeoffs b { font: 850 27px/1 system-ui,sans-serif; letter-spacing: -1px; color: var(--part-accent); }
+.ws-tradeoffs [data-direction=cost] b { color: #e0b29e; }
+.ws-style-effect { margin: 12px 0; padding-bottom: 8px; font: 700 7px/1.5 sans-serif; color: #bdc2b4; letter-spacing: .8px; }
+.ws-sr { position: absolute !important; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (prefers-reduced-motion:no-preference) {
+  .ws-part-art { transition: transform .35s cubic-bezier(.2,.7,.2,1),filter .35s; }
+  .ws-card:hover .ws-part-art, .ws-card:focus-visible .ws-part-art, .ws-card[aria-pressed=true] .ws-part-art { transform: translateY(-3px) rotate(-4deg) scale(1.07); filter: drop-shadow(0 12px 7px #0009); }
+  #workshop .ws-card { transition: border-color .25s,box-shadow .25s; }
+}
+@media (min-width:1100px) {
+  #workshop { grid-template-columns: minmax(0,1fr) 450px; }
+  #workshop .workshop-panel { padding: 20px; }
+}
+@media (max-width:849px) {
+  #workshop { grid-template-rows: auto 270px auto; }
+  #workshop-car-stage { min-height: 270px; }
+  #workshop .workshop-stage-label { font-size: 8px; letter-spacing: 1.5px; top: 6px; }
+  #workshop-spotlight { top: 30px; width: 53%; }
+  #workshop-spotlight > strong { font-size: clamp(25px,7vw,38px); letter-spacing: -1px; margin: 7px 0; }
+  #workshop-spotlight > small { font-size: 6px; letter-spacing: 1px; }
+  #workshop-spotlight p { font-size: 10px; margin: 6px 0; }
+  #workshop-spotlight > span { font-size: 6px; line-height: 1.5; max-width: 140px; }
+  .ws-stage-controls { bottom: 0; gap: 5px; }
+  .ws-stage-controls button { min-height: 36px; padding: 7px 9px; font-size: 7px; }
+  #workshop #workshop-car-stage .showroom-hint { bottom: 49px; font-size: 6px; }
+  #workshop .ws-card { min-width: 100px; flex-basis: 100px; padding: 9px; }
+  .ws-part-art { height: 70px; }
+  #workshop .workshop-panel { padding: 14px; }
+}

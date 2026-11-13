@@ -5,6 +5,7 @@ import { bank } from './economy';
 import { shopOpen, requireShopSession } from './shopSession';
 import { Build, PARTS, SLOTS, Slot, ownsPart, part, purchasePart, recoverPurchase, saveBuild, workshopSpec, workshopStore } from './workshop';
 import './workshop.css';
+import { escapePartText, partArt, spotlightPart, styleStory, syncPartView } from './partPresentation';
 
 const $ = (id: string) => document.getElementById(id)!;
 export class WorkshopUI {
@@ -35,7 +36,13 @@ export class WorkshopUI {
       button.onclick = () => this.showSection(button.dataset.workshopSection as 'style' | 'performance');
     });
     $('workshop-back').onclick = () => this.close();
-    window.addEventListener('minirush:session', () => { if (this.build && !$('workshop').classList.contains('hidden')) this.render(); });
+    for (const button of document.querySelectorAll<HTMLButtonElement>('[data-part-view]')) {
+      button.onclick = () => {
+        $('workshop-car-stage').dataset.view = button.dataset.partView;
+        syncPartView();
+      };
+    }
+    window.addEventListener('minirush:session', () => { if (this.build && this.section === 'style' && !$('workshop').classList.contains('hidden')) this.render(); });
     $('workshop-buy').onclick = async () => {
       if (this.purchasing) return;
       const selected = this.selected;
@@ -76,6 +83,7 @@ export class WorkshopUI {
   private clearInstallation(): void { window.clearTimeout(this.installTimer); this.installation.hidden = true; }
   private showInstallation(report: ComponentInstallation): void {
     if (this.section !== 'performance' || $('workshop').classList.contains('hidden')) return;
+    $('workshop-car-stage').dataset.view = 'car'; syncPartView();
     this.installation.replaceChildren();
     const title = document.createElement('strong'); title.textContent = `${report.recipe.name} installed`;
     const caption = document.createElement('small'); caption.textContent = `BUILD CONFIRMED · ${report.chassis === 'viper' ? 'VIPER GT' : 'RUSH ONE'}`;
@@ -108,6 +116,7 @@ export class WorkshopUI {
   }
   private status(s: string): void { $('workshop-status').textContent = s; }
   private render(): void {
+    const focusedPart = (document.activeElement as HTMLElement | null)?.dataset.part;
     ($('workshop-name') as HTMLInputElement).value = this.build.name;
     $('workshop-balance').textContent = `${bank()} COINS`;
     [...$('workshop-presets').children].forEach((b, i) => b.setAttribute('aria-pressed', String(i === this.index)));
@@ -115,14 +124,16 @@ export class WorkshopUI {
     $('workshop-parts').replaceChildren();
     for (const p of PARTS.filter(p => p.slot === this.slot)) {
       const b = document.createElement('button'); b.type = 'button'; b.className = 'part-card'; b.setAttribute('aria-pressed', String(this.build.parts[this.slot] === p.id)); b.dataset.part = p.id;
-      const icon = document.createElement('span'); icon.className = `part-symbol symbol-${p.slot}`; icon.textContent = p.slot === 'wheels' ? '◉' : p.slot === 'wing' ? '━' : p.slot === 'power' ? 'ϟ' : p.slot === 'tyres' ? '◎' : p.slot === 'body' ? '▰' : '';
-      if (p.color !== undefined) icon.style.background = `#${p.color.toString(16).padStart(6, '0')}`;
-      const name = document.createElement('strong'); name.textContent = p.name;
-      const price = document.createElement('small'); price.textContent = ownsPart(p.id) ? 'OWNED' : `${p.price} COINS`;
-      b.append(icon, name, price); b.onclick = () => { this.build.parts[this.slot] = p.id; this.selected = p.id; this.render(); this.status(p.detail); };
+      b.classList.add('ws-card');
+      const story = styleStory(p); b.style.setProperty('--part-accent', story.accent);
+      b.innerHTML = `<span class="ws-card-index">${escapePartText(p.slot)} / RUSH ONE</span>${partArt(story.kind, story.accent, p.id)}<strong>${escapePartText(p.name)}</strong><small>${ownsPart(p.id) ? 'OWNED' : `${p.price} COINS`} <i>${this.build.parts[this.slot] === p.id ? 'PREVIEWING' : 'TRY ON ↗'}</i></small>`;
+      b.onclick = () => { this.build.parts[this.slot] = p.id; this.selected = p.id; this.render(); this.status(p.detail); };
       $('workshop-parts').append(b);
     }
     const p = part(this.selected)!; const have = ownsPart(p.id);
+    const story = styleStory(p);
+    spotlightPart(story);
+    $('workshop-style-detail').innerHTML = `<div class="ws-dossier" style="--part-accent:${story.accent}"><small>${story.tag}</small><h3>${story.line}</h3><p>${escapePartText(p.detail)}</p><div class="ws-style-effect">${p.slot === 'tyres' || p.slot === 'power' ? 'LOCAL TUNE · PERFORMANCE INDEX ABOVE' : 'VISUAL CUSTOMIZATION · NO STAT ADVANTAGE'}</div></div>`;
     const buy = $('workshop-buy') as HTMLButtonElement; buy.disabled = this.purchasing || have || shopOpen() && bank() < p.price; buy.textContent = this.purchasing ? 'CHECKING SIGN-IN…' : have ? 'PART OWNED' : !shopOpen() ? 'SIGN IN TO BUY' : `BUY PART · ${p.price} COINS`;
     const missing = SLOTS.filter(s => !ownsPart(this.build.parts[s]));
     const save = $('workshop-save') as HTMLButtonElement; save.disabled = missing.length > 0; save.textContent = missing.length ? `BUY ${missing.length} PREVIEWED PART${missing.length > 1 ? 'S' : ''} TO EQUIP` : 'SAVE & EQUIP';
@@ -134,5 +145,6 @@ export class WorkshopUI {
       const meter = document.createElement('i'); meter.style.setProperty('--stat', `${value / 1.2 * 100}%`); el.append(label, strong, meter); $('workshop-stats').append(el);
     }
     this.preview(structuredClone(this.build));
+    if (focusedPart) $('workshop-parts').querySelector<HTMLElement>(`[data-part="${CSS.escape(focusedPart)}"]`)?.focus({ preventScroll: true });
   }
 }
