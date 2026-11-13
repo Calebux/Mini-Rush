@@ -154,7 +154,8 @@ try {
   await page.waitForFunction(() => document.querySelector('.rr-progress-note')?.textContent.includes('Balance unavailable'));
   assert.equal(await page.locator('.rr-materials strong').first().textContent(), '— / 40');
   await page.click('[data-reward-action="workshop"]'); await idle();
-  assert.equal(await page.locator('[data-action="craft"]').isDisabled(), true);
+  assert.equal(await page.locator('[data-action="craft"]').count(), 0, 'offline crafting is unavailable');
+  assert.equal(await page.locator('[data-action="race"]').isEnabled(), true);
   await page.click('#workshop-back');
   offline = false;
   // A late result from a previous race must not replace the current report.

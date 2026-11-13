@@ -8,6 +8,7 @@ not mockups. Prices, inventory, balances and supply are historical snapshots.
 | `home.jpg`, `car-market.jpg`, `garage.jpg`, `customs.jpg`, `performance-parts.jpg`, `economy.jpg` | The live site at https://minirush.site, at 1600 × 1000, using a dedicated test browser profile |
 | `live-race.png`, `race-results.png` | A real two-browser Race Friends integration run against the development backend, at 1280 × 850 |
 | `race-friends-mobile.png` | Live-domain multiplayer verification, at 390 × 844 |
+| `first-build-choice.png` | Local frontend, real testnet craft of component #2 during the [economy demo](../hackathon-demo.md), at 1440 × 900 |
 
 The six live-site captures use public reads and the existing test garage. The
 capture script blocks HTTP actions, mutations and transaction broadcasts; it

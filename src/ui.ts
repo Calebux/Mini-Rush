@@ -38,6 +38,8 @@ import type { Recipe } from './components';
 import { Build, workshopSpec } from './workshop';
 import { WorkshopUI } from './workshopUI';
 import { handlingProfile } from './testDrive';
+import { installHomeBuildGoal } from './homeBuildGoal';
+import { craftingTarget } from './craftingTarget';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T =>
   document.getElementById(id) as T;
@@ -368,12 +370,15 @@ export class UI {
     on('driver-chip', () => this.onDriverChip());
     // the customs workshop lives in the garage, beside the cars it builds
     let workshopFromResults = false;
+    let workshopFromHome = false;
     const workshop = new WorkshopUI(
       (build, chassis) => this.onWorkshopPreview(build, chassis),
       () => {
         if (workshopFromResults) {
           workshopFromResults = false; this.results.classList.remove('hidden'); this.onPage('menu'); this.rewards.show();
           this.results.querySelector<HTMLButtonElement>('[data-reward-action="workshop"]')?.focus({ preventScroll: true });
+        } else if (workshopFromHome) {
+          workshopFromHome = false; this.menu.classList.remove('hidden'); this.onPage('menu');
         } else { $('garage').classList.remove('hidden'); this.onPage('garage'); }
         this.refreshBank(); this.renderCar();
       },
@@ -383,8 +388,23 @@ export class UI {
         // Return through the garage's eligibility gate before another start.
         if (workshopFromResults && !carFits(MODES[this.modeIndex], CARS[index])) workshopFromResults = false;
       },
-      (recipe, chassis) => this.onComponentInstalled(recipe, chassis)
+      (recipe, chassis) => this.onComponentInstalled(recipe, chassis),
+      () => {
+        workshopFromResults = false; workshopFromHome = false;
+        this.results.classList.add('hidden'); this.menu.classList.add('hidden');
+        this.exitDaily(); this.exitWeekend(); this.exitBounty(); this.cityBounty = false;
+        const gp = MODES.findIndex(m => m.id === 'gp'), viper = CARS.findIndex(c => c.id === 'viper');
+        this.setMode(gp); this.onMode(gp); this.selectLapChip(2);
+        this.setCar(viper); this.onCar(viper);
+        $('garage').classList.remove('hidden'); this.onPage('garage');
+        $('btn-garage-done').focus();
+      }
     );
+    installHomeBuildGoal(() => {
+      workshopFromHome = true; workshopFromResults = false;
+      this.audio.unlock(); this.audio.play('click'); this.menu.classList.add('hidden');
+      this.onPage('workshop'); workshop.open('viper', craftingTarget().id);
+    });
     this.rewards.onWorkshop = (recipe, chassis) => {
       workshopFromResults = true; this.audio.play('click'); this.results.classList.add('hidden');
       this.onPage('workshop'); workshop.open(chassis, recipe);

@@ -18,7 +18,7 @@ export class WorkshopUI {
   private installation: HTMLElement;
   private installTimer = 0;
   private purchasing = false;
-  constructor(private preview: (build: Build | null, chassis?: string) => void, private closePage: () => void, private equip: () => void, private onInstalled: (recipe: Recipe, chassis: string) => void = () => {}) {
+  constructor(private preview: (build: Build | null, chassis?: string) => void, private closePage: () => void, private equip: () => void, private onInstalled: (recipe: Recipe, chassis: string) => void = () => {}, raceForMaterials: () => void = () => {}) {
     this.installation = document.createElement('div'); this.installation.id = 'workshop-installation';
     this.installation.hidden = true; this.installation.setAttribute('role', 'status'); this.installation.setAttribute('aria-live', 'polite');
     $('workshop-performance').before(this.installation);
@@ -28,7 +28,9 @@ export class WorkshopUI {
       this.clearInstallation();
       $('workshop-car-stage').querySelector('.workshop-stage-label')!.textContent = `${chassis === 'viper' ? 'VIPER GT' : 'RUSH ONE'} / PERFORMANCE BUILD`;
       $('workshop-car-stage').setAttribute('aria-label', `${chassis === 'viper' ? 'VIPER GT' : 'RUSH ONE'} preview. Drag or use arrow keys to rotate.`);
-    }, report => this.showInstallation(report));
+    }, report => this.showInstallation(report), () => {
+      this.clearInstallation(); $('workshop').classList.add('hidden'); this.preview(null); raceForMaterials();
+    });
     document.querySelectorAll<HTMLButtonElement>('[data-workshop-section]').forEach(button => {
       button.onclick = () => this.showSection(button.dataset.workshopSection as 'style' | 'performance');
     });

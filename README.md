@@ -43,6 +43,7 @@ are snapshots, not promises of current availability. [Capture details and refres
 | What to try | Where to go |
 | --- | --- |
 | A normal race | Home → **Race**; change the event under **Modes** |
+| Build your first performance part | Home → **Your next build**; inspect materials, then **Race for materials** or **Craft part** |
 | Race another person live | Home → **Race Friends** → **Create a race** → copy the invite; both drivers choose **I'm ready** |
 | See your cars | **Garage → Owned cars**; **All cars** shows the broader roster |
 | Customize RUSH ONE | **Garage → Customs workshop → Customize** |
@@ -140,6 +141,11 @@ Other ways to play:
 - **Test drive / Compare builds** provides a fixed dry Lagos proving ground with
   fitted and stock runs. Reports show lap time, 0–100, peak speed, braking,
   off-road time and nitro use. Practice does not spend consumables or earn rewards.
+- **Your next build** connects the homepage, confirmed material balances, race
+  results and the tracked recipe. The workshop shows resource shortfalls and
+  prepares a standard Grand Prix through **Race for materials**. Funded demand
+  appears beside matching recipes and owned parts, so players can choose between
+  fitting a part and supplying a dealer.
 
 ### NEAR economy, ownership and markets
 
@@ -336,6 +342,7 @@ node scripts/capture-readme.mjs
 | `docs/` | Design, operating notes and screenshot assets |
 
 Further reading: [economy and rollout](docs/near-economy.md),
+[hackathon demo and recording walkthrough](docs/hackathon-demo.md),
 [customs, handling and test drive](docs/customs-workshop.md),
 [Weekend GP](docs/weekend-gp.md), [recorded challenges](docs/challenges.md),
 [weekly bounty](docs/bounty.md), [asset guide](public/assets/README.md).

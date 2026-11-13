@@ -34,11 +34,12 @@ void import('./near').then(async (n) => {
   if (!account) return;
   if (!SIGN_IN_REQUIRED) {
     document.querySelector('[data-home-session-label]')!.textContent = `DRIVER ${account.split('.')[0].toUpperCase()}`;
-    document.querySelector('[data-home-session-copy]')!.textContent = 'Your garage is live on NEAR. No wallet, no sign-in.';
+    document.querySelector('[data-home-session-copy]')!.textContent = 'Ready to race, craft and trade. Saved on this device.';
   }
   void n.recoverGarage();
   n.syncCars(await n.holdings().catch(() => []));
   await n.refreshComponents().catch(() => {});
+  window.dispatchEvent(new Event('minirush:garage-updated'));
 });
 // ?diag=1 — layout numbers from a real device, for a bug a desktop can't show
 if (new URLSearchParams(location.search).get('diag') === '1') {

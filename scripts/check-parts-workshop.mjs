@@ -35,7 +35,7 @@ await page.route('**/*', async route => {
         case 'component_offers': value = offers; break;
         case 'component_orders': value = []; break;
         case 'mt_tokens_for_owner': value = Object.entries(balance).map(([token_id, n]) => ({ token_id, balance: String(n) })); break;
-        case 'listings': value = []; break;
+        case 'listings': case 'editions': case 'edition_asks': case 'edition_garage': value = []; break;
         default: throw new Error(`Unmocked view ${body.params.method_name}`);
       }
       result = { result: [...Buffer.from(JSON.stringify(value))], logs: [] };
@@ -136,7 +136,8 @@ try {
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),false);
   offline = true; await action('refresh').click(); await idle();
   assert.match(await page.locator('.pw-status').textContent(), /connection unavailable/);
-  assert.equal(await action('craft','street-turbo').isDisabled(),true);
+  assert.equal(await action('craft','street-turbo').count(),0, 'offline crafting is unavailable');
+  assert.equal(await action('race','street-turbo').isEnabled(),true, 'offline drivers can return to racing');
   assert.equal(await page.evaluate(() => window.__game.carSpec(0).grip),1);
   offline = false; await action('refresh').click(); await idle();
   assert.equal(await page.evaluate(() => window.__game.carSpec(0).grip),1.08);

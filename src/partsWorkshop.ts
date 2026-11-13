@@ -2,13 +2,14 @@ import { CARS } from './cars';
 import { workshopSpec } from './workshop';
 import { applyUpgrades } from './upgrades';
 import { applyComponents, COMPONENT_SLOTS, RECIPES, componentRecipe, componentStats, type Component, type ComponentInstallation } from './components';
-import { craftingTarget, trackRecipe } from './craftingTarget';
+import { craftingProgress, craftingTarget, trackRecipe } from './craftingTarget';
 import { orderPayout, type ComponentOrder } from '../shared/dealerOrders';
 import { ensureAccount, explorerTx, holdings, nearAccount, refreshComponents, relayed, viewCall, hasPendingReward, retryRaceReward, hasPendingAction, type Holding } from './near';
 import { shopOpen, requireShopSession } from './shopSession';
 
 const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 const short = (s: string) => s.split('.')[0];
+const dealerName = (account: string) => ({ 'mama-t': 'Mama T', 'oga-motors': 'Oga Motors', 'tuner-ade': 'Tuner Ade' }[short(account)] ?? short(account));
 
 export class PartsWorkshop {
   private parts: Component[] = [];
@@ -28,7 +29,7 @@ export class PartsWorkshop {
   private tx = '';
   private offset = 0;
   private refreshVersion = 0;
-  constructor(private root: HTMLElement, private previewChassis: (chassis: string) => void, private installed: (report: ComponentInstallation) => void = () => {}) {
+  constructor(private root: HTMLElement, private previewChassis: (chassis: string) => void, private installed: (report: ComponentInstallation) => void = () => {}, private raceForMaterials: () => void = () => {}) {
     window.addEventListener('minirush:session', () => { if (this.root.getClientRects().length) this.render(); });
     window.addEventListener('minirush:garage-action', () => {
       if (!this.root.getClientRects().length || this.busy) return;
@@ -100,23 +101,28 @@ export class PartsWorkshop {
     const recipes = RECIPES.filter(r => r.slot === this.slot);
     const selected = recipes.find(r => r.id === this.selectedRecipe) ?? recipes[0];
     this.selectedRecipe = selected.id;
-    const enough = this.balance('rush') >= selected.rush && this.balance('material:alloy') >= selected.alloy && this.balance('material:circuit') >= selected.circuit;
+    const progress = craftingProgress(selected, this.held), enough = progress.ready;
+    const order = this.orders?.filter(o => o.recipe_id === selected.id && o.dealer !== nearAccount() && o.remaining > 0 && o.expires_ms > Date.now())
+      .sort((a, b) => orderPayout(b.price) - orderPayout(a.price))[0];
     return `<div class="pw-slot-nav" aria-label="Component slots">${COMPONENT_SLOTS.map(s => `<button type="button" data-slot="${s}" aria-pressed="${s === this.slot}">${s}</button>`).join('')}</div>
       <div class="pw-grid" aria-label="Component recipes">${recipes.map(r => `<button type="button" class="part-card pw-card" data-recipe="${r.id}" aria-pressed="${r.id === selected.id}"><span class="part-symbol">${this.symbol(r.slot)}</span><strong>${r.name}</strong><small>${r.rush} RUSH</small></button>`).join('')}</div>
       <section class="pw-detail" aria-label="Selected recipe"><strong>${selected.name}</strong><p>${selected.detail}</p><p class="pw-stats">${componentStats(selected)}</p>
       <p class="pw-cost">${selected.rush} RUSH · ${selected.alloy} ALLOY · ${selected.circuit} CIRCUITS</p>
+      <div class="pw-material-progress" aria-label="Materials needed">${progress.resources.map(r => `<div><span>${r.label}</span><strong>${this.connected ? r.balance : '—'} / ${r.cost}</strong><progress max="${r.cost}" value="${this.connected ? Math.min(r.balance, r.cost) : 0}" aria-label="${r.label} collected"></progress></div>`).join('')}</div>
+      <p class="pw-progress-note">${!this.connected ? 'Connect to check your materials. You can race while the workshop is unavailable.' : enough ? 'Materials ready. Crafting spends these resources.' : `Still need ${progress.resources.filter(r => r.missing > 0).map(r => `${r.missing} ${r.id === 'material:circuit' && r.missing === 1 ? 'circuit' : r.label}`).join(', ')}. About ${progress.races} eligible ${progress.races === 1 ? 'race' : 'races'} at the finish rate; daily limits apply.`}</p>
       <button type="button" class="pw-track" data-action="track" data-id="${selected.id}" aria-pressed="${craftingTarget().id === selected.id}">${craftingTarget().id === selected.id ? '✓ TRACKED ON RACE RESULTS' : 'TRACK THIS UPGRADE'}</button>
-      <div class="workshop-actions pw-actions">${this.button('craft', enough ? 'CRAFT PART' : 'RACE FOR MATERIALS', selected.id, !enough || this.parts.length >= 64)}</div></section>
+      <div class="workshop-actions pw-actions">${enough && this.connected ? this.button('craft', this.parts.length >= 64 ? 'BENCH FULL · SELL OR RECYCLE A PART' : 'CRAFT PART', selected.id, this.parts.length >= 64) : `<button type="button" class="pw-action" data-action="race" data-id="${selected.id}" ${this.busy ? 'disabled' : ''}>RACE FOR MATERIALS ↗</button>`}</div>
+      ${order ? `<aside class="pw-demand"><small>FIT IT OR TRADE IT</small><strong>${esc(dealerName(order.dealer))} offers ${orderPayout(order.price)} RUSH</strong><p>“${esc(order.reason)}”</p><p>Payment after fees. Crafting also uses materials. ${order.remaining} wanted; orders can fill or expire before you finish.</p><button type="button" class="pw-track" data-action="show-orders">VIEW FUNDED ORDER ↗</button></aside>` : ''}</section>
       <details class="pw-guide"><summary>Salvage & crafting</summary><p>Each eligible connected race earns 2 alloy, 1 circuit and RUSH by finishing place: 45 for a win, 36 for second, 30 for third, 24 for any other finish. Finish a race lasting at least 40 seconds; up to 20 rewards a day within the season budget.</p><p>Crafting consumes its inputs. This part recycles into ${Math.floor(selected.alloy / 2)} alloy and ${Math.floor(selected.circuit / 2)} circuits, with no RUSH refund. Installed components replace the local performance tune.</p></details>`;
   }
   private garageView(): string {
     return `<div class="pw-build">${COMPONENT_SLOTS.map(slot => {
       const part = this.parts.find(p => p.installed_on === this.chassis && componentRecipe(p.recipe_id)?.slot === slot);
       return `<div><small>${slot}</small><strong>${part ? esc(componentRecipe(part.recipe_id)!.name) : 'Stock'}</strong></div>`;
-    }).join('')}</div>${this.parts.some(p => this.deliveryOrder(p)) ? '<button type="button" class="pw-track" data-action="show-orders">A DEALER WANTS A PART ON YOUR BENCH ↗</button>' : ''}${this.partShelf(this.parts, false)}`;
+    }).join('')}</div>${this.partShelf(this.parts, false)}`;
   }
   private deliveryOrder(p: Component): ComponentOrder | undefined {
-    return p.installed_on === null && p.price === null ? this.orders?.find(o => o.recipe_id === p.recipe_id && o.dealer !== nearAccount() && o.expires_ms > Date.now()) : undefined;
+    return p.installed_on === null && p.price === null ? this.orders?.find(o => o.recipe_id === p.recipe_id && o.dealer !== nearAccount() && o.remaining > 0 && o.expires_ms > Date.now()) : undefined;
   }
   private exchangeView(): string {
     return `<div class="pw-market-nav" aria-label="Parts market"><button type="button" data-market="listings" aria-pressed="${this.marketPage === 'listings'}">SHOP PARTS</button><button type="button" data-market="orders" aria-pressed="${this.marketPage === 'orders'}">DEALER ORDERS${this.orders ? ` · ${this.orders.length}` : ''}</button></div>${this.marketPage === 'orders' ? this.ordersView() : `<p class="workshop-note">Player-made parts, sold by drivers and dealers. Listing uninstalls a part. Sales burn 2% of the price, with a 1 RUSH minimum fee.</p>${this.partShelf(this.offers, true)}
@@ -124,7 +130,7 @@ export class PartsWorkshop {
   }
   private ordersView(): string {
     if (!this.orders) return '<p class="pw-empty">Dealer orders unavailable. Refresh to check the market. Crafting and player listings are available separately.</p>';
-    const orders = this.orders.filter(o => o.expires_ms > Date.now());
+    const orders = this.orders.filter(o => o.remaining > 0 && o.expires_ms > Date.now());
     return `<div class="pw-order-intro"><small>BUILD FOR THE MARKET</small><strong>Your next customer is waiting.</strong><p>Deliver a requested part for RUSH, or keep it for your own build. Dealers buy with their own funds and resell your original part.</p></div>${orders.length ? orders.map(o => {
       const r = componentRecipe(o.recipe_id); if (!r) return '';
       const part = this.parts.find(p => p.recipe_id === o.recipe_id && p.price === null && p.installed_on === null);
@@ -150,11 +156,13 @@ export class PartsWorkshop {
     const listed = p.price !== null;
     const fee = Math.max(1, Math.floor(Number(p.price) * .02));
     const title = p.installed_on ? `Installed · ${p.installed_on === 'viper' ? 'VIPER GT' : 'RUSH ONE'}` : listed ? 'Listed for sale' : 'On your bench';
+    const order = this.deliveryOrder(p);
     return `<section class="pw-detail" data-part="${esc(p.id)}"><strong>${r.name} #${esc(p.id.split(':')[1] ?? p.id)}</strong>
       <p class="pw-stats">${componentStats(r)}</p><p class="pw-provenance">Made by ${esc(short(p.maker))} · Owned by ${esc(short(p.owner))}</p>
       ${listed ? `<p class="pw-price">${Number(p.price).toLocaleString()} RUSH <small>· Seller receives ${Number(p.price) - fee}</small></p>` : ''}
       ${market ? `<div class="workshop-actions pw-actions">${mine ? this.button('cancel', 'CANCEL YOUR LISTING', p.id) : this.button('buy', 'BUY PART', p.id, this.balance('rush') < Number(p.price))}</div>` : `
         <p class="pw-tag">${title}</p>
+        ${order ? `<aside class="pw-demand"><small>YOUR PART. YOUR CHOICE.</small><strong>Fit it to drive differently. Or supply ${esc(dealerName(order.dealer))}.</strong><p>The dealer offers ${orderPayout(order.price)} RUSH after fees from reserved funds. Selling transfers this serial; it cannot stay in your build.</p><button type="button" class="pw-track" data-action="show-orders">VIEW OFFER · ${orderPayout(order.price)} RUSH ↗</button></aside>` : ''}
         ${listed ? `<div class="workshop-actions pw-actions">${this.button('cancel', 'CANCEL LISTING', p.id)}</div>` : `
           <div class="workshop-actions pw-actions">${this.button('install', p.installed_on === this.chassis ? 'UNINSTALL' : 'INSTALL PART', p.id)}</div>
           <div class="pw-sell"><label for="price-${esc(p.id)}">SALE PRICE / RUSH</label><input id="price-${esc(p.id)}" data-price-for="${esc(p.id)}" type="number" min="10" max="1000000" step="1" inputmode="numeric" placeholder="100" ${this.busy ? 'disabled' : ''}><div class="workshop-actions pw-actions">${this.button('list', 'LIST FOR SALE · UNINSTALLS', p.id)}</div></div>
@@ -170,6 +178,7 @@ export class PartsWorkshop {
     if (button.dataset.selectPart) { this.selectedPart = button.dataset.selectPart; this.render(); return; }
     const action = button.dataset.action;
     if (!action) return;
+    if (action === 'race') { trackRecipe(button.dataset.id!); this.raceForMaterials(); return; }
     if (['buy', 'craft'].includes(action)) {
       this.busy = true; this.render();
       const permitted = await requireShopSession();
@@ -205,7 +214,7 @@ export class PartsWorkshop {
       } else if (action === 'deliver' && order && delivery) {
         const result = await relayed('fill_component_order', { part_id: delivery.id, dealer: order.dealer, revision: order.revision, min_payout: String(orderPayout(order.price)) });
         this.tx = result.tx;
-        this.message = `Delivered #${delivery.id.split(':')[1]}. ${orderPayout(order.price)} RUSH received; the dealer now owns this part.`;
+        this.message = `Delivered #${delivery.id.split(':')[1]}. ${orderPayout(order.price)} RUSH received; ${dealerName(order.dealer)} now owns this part. Its original maker credit stays with it. The next dealer review may offer it for resale.`;
       } else {
         const args: Record<string, unknown> = action === 'craft' ? { recipe_id: id } : { part_id: id };
         if (action === 'install') args.chassis = p?.installed_on === this.chassis ? null : this.chassis;
@@ -221,7 +230,7 @@ export class PartsWorkshop {
       const fresh = await this.refresh(); this.busy = false;
       if (succeeded && fresh && action === 'craft') {
         const crafted = this.parts.find(part => part.recipe_id === id && !previousIds.has(part.id));
-        if (crafted) { this.page = 'garage'; this.selectedPart = crafted.id; this.message = 'Part crafted. Install it on your selected chassis below.'; }
+        if (crafted) { this.page = 'garage'; this.selectedPart = crafted.id; this.message = `Part #${crafted.id.split(':')[1]} crafted. Fit it to your car or trade it. You decide where it goes.`; }
       }
       if (succeeded && fresh && installing && chassis === this.chassis) {
         const fitted = this.parts.find(part => part.id === id && part.installed_on === chassis);
