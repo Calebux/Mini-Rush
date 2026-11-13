@@ -177,7 +177,7 @@ export class Market {
           <small data-proceeds="${esc(c.id)}">${price ? `You receive ${formatNear(sellerProceeds(price), 4)} NEAR after the 2% royalty.` : 'The game keeps a 2% royalty on resales.'}</small>
           <button type="button" class="mk-ghost" data-edition-list="${esc(c.id)}" ${idle ? '' : 'disabled'}>${this.busy.has(c.id) ? 'LISTING…' : 'LIST FOR SALE'}</button>`}</article>`;
     }).join('');
-    const resale = !asks.length ? '' : `<section class="mk-asks" aria-label="Cars for sale by owners"><h3>FROM OWNERS</h3>${asks.map(c =>
+    const resale = `<section class="mk-asks" aria-label="Cars for sale by owners"><h3>FROM OWNERS${asks.length ? ` · ${asks.length}` : ''}</h3>${!asks.length ? `<p class="mk-meta">${!this.live || this.loading ? 'Owner listings are unavailable until the market reconnects.' : 'No other players have listed this edition yet. Owned cars can be listed here for resale.'}</p>` : asks.map(c =>
       `<div class="mk-ask"><span><b>#${c.serial}</b><small>${esc(c.owner.split('.')[0])}</small></span><strong>${near(c.price!)}</strong><button type="button" class="mk-ghost" data-ask-buy="${esc(c.id)}" ${idle ? '' : 'disabled'}>${this.busy.has(c.id) ? 'BUYING…' : can(c.price!) ? 'BUY' : 'ADD NEAR'}</button></div>`).join('')}</section>`;
     return `<span class="mk-kicker">PERFORMANCE PROFILE</span>${model ? this.stats(model) : ''}${primary}${owned}${resale}`;
   }

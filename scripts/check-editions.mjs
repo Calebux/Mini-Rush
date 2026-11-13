@@ -15,7 +15,7 @@ const edition = { id: 'lagos-gold', name: 'LAGOS GOLD', model: 'tourbillon', col
 const car = (serial, owner, price = null) => ({ id: `edition:lagos-gold:${serial}`, edition_id: 'lagos-gold', serial, owner, first_owner: owner,
   minted_ms: Date.now(), price, offer: price ? 10 + serial : 0, last_price: String(2n * NEAR), sales: 0 });
 let cars = [car(3, rival, String(3n * NEAR / 2n))], revision = 40;
-let balance = NEAR / 100n, grants = 0;
+let balance = NEAR / 100n, grants = 0, offline = false;
 const calls = [];
 
 /** Applies one garage call to the in-memory chain. `via` is how it arrived: sent by the garage, or relayed by the game. */
@@ -49,6 +49,7 @@ await page.route('**/*', async route => {
   const req = route.request(); if (req.method() !== 'POST') return route.continue();
   let body; try { body = req.postDataJSON(); } catch { return route.abort(); }
   if (body.jsonrpc) {
+    if (offline) return route.abort('failed');
     const p = body.params; let result;
     if (body.method === 'send_tx' || body.method === 'broadcast_tx_commit') {
       assert.equal(p.wait_until, 'FINAL', 'wait for finalized receipts before refreshing final-block inventory');
@@ -86,7 +87,25 @@ const live = () => page.waitForFunction(() => document.querySelector('.mk-status
 try {
   await page.goto(`${base}/?q=1`, { waitUntil: 'networkidle' });
   await page.waitForFunction(() => window.__game?.state === 'menu');
+  await page.waitForSelector('#home-price-wire[data-state="live"]');
+  assert.match(await page.locator('.hpw-strip').first().innerText(), /OWNER LISTINGS.*1 FOR SALE/s);
+  assert.match(await page.locator('.hpw-strip').first().innerText(), /LAGOS GOLD.*2 NEAR/s);
+  assert.equal(await page.locator('.hpw-window').getAttribute('href'), 'economy/#s-dealers');
+  await page.click('.hpw-pause');
+  assert.equal(await page.locator('#home-price-wire').getAttribute('data-paused'), 'true');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.waitForFunction(() => document.querySelectorAll('.hpw-strip').length === 1);
+  assert.equal(await page.locator('.hpw-strip').count(), 1, 'reduced motion uses one manually scrollable strip');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.screenshot({ path: `${out}/home-wire-desktop.png` });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(300);
+  const wireBox = await page.locator('#home-price-wire').boundingBox();
+  assert.ok(wireBox && wireBox.x >= 0 && wireBox.x + wireBox.width <= 390 && wireBox.y + wireBox.height <= 844);
+  await page.screenshot({ path: `${out}/home-wire-mobile.png` });
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.click('#btn-market-home'); await live();
+  assert.equal(await page.locator('#home-price-wire').isVisible(), false, 'price wire stays on the home screen');
   // Editions lead the rail and are marked as limited; the garage balance appears beside RUSH.
   const first = page.locator('.mk-select').first();
   assert.equal(await first.getAttribute('data-select'), 'edition:lagos-gold');
@@ -143,6 +162,7 @@ try {
   await page.waitForFunction(() => document.querySelectorAll('.mk-own').length === 2);
   assert.equal(calls[3].method, 'buy_edition_car'); assert.equal(calls[3].deposit, 3n * NEAR / 2n);
   assert.equal(await page.locator('.mk-ask').count(), 0);
+  assert.match(await page.locator('.mk-asks').innerText(), /FROM OWNERS.*No other players have listed/s, 'empty owner market stays discoverable');
   assert.equal(await page.locator('.mk-near').innerText(), '0.51 NEAR ＋');
 
   // Phone layout: everything reachable, nothing wider than the screen.
@@ -158,6 +178,16 @@ try {
   const wallet = await page.locator('.mk-wallet').boundingBox();
   assert.ok(wallet.x >= 0 && wallet.x + wallet.width <= 390.5, 'balance card fits the phone');
   await page.screenshot({ path: `${out}/wallet-mobile.png` });
+  await page.click('[data-wallet-close]'); await page.click('.mk-back');
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await page.waitForFunction(() => document.querySelector('.hpw-strip')?.textContent.includes('NONE YET'));
+  offline = true;
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await page.waitForSelector('#home-price-wire[data-state="stale"]');
+  assert.equal(await page.locator('[data-wire-status]').innerText(), 'LAST SEEN');
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForSelector('#home-price-wire[data-state="offline"]');
+  assert.match(await page.locator('.hpw-track').innerText(), /Prices unavailable/);
   assert.deepEqual(errors, []);
-  console.log(`PASS: edition leads the rail in its own paint, short balance opens the top-up, first sale, listing with royalty preview, cancel, owner-to-owner purchase, phone layout. Screenshots: ${out}`);
+  console.log(`PASS: home price wire, pause/reduced motion, stale/offline states, owner-listing empty state, edition purchase and resale, phone layout. Screenshots: ${out}`);
 } finally { await browser.close(); }

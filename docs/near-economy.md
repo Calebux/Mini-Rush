@@ -110,6 +110,13 @@ the workshop clears the illustration.
 
 ## Limited editions: cars sold for NEAR
 
+Player resale listings appear in **Car Market → select a limited edition →
+From Owners**, ordered by asking price. That section stays visible when no
+other owners have listed the selected edition. The homepage price wire shows
+the owner-listing count, edition prices and in-stock dealer prices, and links to
+the economy page. It only polls while the home screen is visible, supports pause
+and reduced motion, and labels cached data "Last seen" when a refresh fails.
+
 RUSH is earned and never sold, so it brings the game no income. Limited editions
 are the paid side. An edition is a fixed run of numbered cars (`edition:<id>:<n>`,
 NEP-171 tokens served by the same `nft_*` methods as parts) that drives as an
