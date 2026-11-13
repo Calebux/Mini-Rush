@@ -1,5 +1,27 @@
 # NEAR parts economy — first playable slice
 
+## Cinematic workshop and Skin Studio production release
+
+Deployed frontend source **7774a33** to https://minirush.site on 2026-11-13.
+Release: https://mini-rush-kac6k11du-calebuxs-projects.vercel.app
+(`dpl_E1ddrEyxUsDVCEPezub3MRA9RkTH`). Vercel reports Ready, with both
+`minirush.site` and `www.minirush.site` assigned to it. This supersedes the older
+frontend deployment URL recorded below. Production Convex remains
+`precious-dalmatian-332.eu-west-1.convex.cloud`; no backend or contract changes
+were required. The build used committed source, excluding local environment
+files, temporary outputs and agent configuration.
+
+The hosted cinematic-workshop check passed 3D part inspection, car switching,
+motion controls, reduced motion and phone layouts. The hosted skin check passed
+preview isolation, local coin purchase, free re-edits, reload persistence,
+mobile layout and saved skins in a normal race. It confirmed requests target
+production Convex and the economy page returns current testnet supply data.
+Purchases used isolated browser fixture coins; all account-creation and chain
+writes were blocked. Screenshots are in `/tmp/minirush-live-customization/`.
+
+Repeat with `node scripts/check-live-customization.mjs https://minirush.site`
+and `npm run check:workshop-cinematic -- https://minirush.site`.
+
 ## Race Friends — private multiplayer
 
 Deployed to production Convex and https://minirush.site on 2026-11-13.
