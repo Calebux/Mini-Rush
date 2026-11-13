@@ -93,6 +93,12 @@
   background: var(--cream); color: var(--gold-ink); border: 1px solid var(--cream); border-radius: 4px; letter-spacing: 1.2px;
 }
 #garage #garage-bank { color: var(--cream); }
+#garage .garage-collection-filter { display: flex; gap: 5px; }
+#garage .garage-collection-filter button { flex: 1; min-height: 36px; padding: 7px 5px; border: 1px solid var(--line); border-radius: 4px; background: transparent; color: var(--muted); font: 800 9px sans-serif; letter-spacing: .6px; cursor: pointer; }
+#garage .garage-collection-filter button[aria-pressed=true] { background: #eeead30d; border-color: var(--gold); color: var(--cream); }
+#garage #garage-car-classes[hidden] { display: none; }
+#garage.collection-view .car-roster-head { display: grid; }
+#garage .car-roster-nav:disabled { opacity: .4; cursor: default; }
 #workshop :is(button,input,select):focus-visible, #garage button:focus-visible, #race-rewards :is(button,select):focus-visible {
   outline: 2px solid var(--cream); outline-offset: 3px;
 }

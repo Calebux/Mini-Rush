@@ -2,6 +2,7 @@ import { PartsWorkshop } from './partsWorkshop';
 import { CARS } from './cars';
 import { type ComponentInstallation, type Recipe } from './components';
 import { bank } from './economy';
+import { shopOpen, requireShopSession } from './shopSession';
 import { Build, PARTS, SLOTS, Slot, ownsPart, part, purchasePart, recoverPurchase, saveBuild, workshopSpec, workshopStore } from './workshop';
 import './workshop.css';
 
@@ -16,6 +17,7 @@ export class WorkshopUI {
   private returnFocus: HTMLElement | null = null;
   private installation: HTMLElement;
   private installTimer = 0;
+  private purchasing = false;
   constructor(private preview: (build: Build | null, chassis?: string) => void, private closePage: () => void, private equip: () => void, private onInstalled: (recipe: Recipe, chassis: string) => void = () => {}) {
     this.installation = document.createElement('div'); this.installation.id = 'workshop-installation';
     this.installation.hidden = true; this.installation.setAttribute('role', 'status'); this.installation.setAttribute('aria-live', 'polite');
@@ -31,9 +33,16 @@ export class WorkshopUI {
       button.onclick = () => this.showSection(button.dataset.workshopSection as 'style' | 'performance');
     });
     $('workshop-back').onclick = () => this.close();
-    $('workshop-buy').onclick = () => {
-      const error = purchasePart(this.selected); this.render();
-      this.status(error ?? `${part(this.selected)!.name} is yours. Save to equip this build.`);
+    window.addEventListener('minirush:session', () => { if (this.build && !$('workshop').classList.contains('hidden')) this.render(); });
+    $('workshop-buy').onclick = async () => {
+      if (this.purchasing) return;
+      const selected = this.selected;
+      this.purchasing = true; this.render();
+      try {
+        if (!(await requireShopSession()) || selected !== this.selected) return;
+        const error = purchasePart(selected);
+        this.status(error ?? `${part(selected)!.name} is yours. Save to equip this build.`);
+      } finally { this.purchasing = false; this.render(); }
     };
     $('workshop-save').onclick = () => {
       this.build.name = ($('workshop-name') as HTMLInputElement).value;
@@ -112,7 +121,7 @@ export class WorkshopUI {
       $('workshop-parts').append(b);
     }
     const p = part(this.selected)!; const have = ownsPart(p.id);
-    const buy = $('workshop-buy') as HTMLButtonElement; buy.disabled = have || bank() < p.price; buy.textContent = have ? 'PART OWNED' : `BUY PART · ${p.price} COINS`;
+    const buy = $('workshop-buy') as HTMLButtonElement; buy.disabled = this.purchasing || have || shopOpen() && bank() < p.price; buy.textContent = this.purchasing ? 'CHECKING SIGN-IN…' : have ? 'PART OWNED' : !shopOpen() ? 'SIGN IN TO BUY' : `BUY PART · ${p.price} COINS`;
     const missing = SLOTS.filter(s => !ownsPart(this.build.parts[s]));
     const save = $('workshop-save') as HTMLButtonElement; save.disabled = missing.length > 0; save.textContent = missing.length ? `BUY ${missing.length} PREVIEWED PART${missing.length > 1 ? 'S' : ''} TO EQUIP` : 'SAVE & EQUIP';
     const spec = workshopSpec(CARS.find(c => c.model === 300)!, this.build);

@@ -6,6 +6,7 @@ import { CARS, type CarSpec } from './cars';
 import { COMPONENT_SLOTS, RECIPES, type Component, type Recipe } from './components';
 import { GARAGE, dealerLog, explorerAccount, explorerTx, viewCall, type DealerMove, type Listing } from './near';
 import { RACE_PAYOUT } from '../shared/raceRules';
+import { formatNear, type Edition, type NearLedger } from '../shared/editions';
 import type { EconomyStage } from './economyStage';
 
 interface Ledger {
@@ -19,12 +20,14 @@ interface Economy {
   races_today: number; races_per_day: number; races_per_account_day: number;
   payout: { first: string; second: string; third: string; finish: string; alloy: number; circuit: number };
   market_fee_percent: number; ledger: Ledger;
+  /** NEAR taken by limited-edition sales; absent on a garage without editions. */
+  near?: NearLedger;
 }
 /** What the page shows. `full` is null against a garage that predates the parts workshop. */
 interface Snapshot {
   rush: number; alloy: number; circuit: number; dealerRush: number;
   payout: { first: number; second: number; third: number; finish: number; alloy: number; circuit: number };
-  full: Economy | null; stalls: Listing[]; offers: Component[]; moves: DealerMove[];
+  full: Economy | null; stalls: Listing[]; offers: Component[]; moves: DealerMove[]; editions: Edition[];
 }
 interface Plate { label: string; value: number | string; hint?: string; tone?: string }
 
@@ -127,10 +130,11 @@ async function load(): Promise<Snapshot> {
     dealerLog(50).catch((): DealerMove[] => [])
   ]);
   if (full) {
-    const offers = await viewCall<Component[]>('component_offers', { limit: 12 }).catch((): Component[] => []);
+    const [offers, editions] = await Promise.all([viewCall<Component[]>('component_offers', { limit: 12 }).catch((): Component[] => []),
+      full.near ? viewCall<Edition[]>('editions', {}).catch((): Edition[] => []) : []]);
     const p = full.payout;
     return { rush: Number(full.rush_supply), alloy: Number(full.alloy_supply), circuit: Number(full.circuit_supply),
-      dealerRush: Number(full.dealer_rush), full, offers, stalls, moves,
+      dealerRush: Number(full.dealer_rush), full, offers, stalls, moves, editions,
       payout: { first: Number(p.first), second: Number(p.second), third: Number(p.third), finish: Number(p.finish), alloy: p.alloy, circuit: p.circuit } };
   }
   // Older garage: no ledger yet, but supply and the dealers' tills are still on chain.
@@ -140,7 +144,7 @@ async function load(): Promise<Snapshot> {
   ]);
   const tills = await Promise.all(dealers.map(d => viewCall<string>('mt_balance_of', { account_id: d, token_id: 'rush' })));
   return { rush: Number(supply[0] ?? 0), alloy: Number(supply[1] ?? 0), circuit: Number(supply[2] ?? 0),
-    dealerRush: tills.reduce((sum, t) => sum + Number(t), 0), full: null, offers: [], stalls, moves,
+    dealerRush: tills.reduce((sum, t) => sum + Number(t), 0), full: null, offers: [], stalls, moves, editions: [],
     payout: { ...RACE_PAYOUT } };
 }
 
@@ -406,6 +410,29 @@ function render(s: Snapshot): void {
     { label: 'Back on recycle', value: '50%', hint: 'materials only, no RUSH' },
     { label: 'Full set', value: '10', hint: 'races at the finish rate', tone: 'earn' }
   ]);
+  // 05 limited runs: the NEAR the game has taken, straight from the contract's ledger
+  const near = s.full?.near, nl = near?.ledger;
+  plates($('near-plates'), near && nl ? [
+    { label: 'Game revenue', value: formatNear(BigInt(nl.primary_volume) + BigInt(nl.royalties)), hint: 'NEAR · first sales plus royalties', tone: 'money' },
+    { label: 'Cars sold', value: near.cars_minted, hint: `of ${n(near.cars_total)} that will ever exist`, tone: 'earn' },
+    { label: 'Resold by players', value: nl.resales, hint: `${formatNear(nl.resale_volume)} NEAR changed hands` },
+    { label: 'Royalty', value: `${near.royalty_percent}%`, hint: `${formatNear(nl.royalties, 4)} NEAR kept so far`, tone: 'money' }
+  ] : [
+    { label: 'Paid in', value: 'NEAR', hint: 'from the player\u2019s own garage', tone: 'money' },
+    { label: 'First sale', value: '100%', hint: 'goes to the game', tone: 'earn' },
+    { label: 'Resale royalty', value: '2%', hint: 'seller keeps the rest', tone: 'money' },
+    { label: 'Supply', value: 'FIXED', hint: 'a run can never grow' }
+  ]);
+  $('runs').replaceChildren(...s.editions.map(e => {
+    const li = el('li'), name = el('strong', e.name), bar = el('div', undefined, 'run-bar'), fill = el('i');
+    name.append(el('small', `DRIVES AS ${(CARS.find(c => c.id === e.model)?.name ?? e.model).toUpperCase()}`));
+    fill.style.width = `${Math.round(e.minted / e.size * 100)}%`; bar.append(fill);
+    li.append(name, el('b', `${formatNear(e.price)} NEAR`), el('span', `${n(e.minted)} OF ${n(e.size)} SOLD · ${e.minted < e.size ? `NEXT IS #${e.minted + 1}` : 'SOLD OUT'}`), bar);
+    return li;
+  }));
+  $('runs-empty').hidden = s.editions.length > 0;
+  $('runs-empty').textContent = near ? 'No limited run is open right now.' : 'Limited runs open with the next garage upgrade. Sales will be counted here, read from the contract.';
+
   $('offers').replaceChildren(...s.offers.filter(o => o.price !== null).map(o => {
     const recipe = RECIPES.find(r => r.id === o.recipe_id);
     const li = el('li'), name = el('strong', recipe?.name ?? o.recipe_id), trail = el('span', 'MADE BY ');

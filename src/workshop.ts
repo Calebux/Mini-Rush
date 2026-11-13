@@ -1,5 +1,6 @@
 import type { CarSpec } from './cars';
 import { bank } from './economy';
+import { checkLocalPurchase } from './shopSession';
 
 export const SLOTS = ['body', 'wheels', 'wing', 'paint', 'tyres', 'power'] as const;
 export type Slot = typeof SLOTS[number];
@@ -70,6 +71,7 @@ export function purchasePart(id: string): string | null {
     const p = part(id);
     if (!p) return 'Unknown part.';
     if (ownsPart(id)) return null;
+    if (!checkLocalPurchase()) return 'Sign in to buy parts. You can keep racing as a guest.';
     const balance = bank();
     if (balance < p.price) return `Earn ${p.price - balance} more coins by racing.`;
     const s = workshopStore(); s.owned.push(id);

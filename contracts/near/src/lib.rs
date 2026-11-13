@@ -7,6 +7,7 @@
 //!
 //! `components.rs` adds individually owned component NFTs, crafting,
 //! installation, player sales, recycling and idempotent race salvage rewards.
+//! `editions.rs` adds limited-edition cars: numbered NFTs sold and resold for NEAR.
 //!
 //! Cars and parts are sold from dealer stalls. Each stall belongs to a dealer
 //! account run by an AI agent off-chain; the agent reprices its stock from
@@ -14,7 +15,9 @@
 //! sees can be traced to a signed decision on chain.
 
 mod components;
+mod editions;
 use components::Workshop;
+use editions::Showroom;
 use near_sdk::json_types::U128;
 use near_sdk::serde_json::json;
 use near_sdk::store::{IterableMap, IterableSet, LookupMap};
@@ -94,6 +97,7 @@ pub struct Garage {
     owned: LookupMap<AccountId, Vec<String>>,
     listings: IterableMap<String, Listing>,
     workshop: Workshop,
+    showroom: Showroom,
 }
 
 fn bal_key(token_id: &str, account: &AccountId) -> String {
@@ -120,6 +124,7 @@ impl Garage {
             owned: LookupMap::new(Key::Owned),
             listings: IterableMap::new(Key::Listings),
             workshop: Workshop::default(),
+            showroom: Showroom::default(),
         };
         g.tokens.insert(RUSH.to_string(), TokenInfo { kind: "coin".into(), name: "RUSH".into() });
         g
@@ -406,6 +411,9 @@ impl Garage {
     fn debit(&mut self, token_id: &str, account: &AccountId, amount: u128) {
         let before = self.balance(token_id, account);
         require!(before >= amount, format!("not enough {token_id}"));
+        if token_id == RUSH {
+            require!(before - amount >= self.reserved_order_rush(account), "RUSH reserved for purchase orders");
+        }
         let after = before - amount;
         if after == 0 {
             self.balances.remove(&bal_key(token_id, account));

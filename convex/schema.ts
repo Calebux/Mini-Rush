@@ -132,6 +132,34 @@ export default defineSchema({
   }).index('by_account', ['account']).index('by_key', ['publicKey'])
     .index('by_created', ['createdAt']).index('by_paid', ['lastPaidAt']),
 
+  // Signed outer transaction is saved before broadcast; retries reuse its exact bytes.
+  identityProofs: defineTable({
+    account: v.string(), garageKey: v.string(), identityKey: v.string(), recipient: v.string(),
+    request: v.string(), message: v.string(), nonce: v.string(), createdAt: v.number(), expiresAt: v.number(),
+    state: v.union(v.literal('issued'), v.literal('pending'), v.literal('verified'), v.literal('failed')),
+    tx: v.optional(v.string()), signedTransaction: v.optional(v.string()), identityHash: v.optional(v.string()),
+    result: v.optional(v.string())
+  }).index('by_account_created', ['account', 'createdAt']).index('by_account_request', ['account', 'request'])
+    .index('by_expiry', ['expiresAt']),
+  // Verified identity association only: this table grants no signing or recovery permission.
+  garageIdentities: defineTable({
+    account: v.string(), garageKey: v.string(), identityKey: v.string(), identityHash: v.string(),
+    proofTx: v.string(), verifiedAt: v.number()
+  }).index('by_account', ['account']).index('by_identity', ['identityHash']),
+  identityBudgets: defineTable({ day: v.string(), signatures: v.number() }).index('by_day', ['day']),
+
+  // One-time test NEAR top-ups (testnet only), so a garage is never paid twice.
+  nearGrants: defineTable({
+    account: v.string(), day: v.string(), amount: v.string(), tx: v.optional(v.string()), at: v.number()
+  }).index('by_account', ['account']).index('by_day', ['day']),
+
+  garageActions: defineTable({
+    digest: v.string(), account: v.string(), tx: v.string(), signedTransaction: v.string(),
+    state: v.union(v.literal('pending'), v.literal('confirmed'), v.literal('failed')),
+    result: v.optional(v.string()), createdAt: v.number()
+  }).index('by_digest', ['digest']).index('by_account_state', ['account', 'state'])
+    .index('by_state_created', ['state', 'createdAt']),
+
   nearRaces: defineTable({
     account: v.string(), run: v.string(), distance: v.number(),
     startedAt: v.number(), sampledAt: v.number(), progress: v.number(), elapsed: v.number(), samples: v.number(),

@@ -317,6 +317,7 @@ dl.rows dt { color: var(--muted); } dl.rows dd { font: 800 12px var(--display); 
   body[data-scene=loop] { --stage: 13vh 50vw 13vh 2vw; }
   body[data-scene=dealers] { --stage: 11vh 2vw 15vh 48vw; }
   body[data-scene=parts] { --stage: 13vh 50vw 13vh 2vw; }
+  body[data-scene=editions] { --stage: 13vh 2vw 13vh 48vw; }
   body[data-scene=rules] { --stage: 15vh 3vw 15vh 50vw; }
   body[data-scene=finale] { --stage: 40vh 18vw 20vh 18vw; }
 }
@@ -332,3 +333,8 @@ body.no-gl #market-car-stage { display: none; }
   .circuit::before, .cue i, .live[data-state=live] i, .reel.run i { animation: none; }
   .tape { overflow-x: auto; } .tape ul { animation: none; }
 }
+
+/* Limited runs: how much of each numbered edition has sold. */
+.runs li { border-left-color: var(--money); }
+.runs .run-bar { grid-column: 1 / -1; height: 3px; background: #ffffff14; }
+.runs .run-bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--money), #ff9a3d); }

@@ -12,6 +12,15 @@
 }
 /* Home + garage cards keep the original Neon Night shape; only the type
    changes, to the cleaner system face used across the other screens. */
+.home-camera-motion {
+  position: absolute; bottom: 0; left: 0; min-height: 44px; padding: 0 12px;
+  border: 1px solid #e5d8b530; border-radius: 4px; background: #101411d9;
+  color: #e5dfcf; font: 650 9px/1.2 system-ui, sans-serif; letter-spacing: 1px;
+  cursor: pointer; touch-action: manipulation;
+}
+.home-camera-motion:hover { background: #252b24; }
+.home-camera-motion:focus-visible { outline: 2px solid #e5dfcf; outline-offset: 3px; }
+.home-camera-motion:disabled { color: #a2a59b; cursor: default; }
 #menu .logo, #menu .sub-logo, #menu .driver-chip,
 #menu .setup-pill span, #menu .setup-pill strong,
 #menu .mode-home-copy small, #menu .mode-home-copy strong, #menu .mode-home-copy em, #menu .mode-home-cta,

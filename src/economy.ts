@@ -1,10 +1,14 @@
 // The coin bank. Coins collected in races accumulate here and pay for
 // cars, upgrades, paint and workshop parts. All local; owned() lists the cars
 // bought so far.
+import { checkLocalPurchase } from './shopSession';
 const BANK_KEY = 'minirush.bank';
 const OWNED_KEY = 'minirush.owned';
 let chainCars: string[] = [];
 export function syncChainCars(ids: string[]): void { chainCars = ids; }
+/** Models unlocked by limited-edition cars held on chain. */
+let editionModels: string[] = [];
+export function syncEditionModels(ids: string[]): void { editionModels = ids; }
 
 export const bank = (): number => {
   const n = Number(localStorage.getItem(BANK_KEY));
@@ -18,9 +22,9 @@ export const deposit = (coins: number): void => {
 export function owned(): Set<string> {
   try {
     const raw = JSON.parse(localStorage.getItem(OWNED_KEY) ?? '[]') as string[];
-    return new Set([...(Array.isArray(raw) ? raw : []), ...chainCars]);
+    return new Set([...(Array.isArray(raw) ? raw : []), ...chainCars, ...editionModels]);
   } catch {
-    return new Set(chainCars);
+    return new Set([...chainCars, ...editionModels]);
   }
 }
 
@@ -62,6 +66,7 @@ export function racePayout(p: {
 
 /** Buy a car with coins. False = can't afford or already owned (nothing deducted). */
 export function buyCar(id: string, price: number): boolean {
+  if (!checkLocalPurchase()) return false;
   if (owned().has(id) || !spend(price)) return false;
   grantCar(id);
   return true;

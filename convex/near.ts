@@ -10,17 +10,26 @@
 // OpenAI-compatible model when DEALER_LLM_URL / DEALER_LLM_KEY / DEALER_LLM_MODEL
 // are set (NEAR AI Cloud, OpenRouter, …) and with plain rules otherwise; every
 // decision records which one made it.
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import * as borsh from 'borsh';
-import { Account, actions, PublicKey, SCHEMA, type KeyPairString } from 'near-api-js';
+import { Account, actions, PublicKey, SCHEMA, SignedTransaction, baseEncode, encodeDelegateAction, type KeyPairString } from 'near-api-js';
 import { v } from 'convex/values';
 import { action, internalAction } from './_generated/server';
 import { internal } from './_generated/api';
 import { RACE_PAYOUT, raceRush, rewardPlace } from '../shared/raceRules';
+import { dealerOrderPlan, type ComponentOrder, type DealerPart, type OrderRecipe } from '../shared/dealerOrders';
+import { settledOutcome, type ActionResult } from '../shared/garageRecovery';
+import { AUTH_GUARD, identityStartMessage, type IdentityChallenge, type IdentityProofResult } from '../shared/identityProof';
+import { inspectSigningToken, mpcSignature, proofBytes, strictBase64, verifyIdentitySignature } from './identityProofCrypto';
+import type { ActionCtx } from './_generated/server';
+import { requiresShopSignIn, signInRequired } from '../shared/shopPolicy';
+import { YOCTO } from '../shared/editions';
 
 const GARAGE = process.env.NEAR_GARAGE ?? 'minirush-garage.testnet';
 const RPC = process.env.NEAR_RPC ?? 'https://test.rpc.fastnear.com';
 const TGAS = 1_000_000_000_000n;
+// Off by default: the key made on the player's device is their access. See shared/shopPolicy.ts.
+const SIGN_IN_REQUIRED = signInRequired(process.env.SHOP_SIGN_IN);
 const WELCOME_RUSH = 0; // No transferable signup grant: extra accounts must not print spending money.
 const PLAYER_NEAR = 10_000_000_000_000_000_000_000n; // 0.01 NEAR: account storage only — the game pays gas
 
@@ -47,6 +56,94 @@ function panicText(err: unknown): string {
 
 const KEY = /^ed25519:[1-9A-HJ-NP-Za-km-z]{43,44}$/;
 
+function identityDeposit(): bigint {
+  if (process.env.NEAR_AUTH_PROOFS_ENABLED !== 'true' || !GARAGE.endsWith('.testnet')) throw new Error('Ownership verification is not enabled on this server yet');
+  const value = process.env.NEAR_AUTH_SIGN_DEPOSIT_YOCTO;
+  if (!value || !/^\d{1,23}$/.test(value) || BigInt(value) > 10_000_000_000_000_000_000_000n) throw new Error('Ownership signing budget is not configured');
+  return BigInt(value); // Explicit operator configuration, at most 0.01 testnet NEAR per attempt.
+}
+async function garageOwner(ctx: ActionCtx, account: string): Promise<string> {
+  const player = await ctx.runQuery(internal.nearDb.playerByAccount, { account });
+  if (!player) throw new Error('Unknown garage');
+  const key = await gameAccount().provider.viewAccessKey({ accountId: account, publicKey: player.publicKey, finalityQuery: { finality: 'final' } });
+  if (key.permission !== 'FullAccess') throw new Error('Garage ownership key is no longer active');
+  return player.publicKey;
+}
+
+export const beginIdentityProof = action({
+  args: { account: v.string(), identityKey: v.string(), recipient: v.string(), request: v.string(), at: v.number(), signature: v.string() },
+  handler: async (ctx, args): Promise<IdentityChallenge> => {
+    identityDeposit();
+    const allowed = (process.env.NEAR_AUTH_ALLOWED_ORIGINS ?? 'https://minirush.site,http://localhost:3000,http://127.0.0.1:5174,http://localhost:5174').split(',').map(s => s.trim());
+    if (!KEY.test(args.identityKey) || !/^[a-zA-Z0-9-]{16,64}$/.test(args.request) || !Number.isSafeInteger(args.at) || Math.abs(Date.now() - args.at) > 60_000 || !allowed.includes(args.recipient)) throw new Error('Invalid ownership check');
+    const garageKey = await garageOwner(ctx, args.account);
+    const message = identityStartMessage(args.account, args.identityKey, args.recipient, args.request, args.at);
+    if (!PublicKey.from(garageKey).verify(new TextEncoder().encode(message), strictBase64(args.signature, 64))) throw new Error('Garage ownership signature did not match');
+    const row = await ctx.runMutation(internal.nearDb.issueIdentityProof, { account: args.account, identityKey: args.identityKey,
+      recipient: args.recipient, request: args.request, garageKey, nonce: randomBytes(32).toString('base64'), garage: GARAGE });
+    return { id: row._id, account: row.account, garageKey: row.garageKey, identityKey: row.identityKey, recipient: row.recipient,
+      nonce: row.nonce, message: row.message, expiresAt: row.expiresAt };
+  }
+});
+
+export const completeIdentityProof = action({
+  args: { id: v.id('identityProofs'), garageSignature: v.string(), signingToken: v.optional(v.string()) },
+  handler: async (ctx, { id, garageSignature, signingToken }): Promise<IdentityProofResult> => {
+    let saved = await ctx.runQuery(internal.nearDb.identityProof, { id });
+    if (!saved) return { state: 'failed', message: 'This ownership check is no longer available. Start a new check to verify your link again.' };
+    const garageKey = await garageOwner(ctx, saved.account);
+    if (garageKey !== saved.garageKey) throw new Error('The garage key has changed');
+    const payload = proofBytes(saved);
+    verifyIdentitySignature(garageKey, payload, garageSignature);
+    const result = (row: typeof saved): IdentityProofResult => ({ state: row!.state === 'verified' ? 'verified' : row!.state === 'failed' ? 'failed' : 'pending',
+      message: row!.result ?? 'Checking the original ownership request. Your garage is unchanged.', ...(row!.tx ? { tx: row!.tx } : {}) });
+    if (saved.state === 'verified' || saved.state === 'failed') return result(saved);
+    const game = gameAccount();
+    if (saved.state === 'issued') {
+      const deposit = identityDeposit();
+      if (saved.expiresAt <= Date.now()) return { state: 'failed', message: 'Ownership check expired. Start a new check.' };
+      if (!signingToken) return { state: 'needs_approval', message: 'Approve the ownership message to continue.' };
+      let claims: ReturnType<typeof inspectSigningToken>;
+      try { claims = inspectSigningToken(signingToken, payload); } catch { throw new Error('The signing request did not match this ownership check'); }
+      const derived = await game.provider.callFunction({ contractId: 'v1.signer-prod.testnet', method: 'derived_public_key',
+        args: { path: `${AUTH_GUARD}#${claims.subject}`, predecessor: 'fast-auth.testnet', domain_id: 1 } });
+      if (derived !== saved.identityKey) throw new Error('The signed-in identity changed. Start a new ownership check.');
+      const signed = await game.createSignedTransaction({ receiverId: 'fast-auth.testnet', actions: [actions.functionCall('sign', {
+        guard_id: AUTH_GUARD, verify_payload: signingToken, sign_payload: Array.from(payload), algorithm: 'eddsa'
+      }, 300n * TGAS, deposit)] });
+      saved = await ctx.runMutation(internal.nearDb.prepareIdentityProof, { id,
+        tx: baseEncode(createHash('sha256').update(signed.transaction.encode()).digest()),
+        signedTransaction: Buffer.from(signed.encode()).toString('base64'), identityHash: claims.identityHash });
+    }
+    if (saved.state !== 'pending') return result(saved);
+    const pending = result(saved);
+    const finish = async (response: Awaited<ReturnType<typeof game.provider.viewTransactionStatus>>): Promise<IdentityProofResult> => {
+      const outcome = settledOutcome(response, saved!.tx!);
+      if (!outcome) return pending;
+      let verified = false;
+      if (outcome.state === 'confirmed') {
+        try {
+          verifyIdentitySignature(saved!.identityKey, payload, mpcSignature(response));
+          verified = (await garageOwner(ctx, saved!.account)) === saved!.garageKey;
+        } catch { /* A failed/absent/mismatched MPC signature never establishes ownership. */ }
+      }
+      return result(await ctx.runMutation(internal.nearDb.finishIdentityProof, { id, verified,
+        message: 'Ownership could not be verified. Your existing garage is unchanged.' }));
+    };
+    try {
+      const response = await game.provider.viewTransactionStatus({ txHash: saved.tx!, accountId: GARAGE, waitUntil: 'NONE' });
+      const settled = await finish(response);
+      if (settled.state !== 'pending') return settled;
+    } catch { /* Query outages say nothing about whether the original call completed. */ }
+    // Operator pause and expiry stop broadcasts; already finalized results can still be checked.
+    if (saved.expiresAt <= Date.now()) return result(await ctx.runMutation(internal.nearDb.finishIdentityProof, { id, verified: false, message: 'Ownership check expired. Start a new check.' }));
+    if (process.env.NEAR_AUTH_PROOFS_ENABLED !== 'true') return pending;
+    try {
+      return await finish(await game.provider.sendTransactionUntil(SignedTransaction.decode(Buffer.from(saved.signedTransaction!, 'base64')), 'FINAL'));
+    } catch { return pending; }
+  }
+});
+
 export const createPlayer = action({
   args: { publicKey: v.string() },
   handler: async (ctx, { publicKey }): Promise<{ account: string; welcome: number; created: boolean }> => {
@@ -64,6 +161,39 @@ export const createPlayer = action({
     });
     await ctx.runMutation(internal.nearDb.insertPlayer, { account, publicKey });
     return { account, welcome: WELCOME_RUSH, created: true };
+  }
+});
+
+/**
+ * Testnet only: a one-time top-up of test NEAR so a new garage can try a NEAR
+ * purchase. One per garage, a daily budget for the whole game, and never from
+ * the balance that covers the contract's own storage.
+ */
+export const testNear = action({
+  args: { account: v.string() },
+  handler: async (ctx, { account }): Promise<{ state: 'sent' | 'already' | 'unavailable'; message: string; tx?: string }> => {
+    const amount = BigInt(Math.round(Number(process.env.NEAR_TEST_GRANT ?? '2') * 1000)) * (YOCTO / 1000n);
+    if (!GARAGE.endsWith('.testnet') || amount <= 0n) return { state: 'unavailable', message: 'Test NEAR is only offered on testnet.' };
+    const player = await ctx.runQuery(internal.nearDb.playerByAccount, { account });
+    if (!player) return { state: 'unavailable', message: 'Open your garage first, then try again.' };
+    const game = gameAccount();
+    const state = await game.getState();
+    const reserve = BigInt(Math.round(Number(process.env.NEAR_TEST_GRANT_RESERVE ?? '3'))) * YOCTO;
+    if (BigInt(state.balance.available) < amount + reserve) {
+      return { state: 'unavailable', message: 'The test NEAR pool is empty right now. You can send test NEAR to your garage address instead.' };
+    }
+    const cap = Math.round(Number(process.env.NEAR_TEST_GRANT_DAILY ?? '20'));
+    const reserved = await ctx.runMutation(internal.nearDb.reserveGrant, { account, amount: amount.toString(), cap });
+    if (reserved === 'already') return { state: 'already', message: 'This garage has already received its test NEAR.' };
+    if (reserved === 'budget') return { state: 'unavailable', message: 'Today\u2019s test NEAR has all been handed out. Try again tomorrow, or send test NEAR to your garage address.' };
+    // A grant stays recorded even if the outcome is unclear, so one garage can never be paid twice.
+    try {
+      const res = await game.signAndSendTransaction({ receiverId: account, waitUntil: 'FINAL', actions: [actions.transfer(amount)] });
+      await ctx.runMutation(internal.nearDb.settleGrant, { account, tx: res.transaction.hash });
+      return { state: 'sent', message: 'Test NEAR added to your garage.', tx: res.transaction.hash };
+    } catch {
+      return { state: 'unavailable', message: 'The top-up may not have arrived. Check your balance in a moment.' };
+    }
   }
 });
 
@@ -109,7 +239,10 @@ export const raceProgress = action({
 
 /** What a player may ask the game to pay gas for: these garage calls, nothing else. */
 const RELAYABLE: Record<string, bigint> = { buy: 0n, sell_back: 0n, consume: 0n, mt_transfer: 1n,
-  craft_component: 0n, install_component: 0n, list_component: 0n, cancel_component: 0n, buy_component: 0n, recycle_component: 0n, nft_transfer: 1n };
+  craft_component: 0n, install_component: 0n, list_component: 0n, cancel_component: 0n, buy_component: 0n, recycle_component: 0n, fill_component_order: 0n, nft_transfer: 1n,
+  // Listing an edition car is free. Buying one carries NEAR and is deliberately absent: a relayed
+  // deposit is charged to the relayer, so the player's garage sends those calls itself.
+  list_edition_car: 0n, cancel_edition_listing: 0n };
 
 export const relay = action({
   args: { signedDelegate: v.string() },
@@ -128,6 +261,7 @@ export const relay = action({
       if (!fc || !(fc.methodName in RELAYABLE)) throw new Error('method not relayed');
       if (BigInt(fc.deposit) !== RELAYABLE[fc.methodName]) throw new Error('bad deposit');
       if (BigInt(fc.gas) > 80n * TGAS) throw new Error('too much gas');
+      if (requiresShopSignIn(fc.methodName, SIGN_IN_REQUIRED) && !(await ctx.auth.getUserIdentity())) throw new Error('Sign in to buy cars and parts.');
     }
     try {
       const res = await gameAccount().signAndSendTransaction({
@@ -149,6 +283,72 @@ export const relay = action({
       const t = err instanceof Error ? err.message : String(err);
       const m = t.match(/ExecutionError\\?":\\?"([^"\\]+)/) ?? t.match(/Smart contract panicked: ([^"\n\\]+)/);
       throw new Error(m ? m[1].replace('Smart contract panicked: ', '') : t.slice(0, 200));
+    }
+  }
+});
+
+/** Durable relay for new clients. A timeout never becomes permission to spend again. */
+export const relayTracked = action({
+  args: { signedDelegate: v.string() },
+  handler: async (ctx, { signedDelegate }): Promise<ActionResult> => {
+    const bytes = Buffer.from(signedDelegate, 'base64');
+    if (bytes.length > 2048) return { state: 'failed', message: 'This action is too large.' };
+    // Borsh yields the plain schema representation used by the existing relay.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let sd: any;
+    try { sd = borsh.deserialize(SCHEMA.SignedDelegate, bytes); }
+    catch { return { state: 'failed', message: 'This action could not be read.' }; }
+    const da = sd.delegateAction;
+    const player = await ctx.runQuery(internal.nearDb.playerByAccount, { account: da.senderId });
+    const publicKey = PublicKey.from(da.publicKey);
+    const signature = sd.signature.ed25519Signature?.data;
+    if (!player || publicKey.toString() !== player.publicKey || !signature ||
+      !publicKey.verify(createHash('sha256').update(encodeDelegateAction(da)).digest(), Uint8Array.from(signature))) {
+      return { state: 'failed', message: 'Please reopen your saved garage before trying again.' };
+    }
+    if (da.receiverId !== GARAGE || da.actions.length !== 1 || da.actions.some((a: { functionCall?: { methodName: string; deposit: bigint; gas: bigint } }) => {
+      const fc = a.functionCall;
+      return !fc || !(fc.methodName in RELAYABLE) || BigInt(fc.deposit) !== RELAYABLE[fc.methodName] || BigInt(fc.gas) > 80n * TGAS;
+    })) return { state: 'failed', message: 'This garage action is not supported.' };
+    const digest = createHash('sha256').update(bytes).digest('hex');
+    let saved = await ctx.runQuery(internal.nearDb.garageAction, { digest });
+    const game = gameAccount();
+    if (!saved) {
+      if (requiresShopSignIn(da.actions[0].functionCall.methodName, SIGN_IN_REQUIRED) && !(await ctx.auth.getUserIdentity())) {
+        return { state: 'failed', message: 'Sign in to buy cars and parts. Nothing was purchased.' };
+      }
+      // If the record was pruned, an expired delegate must never be broadcast again.
+      const block = await game.provider.viewBlock({ finality: 'final' });
+      if (BigInt(da.maxBlockHeight) <= BigInt(block.header.height)) return { state: 'pending', message: 'This older request needs a history check. Keep your browser data and contact support.' };
+      if (BigInt(da.maxBlockHeight) > BigInt(block.header.height) + 1200n) return { state: 'failed', message: 'This request has an unsupported expiry. Reopen the game and try again.' };
+      const signed = await game.createSignedTransaction({ receiverId: da.senderId,
+        actions: [actions.signedDelegate({ delegateAction: da, signature: sd.signature })] });
+      const tx = baseEncode(createHash('sha256').update(signed.transaction.encode()).digest());
+      saved = await ctx.runMutation(internal.nearDb.prepareGarageAction, { digest, account: da.senderId, tx,
+        signedTransaction: Buffer.from(signed.encode()).toString('base64') });
+    }
+    if (saved.result && saved.state !== 'pending') return JSON.parse(saved.result) as ActionResult;
+    const pending: ActionResult = { state: 'pending', tx: saved.tx };
+    const finish = async (response: Awaited<ReturnType<typeof game.provider.viewTransactionStatus>>): Promise<ActionResult> => {
+      const result = settledOutcome(response, saved!.tx);
+      if (!result) return pending;
+      if (result.state === 'confirmed') {
+        const raw = [...response.receipts_outcome].reverse().map(r => (r.outcome.status as { SuccessValue?: string }).SuccessValue).find(Boolean);
+        try { result.value = raw ? JSON.parse(Buffer.from(raw, 'base64').toString()) : null; } catch { result.value = null; }
+      }
+      await ctx.runMutation(internal.nearDb.finishGarageAction, { digest, state: result.state as 'confirmed' | 'failed', result: JSON.stringify(result) });
+      return result;
+    };
+    try {
+      const status = await game.provider.viewTransactionStatus({ txHash: saved.tx, accountId: GARAGE, waitUntil: 'NONE' });
+      const result = await finish(status);
+      if (result.state !== 'pending') return result;
+    } catch { /* Unknown or unavailable: only the exact saved transaction may be resent. */ }
+    try {
+      return await finish(await game.provider.sendTransactionUntil(SignedTransaction.decode(Buffer.from(saved.signedTransaction, 'base64')), 'FINAL'));
+    } catch {
+      // Invalid nonce can mean the first broadcast succeeded. Preserve the original hash.
+      return pending;
     }
   }
 });
@@ -243,6 +443,7 @@ async function llmDecisions(dealer: string, stalls: (ListingView & { soldSince: 
 export const dealerTick = internalAction({
   args: {},
   handler: async (ctx): Promise<string> => {
+    if (process.env.NEAR_DEALER_AGENTS_ENABLED === 'false') return 'Dealer agents disabled on this deployment';
     const listings = await view<ListingView[]>('listings');
     const racers: number = await ctx.runQuery(internal.nearDb.recentRacers, {});
     const keys = dealerKeys();
@@ -285,6 +486,55 @@ export const dealerTick = internalAction({
       }
       await ctx.runMutation(internal.nearDb.recordMoves, { moves: moves.map((m) => ({ ...m, tx })) });
       report.push(`${dealer}: ${acts.length} changes by ${by}`);
+    }
+    // These actions use the same dealer keys. Run them after repricing so the
+    // scheduled jobs do not race one another for account access-key nonces.
+    try { report.push(await ctx.runAction(internal.near.componentDealerTick, {})); }
+    catch (err) { report.push(`component buyers: ${panicText(err)}`); }
+    return report.join('; ');
+  }
+});
+
+// Separate from legacy car restocks: components are sourced only from players.
+// A live order keeps its quoted terms until filled or expired; ticks never withdraw it early.
+export const componentDealerTick = internalAction({
+  args: {},
+  handler: async (): Promise<string> => {
+    if (process.env.NEAR_DEALER_AGENTS_ENABLED === 'false') return 'Dealer agents disabled on this deployment';
+    const [recipes, dealers] = await Promise.all([view<OrderRecipe[]>('component_recipes'), view<string[]>('dealers')]);
+    const report: string[] = [];
+    for (const [account, key] of Object.entries(dealerKeys())) {
+      if (!dealers.includes(account)) continue;
+      try {
+        const signer = new Account(account, RPC, key as KeyPairString);
+        const send = async (method: string, args: Record<string, unknown>) => {
+          const result = await signer.signAndSendTransaction({ receiverId: GARAGE,
+            actions: [actions.functionCall(method, args, 60n * TGAS, 0n)] });
+          for (const receipt of result.receipts_outcome) {
+            if ((receipt.outcome.status as { Failure?: unknown }).Failure) throw new Error('Dealer transaction failed');
+          }
+        };
+        const [inventory, initialFunds, orders] = await Promise.all([
+          view<DealerPart[]>('component_inventory', { account_id: account }),
+          view<{ available: string; reserved: string }>('dealer_order_funds', { account_id: account }),
+          view<ComponentOrder[]>('component_orders')
+        ]);
+        let funds = initialFunds;
+        const liveReserved = orders.filter(o => o.dealer === account).reduce((sum,o) => sum + BigInt(o.price) * BigInt(o.remaining), 0n);
+        if (BigInt(funds.reserved) > liveReserved) {
+          await send('expire_component_orders', {});
+          funds = await view<typeof funds>('dealer_order_funds', { account_id: account });
+        }
+        const plan = dealerOrderPlan(account, recipes, inventory, Number(funds.available));
+        // Separate transactions prevent one concurrently sold listing blocking other stock.
+        for (const listing of plan.listings.slice(0, 12)) {
+          try { await send('list_component', listing); } catch { report.push(`${account}: listing changed; retry next tick`); }
+        }
+        if (plan.order && !orders.some(o => o.dealer === account)) {
+          await send('place_component_order', { ...plan.order, expires_ms: Date.now() + 60 * 60 * 1000, replace_revision: null });
+          report.push(`${account}: buying ${plan.order.quantity} ${plan.order.recipe_id}`);
+        } else report.push(`${account}: existing order, sufficient stock or insufficient budget`);
+      } catch (err) { report.push(`${account}: ${panicText(err)}`); }
     }
     return report.join('; ');
   }

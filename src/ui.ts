@@ -12,6 +12,7 @@ import {
   countdown, msToClose, msToWeekend, WEEKEND_LAPS, weekendMapIndex, weekendOpen
 } from './weekend';
 import { bank, buyCar, owned, racePayout } from './economy';
+import { shopOpen, requireShopSession } from './shopSession';
 import { Leaderboard } from './leaderboard';
 import { MAPS } from './maps';
 import { carFits, MODES, ModeSpec } from './modes';
@@ -221,7 +222,7 @@ export class UI {
   onMap: (index: number) => void = () => {};
   onMode: (index: number) => void = () => {};
   onPage: (page: 'menu' | 'garage' | 'tour' | 'workshop' | 'market') => void = () => {};
-  onMarketPreview: (id: string) => void = () => {};
+  onMarketPreview: (id: string, paint?: number) => void = () => {};
   onWorkshopPreview: (build: Build | null, chassis?: string) => void = () => {};
   onComponentInstalled: (recipe: Recipe, chassis: string) => void = () => {};
   onNitroPress: () => void = () => {}; // the pill itself — needed when tap = shoot
@@ -280,6 +281,7 @@ export class UI {
   private carButtons: HTMLButtonElement[] = [];
   private tallyTimers: number[] = [];
   private carTab: CarClass = 'fast';
+  private ownedCarsOnly = false;
   private dots: HTMLElement[] = [];
   private board = new Leaderboard();
   private carIndex = 0;
@@ -298,6 +300,8 @@ export class UI {
   private purchaseNote: { id: string; text: string } | null = null; // note for the car just bought
 
   constructor(private audio: AudioManager) {
+    window.addEventListener('minirush:session', () => { this.renderCar(); });
+    window.addEventListener('minirush:garage-updated', () => { this.renderCar(); this.refreshBank(); });
     // blur so Space/Enter (nitro key) can't re-trigger the focused button
     const on = (id: string, fn: () => void) =>
       $(id).addEventListener('click', (e) => {
@@ -500,7 +504,7 @@ export class UI {
       this.audio.play('click');
       this.exitDaily(); this.exitWeekend(); this.exitBounty();
       this.market ??= new Market();
-      this.market.onPreview = id => this.onMarketPreview(id);
+      this.market.onPreview = (id, paint) => this.onMarketPreview(id, paint);
       this.market.onClose = () => {
         this.audio.play('back');
         this.onPage('menu');
@@ -570,19 +574,36 @@ export class UI {
       ['upg-speed', 'speed'], ['upg-grip', 'grip'], ['upg-nitro', 'nitro']
     ];
     for (const [id, stat] of upgrades) {
-      on(id, () => {
-        if (buyTier(CARS[this.carIndex].id, stat)) {
-          this.audio.play('buy');
-          this.renderCar();
-          this.refreshBank();
-          this.onCar(this.carIndex); // rebuild the player with the new spec
-        }
+      let purchasing = false;
+      on(id, async () => {
+        if (purchasing) return;
+        purchasing = true;
+        const carIndex = this.carIndex;
+        try {
+          if (!(await requireShopSession()) || this.carIndex !== carIndex) return;
+          if (buyTier(CARS[carIndex].id, stat)) {
+            this.audio.play('buy'); this.renderCar(); this.refreshBank();
+            this.onCar(this.carIndex);
+          }
+        } finally { purchasing = false; }
       });
     }
 
     // garage carousel
     on('car-prev', () => this.stepCar(-1));
     on('car-next', () => this.stepCar(1));
+    on('garage-owned-cars', () => {
+      this.ownedCarsOnly = true;
+      const have = owned();
+      const current = CARS[this.carIndex];
+      if (current.price > 0 && !have.has(current.id)) {
+        const collection = tabOrder().filter(i => CARS[i].price === 0 || have.has(CARS[i].id));
+        const first = collection.find(i => CARS[i].class === this.carTab) ?? collection[0];
+        if (first !== undefined) { this.selectCar(first); return; }
+      }
+      this.renderCar();
+    });
+    on('garage-all-cars', () => { this.ownedCarsOnly = false; this.renderCar(); });
     for (const cls of CAR_TABS) {
       on(`tab-${cls}`, () => {
         if (this.carTab === cls) return;
@@ -1356,9 +1377,11 @@ export class UI {
     ctx.fill();
   }
 
-  /** Prev/next stay inside the open shelf — the tabs are how you change class. */
+  /** Collection navigation includes every owned class; catalogue navigation stays in its shelf. */
   private stepCar(dir: number): void {
-    const shelf = tabOrder().filter((i) => CARS[i].class === this.carTab);
+    const have = owned();
+    const shelf = tabOrder().filter(i => this.ownedCarsOnly
+      ? CARS[i].price === 0 || have.has(CARS[i].id) : CARS[i].class === this.carTab);
     if (!shelf.length) return;
     const at = shelf.indexOf(this.carIndex);
     this.selectCar(shelf[(at + dir + shelf.length) % shelf.length]);
@@ -1382,6 +1405,7 @@ export class UI {
       const hex = `#${activeColor(car.id, car.color).toString(16).padStart(6, '0')}`;
       button.type = 'button';
       button.className = `car-roster-item ${car.class}`;
+      button.dataset.carId = car.id;
       button.style.setProperty('--car-color', hex);
       button.setAttribute('aria-label', `Select ${car.name}`);
       button.innerHTML =
@@ -1419,6 +1443,8 @@ export class UI {
     // scrolling the specs card.
     const ownedCars = owned();
     const isOwned = c.price === 0 || ownedCars.has(c.id);
+    // Explicit external selections (e.g. a class event) can open an unowned car.
+    if (!isOwned) this.ownedCarsOnly = false;
     $<HTMLButtonElement>('btn-test-drive').disabled = !isOwned;
     $('home-car-eyebrow').textContent = isOwned ? 'YOUR GARAGE / READY TO ROLL' : 'PREVIEW / BUY WITH COINS';
     // a class mode (Hyper Cup) needs the right shelf as well as ownership
@@ -1441,9 +1467,9 @@ export class UI {
           : `${activeMode.name}\u00a0· NO\u00a0BUILDS`;
     if (!isOwned) {
       const coins = bank();
-      pay.disabled = coins < c.price;
-      pay.textContent = `BUY\u00a0· ${coinPrice(c.price)}`;
-      $('market-status').textContent = coins >= c.price
+      pay.disabled = shopOpen() && coins < c.price;
+      pay.textContent = shopOpen() ? `BUY\u00a0· ${coinPrice(c.price)}` : 'SIGN IN TO BUY';
+      $('market-status').textContent = !shopOpen() ? 'Guest racing is free. Sign in to add cars to your collection.' : coins >= c.price
         ? `You have ${coinPrice(coins)}. Unlocks ${c.name} on this device.`
         : `${coinPrice(c.price - coins)} short. Race to earn more.`;
     } else {
@@ -1460,14 +1486,24 @@ export class UI {
     const shelfOwned = CARS.filter((car) => car.class === this.carTab
       && (car.price === 0 || ownedCars.has(car.id))).length;
     const shelfSize = CARS.filter((car) => car.class === this.carTab).length;
-    $('car-roster-count').textContent = `${TAB_LABEL[this.carTab]} · ${shelfOwned}/${shelfSize} OWNED`;
+    const collectionSize = CARS.filter(car => car.price === 0 || ownedCars.has(car.id)).length;
+    $('garage-owned-cars').textContent = `OWNED CARS · ${collectionSize}`;
+    $('garage-owned-cars').setAttribute('aria-pressed', String(this.ownedCarsOnly));
+    $('garage-all-cars').setAttribute('aria-pressed', String(!this.ownedCarsOnly));
+    $('garage-car-classes').hidden = this.ownedCarsOnly;
+    $('garage').classList.toggle('collection-view', this.ownedCarsOnly);
+    $('car-roster-count').textContent = this.ownedCarsOnly
+      ? `MY COLLECTION · ${collectionSize} ${collectionSize === 1 ? 'CAR' : 'CARS'}`
+      : `${TAB_LABEL[this.carTab]} · ${shelfOwned}/${shelfSize} OWNED`;
+    ($('car-prev') as HTMLButtonElement).disabled = this.ownedCarsOnly && collectionSize < 2;
+    ($('car-next') as HTMLButtonElement).disabled = this.ownedCarsOnly && collectionSize < 2;
 
     this.carButtons.forEach((button, index) => {
       const car = CARS[index];
       const carOwned = car.price === 0 || ownedCars.has(car.id);
       // the roster dot follows a skin bought since the shelf was built
       button.style.setProperty('--car-color', `#${activeColor(car.id, car.color).toString(16).padStart(6, '0')}`);
-      button.hidden = car.class !== this.carTab;
+      button.hidden = this.ownedCarsOnly ? !carOwned : car.class !== this.carTab;
       button.classList.toggle('selected', index === this.carIndex);
       button.classList.toggle('locked', !carOwned);
       button.setAttribute('aria-pressed', String(index === this.carIndex));
@@ -1493,18 +1529,19 @@ export class UI {
         btn.innerHTML =
           `<span>${UPGRADE_LABEL[stat]}</span>` +
           `<span class="pips">${pips}</span>` +
-          `<span class="cost">${maxed ? 'MAX' : `⬤ ${TIER_COST[t]}`}</span>`;
+          `<span class="cost">${maxed ? 'MAX' : !shopOpen() ? 'SIGN IN' : `⬤ ${TIER_COST[t]}`}</span>`;
         btn.classList.toggle('maxed', maxed);
-        btn.disabled = maxed || bank() < TIER_COST[t];
+        btn.disabled = maxed || shopOpen() && bank() < TIER_COST[t];
       }
     }
 
     this.renderSkins(isOwned);
   }
 
-  private buyGarageCar(): void {
+  private async buyGarageCar(): Promise<void> {
     const c = CARS[this.carIndex];
     if (c.price === 0 || owned().has(c.id)) return;
+    if (!(await requireShopSession())) return;
     if (!buyCar(c.id, c.price)) {
       this.audio.play('empty');
       $('market-status').textContent = `${coinPrice(c.price - bank())} short. Race to earn more.`;
@@ -1545,8 +1582,9 @@ export class UI {
       dot.style.background = hex;
       dot.style.color = hex; // drives the currentColor glow
       dot.title = owned ? skin.name : `${skin.name} · ⬤ ${skin.price}`;
-      dot.addEventListener('click', () => {
+      dot.addEventListener('click', async () => {
         dot.blur();
+        if (!owned && !(await requireShopSession())) return;
         if (owned) {
           equipSkin(car.id, i);
           this.audio.play('select');

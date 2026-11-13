@@ -1,3 +1,4 @@
+import { signedInDriver } from './auth-fixture.mjs';
 // UI acceptance with mocked NEAR settlement. The finish is accelerated below;
 // this does not validate reward eligibility or replace a live two-account test.
 import { chromium } from 'playwright';
@@ -49,7 +50,7 @@ await page.route('**/*', async route => {
     }
     return ok({ minted: tierRush(body.args.place), alloy: 2, circuit: 1, place: body.args.place, tx: 'race-receipt' });
   }
-  if (body.path === 'near:relay') {
+  if (body.path === 'near:relayTracked') {
     const delegate = borsh.deserialize(SCHEMA.SignedDelegate, Buffer.from(body.args.signedDelegate, 'base64'));
     const call = delegate.delegateAction.actions[0].functionCall, args = JSON.parse(Buffer.from(call.args).toString());
     mutations.push(call.methodName);
@@ -59,17 +60,18 @@ await page.route('**/*', async route => {
       balance.rush -= recipe.rush; balance['material:alloy'] -= recipe.alloy; balance['material:circuit'] -= recipe.circuit;
       inventory.push({ id: 'component:1', recipe_id: recipe.id, owner: me, maker: me, created_ms: Date.now(), installed_on: null, price: null, offer: 0 });
     } else if (call.methodName === 'install_component') {
-      if (rejectInstall) return route.fulfill({ json: { status: 'error', errorMessage: 'Fixture: installation rejected' } });
+      if (rejectInstall) return ok({ state: 'failed', message: 'Fixture: installation rejected' });
       inventory.find(p => p.id === args.part_id).installed_on = args.chassis;
     } else throw new Error(`Unexpected mutation ${call.methodName}`);
-    return ok({ tx: 'component-receipt', value: 'component:1' });
+    return ok({ state: 'confirmed', tx: 'component-receipt', value: 'component:1' });
   }
   return ok([]); // Block analytics and any other backend writes.
 });
-const idle = () => page.waitForFunction(() => !document.querySelector('.pw-status')?.textContent?.match(/Confirming|Refreshing/));
+const idle = () => page.waitForFunction(() => !document.querySelector('.pw-status')?.textContent?.match(/Completing|Confirming|Refreshing/));
 const rewardStatus = status => page.waitForFunction(s => document.querySelector('#race-rewards')?.dataset.status === s, status);
 try {
   await page.goto(`${base}/?q=1`, { waitUntil: 'networkidle' });
+  await signedInDriver(page);
   await page.waitForFunction(() => window.__game?.state === 'menu');
   await page.click('#btn-play'); await page.click('#btn-tour-done'); await page.click('#btn-garage-done');
   await page.waitForFunction(() => window.__game.state === 'racing');
@@ -190,6 +192,7 @@ try {
   await page.evaluate(async () => { const near = await import('/src/near.ts'); await near.retryRaceReward(); });
   assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('minirush.near.pending-races.v2')).length), 0);
   await page.reload({ waitUntil: 'networkidle' });
+  await signedInDriver(page);
   assert.equal(await page.evaluate(() => localStorage.getItem('minirush.crafting-target.v1')), 'street-slick');
   assert.deepEqual(errors, []);
   assert.deepEqual(mutations,['craft_component','install_component','install_component','install_component','install_component']);

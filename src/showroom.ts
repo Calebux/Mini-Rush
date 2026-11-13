@@ -48,19 +48,42 @@ export class Showroom {
     this.boundStages.add(el);
     const manual = () => {
       this.targetAngle = null;
+      if (el.id === 'home-car-stage') el.dataset.orbit = 'false';
       if (el.id === 'market-car-stage') {
         el.dataset.orbit = 'false';
         document.querySelector('.mk-motion')?.setAttribute('aria-pressed', 'false');
         document.querySelectorAll('.mk-camera [data-shot]').forEach(b => b.setAttribute('aria-pressed', 'false'));
       }
     };
-    el.addEventListener('pointerdown', e => { manual(); this.dragX = e.clientX; el.setPointerCapture(e.pointerId); });
+    el.addEventListener('pointerdown', e => {
+      if ((e.target as HTMLElement).closest('button')) return;
+      manual(); this.dragX = e.clientX; el.setPointerCapture(e.pointerId);
+    });
     el.addEventListener('pointermove', e => { if (this.dragX !== null) { this.angle += (e.clientX - this.dragX) * .008; this.dragX = e.clientX; } });
     const stop = () => { this.dragX = null; };
     el.addEventListener('pointerup', stop); el.addEventListener('pointercancel', stop); el.addEventListener('lostpointercapture', stop);
     el.addEventListener('keydown', e => {
+      if ((e.target as HTMLElement).closest('button')) return;
       if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); manual(); this.angle += e.key === 'ArrowLeft' ? -.2 : .2; }
     });
+    const motion = el.querySelector<HTMLButtonElement>('[data-home-motion]');
+    if (motion) {
+      const sync = () => {
+        motion.disabled = this.reducedMotion.matches;
+        const moving = el.dataset.orbit === 'true' && !this.reducedMotion.matches;
+        motion.setAttribute('aria-pressed', String(moving));
+        motion.textContent = this.reducedMotion.matches ? 'MOTION OFF' : moving ? 'Ⅱ PAUSE CAMERA' : '↻ RESUME CAMERA';
+      };
+      motion.addEventListener('click', () => {
+        el.dataset.orbit = String(el.dataset.orbit !== 'true');
+        this.targetAngle = null;
+        sync();
+      });
+      el.addEventListener('pointerdown', sync);
+      el.addEventListener('keydown', sync);
+      this.reducedMotion.addEventListener('change', sync);
+      sync();
+    }
   }
   setCar(spec: CarSpec): void {
     const key = JSON.stringify(spec); if (key === this.key) return; this.key = key;
@@ -96,8 +119,8 @@ export class Showroom {
     if (this.installation && (!workshop || !this.installation.update(dt))) {
       this.installation.dispose(); this.installation = null;
     }
-    if (market) {
-      const shot = `${this.stage.dataset.shot}/${this.stage.dataset.take ?? ''}`;
+    if (market || this.stage.id === 'home-car-stage') {
+      const shot = `${this.stage.id}/${this.stage.dataset.shot}/${this.stage.dataset.take ?? ''}`;
       if (shot !== this.shot) {
         this.shot = shot;
         const wanted = this.stage.dataset.shot === 'side' ? Math.PI / 2 : this.stage.dataset.shot === 'rear' ? 2.55 : .65;

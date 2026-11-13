@@ -1,6 +1,7 @@
 // Database side of the NEAR layer (convex/near.ts holds the actions that sign).
 import { v } from 'convex/values';
 import { checkProgress, rewardPlace } from '../shared/raceRules';
+import { identityMessage, IDENTITY_TTL } from '../shared/identityProof';
 import { internalMutation, internalQuery, query } from './_generated/server';
 
 export const RACE_CAP = 400;          // RUSH per race payout
@@ -9,6 +10,105 @@ export const RACE_GAP_MS = 40_000;    // no two payouts closer than a short race
 export const CREATIONS_PER_HOUR = 120;
 
 const today = () => new Date().toISOString().slice(0, 10);
+
+export const identityProof = internalQuery({
+  args: { id: v.id('identityProofs') }, handler: (ctx, { id }) => ctx.db.get(id)
+});
+export const issueIdentityProof = internalMutation({
+  args: { account: v.string(), garageKey: v.string(), identityKey: v.string(), recipient: v.string(), request: v.string(), nonce: v.string(), garage: v.string() },
+  handler: async (ctx, args) => {
+    const old = await ctx.db.query('identityProofs').withIndex('by_account_request', q => q.eq('account', args.account).eq('request', args.request)).first();
+    if (old) {
+      if (old.identityKey !== args.identityKey || old.garageKey !== args.garageKey || old.recipient !== args.recipient) throw new Error('Challenge request changed');
+      return old;
+    }
+    const recent = await ctx.db.query('identityProofs').withIndex('by_account_created', q => q.eq('account', args.account).gt('createdAt', Date.now() - 86400_000)).take(10);
+    if (recent.length >= 10 || recent.some(p => p.createdAt > Date.now() - 30_000)) throw new Error('Please wait before starting another ownership check');
+    if (recent.some(p => p.expiresAt > Date.now() && (p.state === 'issued' || p.state === 'pending'))) throw new Error('Finish the current ownership check first');
+    const expiresAt = Date.now() + IDENTITY_TTL;
+    const { garage, ...row } = args;
+    const id = await ctx.db.insert('identityProofs', { ...row, expiresAt, createdAt: Date.now(), state: 'issued',
+      message: identityMessage(args.account, args.garageKey, args.identityKey, garage, expiresAt) });
+    return (await ctx.db.get(id))!;
+  }
+});
+export const prepareIdentityProof = internalMutation({
+  args: { id: v.id('identityProofs'), tx: v.string(), signedTransaction: v.string(), identityHash: v.string() },
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.id);
+    if (!row) throw new Error('Unknown ownership check');
+    if (row.state !== 'issued') return row;
+    if (row.expiresAt <= Date.now()) throw new Error('Ownership check expired');
+    const current = await ctx.db.query('garageIdentities').withIndex('by_account', q => q.eq('account', row.account)).first();
+    const identity = await ctx.db.query('garageIdentities').withIndex('by_identity', q => q.eq('identityHash', args.identityHash)).first();
+    if (current && (current.identityHash !== args.identityHash || current.identityKey !== row.identityKey) || identity && identity.account !== row.account) throw new Error('This identity or garage is already linked');
+    const day = today();
+    const budget = await ctx.db.query('identityBudgets').withIndex('by_day', q => q.eq('day', day)).first();
+    if ((budget?.signatures ?? 0) >= 100) throw new Error('Ownership checks are at today’s limit');
+    if (budget) await ctx.db.patch(budget._id, { signatures: budget.signatures + 1 });
+    else await ctx.db.insert('identityBudgets', { day, signatures: 1 });
+    await ctx.db.patch(row._id, { state: 'pending', tx: args.tx, signedTransaction: args.signedTransaction, identityHash: args.identityHash });
+    return (await ctx.db.get(row._id))!;
+  }
+});
+export const finishIdentityProof = internalMutation({
+  args: { id: v.id('identityProofs'), verified: v.boolean(), message: v.string() },
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.id);
+    if (!row || row.state !== 'pending') return row;
+    let verified = args.verified && row.expiresAt > Date.now() && !!row.identityHash && !!row.tx;
+    const player = await ctx.db.query('nearPlayers').withIndex('by_account', q => q.eq('account', row.account)).first();
+    if (player?.publicKey !== row.garageKey) verified = false;
+    const current = await ctx.db.query('garageIdentities').withIndex('by_account', q => q.eq('account', row.account)).first();
+    const identity = row.identityHash ? await ctx.db.query('garageIdentities').withIndex('by_identity', q => q.eq('identityHash', row.identityHash!)).first() : null;
+    if (current && (current.identityHash !== row.identityHash || current.identityKey !== row.identityKey) || identity && identity.account !== row.account) verified = false;
+    if (verified && !current) await ctx.db.insert('garageIdentities', { account: row.account, garageKey: row.garageKey, identityKey: row.identityKey,
+      identityHash: row.identityHash!, proofTx: row.tx!, verifiedAt: Date.now() });
+    const message = verified ? 'Ownership link verified. Account recovery is not enabled yet.' : args.verified ? 'The ownership check expired or the garage changed. Start a new check.' : args.message;
+    await ctx.db.patch(row._id, { state: verified ? 'verified' : 'failed', result: message, signedTransaction: undefined });
+    return (await ctx.db.get(row._id))!;
+  }
+});
+export const pruneIdentityProofs = internalMutation({
+  args: {}, handler: async ctx => {
+    const expired = await ctx.db.query('identityProofs').withIndex('by_expiry', q => q.lt('expiresAt', Date.now() - 86400_000)).take(200);
+    for (const row of expired) await ctx.db.delete(row._id);
+    const budgets = await ctx.db.query('identityBudgets').withIndex('by_day', q => q.lt('day', new Date(Date.now() - 7 * 86400_000).toISOString().slice(0, 10))).take(30);
+    for (const row of budgets) await ctx.db.delete(row._id);
+  }
+});
+
+export const garageAction = internalQuery({
+  args: { digest: v.string() },
+  handler: (ctx, { digest }) => ctx.db.query('garageActions').withIndex('by_digest', q => q.eq('digest', digest)).first()
+});
+export const prepareGarageAction = internalMutation({
+  args: { digest: v.string(), account: v.string(), tx: v.string(), signedTransaction: v.string() },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db.query('garageActions').withIndex('by_digest', q => q.eq('digest', args.digest)).first();
+    if (existing) return existing;
+    const pending = await ctx.db.query('garageActions').withIndex('by_account_state', q => q.eq('account', args.account).eq('state', 'pending')).first();
+    if (pending) throw new Error('Another action for this garage is still completing.');
+    const id = await ctx.db.insert('garageActions', { ...args, state: 'pending', createdAt: Date.now() });
+    return (await ctx.db.get(id))!;
+  }
+});
+export const finishGarageAction = internalMutation({
+  args: { digest: v.string(), state: v.union(v.literal('confirmed'), v.literal('failed')), result: v.string() },
+  handler: async (ctx, { digest, state, result }) => {
+    const row = await ctx.db.query('garageActions').withIndex('by_digest', q => q.eq('digest', digest)).first();
+    if (row?.state === 'pending') await ctx.db.patch(row._id, { state, result });
+  }
+});
+export const pruneGarageActions = internalMutation({
+  args: {},
+  handler: async ctx => {
+    for (const state of ['confirmed', 'failed'] as const) {
+      const rows = await ctx.db.query('garageActions').withIndex('by_state_created', q => q.eq('state', state).lt('createdAt', Date.now() - 30 * 86400_000)).take(100);
+      for (const row of rows) await ctx.db.delete(row._id);
+    }
+  }
+});
 
 export const playerByKey = internalQuery({
   args: { publicKey: v.string() },
@@ -38,6 +138,27 @@ export const recentRacers = internalQuery({
     const since = Date.now() - 3_600_000;
     const rows = await ctx.db.query('nearPlayers').withIndex('by_paid', (q) => q.gt('lastPaidAt', since)).collect();
     return rows.length;
+  }
+});
+
+/** Records a test NEAR top-up before it is sent: one per garage, `cap` per UTC day. */
+export const reserveGrant = internalMutation({
+  args: { account: v.string(), amount: v.string(), cap: v.number() },
+  handler: async (ctx, { account, amount, cap }): Promise<'ok' | 'already' | 'budget'> => {
+    if (await ctx.db.query('nearGrants').withIndex('by_account', (q) => q.eq('account', account)).first()) return 'already';
+    const day = today();
+    const sent = await ctx.db.query('nearGrants').withIndex('by_day', (q) => q.eq('day', day)).collect();
+    if (sent.length >= cap) return 'budget';
+    await ctx.db.insert('nearGrants', { account, day, amount, at: Date.now() });
+    return 'ok';
+  }
+});
+
+export const settleGrant = internalMutation({
+  args: { account: v.string(), tx: v.string() },
+  handler: async (ctx, { account, tx }) => {
+    const row = await ctx.db.query('nearGrants').withIndex('by_account', (q) => q.eq('account', account)).first();
+    if (row) await ctx.db.patch(row._id, { tx });
   }
 });
 

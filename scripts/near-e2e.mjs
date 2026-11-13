@@ -19,7 +19,7 @@ const call = async (path, args) => {
 };
 const view = (method,args={}) => new Account(garage,rpc).provider.callFunction({contractId:garage,method,args});
 assert.equal((await view('component_recipes')).length,12);
-assert.equal((await view('nft_metadata')).symbol,'RUSHPART');
+assert.equal((await view('nft_metadata')).symbol,'MINIRUSH');
 const makePlayer = async () => {
   const key = KeyPair.fromRandom('ed25519');
   const {account} = await call('near:createPlayer',{publicKey:key.getPublicKey().toString()});

@@ -1,11 +1,12 @@
 {
   "name": "minirush",
   "version": "0.1.0",
-  "description": "MiniRush Outbreak GP \u2014 mobile-first zombie racing for the web",
+  "description": "MiniRush Outbreak GP — mobile-first zombie racing for the web",
   "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite --host",
+    "dev:auth": "vite --host localhost --port 3000 --strictPort",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host",
     "smoke": "node scripts/smoke.mjs",
@@ -18,12 +19,23 @@
     "check:market": "node scripts/check-cinematic-market.mjs",
     "check:race-workshop": "node scripts/check-race-workshop.mjs",
     "check:test-drive": "node scripts/check-test-drive.mjs",
-    "check:handling-rivals": "node scripts/check-handling-rivals.mjs"
+    "check:handling-rivals": "node scripts/check-handling-rivals.mjs",
+    "check:dealer-orders": "node --experimental-strip-types scripts/check-dealer-orders.mjs",
+    "check:garage-recovery": "node --experimental-strip-types scripts/check-garage-recovery.mjs && node --experimental-strip-types scripts/check-garage-recovery.mjs --guest",
+    "check:garage-recovery-ui": "node scripts/check-garage-recovery-ui.mjs",
+    "check:near-auth": "node --experimental-strip-types scripts/check-near-auth.mjs",
+    "check:identity-proof": "node --experimental-strip-types scripts/check-identity-proof.mjs",
+    "check:auth-origin": "node scripts/check-auth-origin.mjs",
+    "check:editions": "node scripts/check-editions.mjs"
   },
   "dependencies": {
+    "@fast-auth-near/browser-sdk": "1.4.2",
+    "@fast-auth-near/javascript-provider": "1.4.1",
     "@types/three": "^0.185.1",
     "borsh": "^2.0.0",
+    "buffer": "6.0.3",
     "near-api-js": "^7.4.0",
+    "near-auth-api": "npm:near-api-js@5.1.1",
     "three": "^0.185.1",
     "typescript": "^7.0.2",
     "vite": "^8.1.4"

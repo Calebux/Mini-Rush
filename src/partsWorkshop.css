@@ -50,6 +50,26 @@
 @media (min-width: 850px) { #workshop .workshop-panel { max-height: calc(100dvh - 130px); overflow-y: auto; } }
 .pw-track { border: 1px solid var(--line); border-radius: 5px; background: transparent; color: var(--gold-hi); padding: 8px 10px; min-height: 36px; font: 800 9px sans-serif; cursor: pointer; }
 .pw-track[aria-pressed=true] { background: #4d91ff14; }
+.pw-market-nav { display: flex; gap: 6px; margin: 10px 0 16px; }
+.pw-market-nav button { flex: 1; min-height: 40px; padding: 9px 5px; border: 1px solid var(--line); border-radius: 5px; background: transparent; color: var(--muted); font: 800 9px sans-serif; cursor: pointer; }
+.pw-market-nav button[aria-pressed=true] { color: var(--cream); border-color: var(--gold); }
+.pw-order-intro { padding: 2px 0 12px; }
+.pw-order-intro small { display: block; color: var(--gold); font: 800 8px sans-serif; letter-spacing: 1.5px; }
+.pw-order-intro strong { display: block; margin-top: 7px; font: 700 17px/1.2 sans-serif; }
+.pw-order-intro p, .pw-order p { font: 11px/1.5 sans-serif; color: var(--muted); }
+.pw-order { margin: 0 0 12px; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: #ffffff03; }
+.pw-order header { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 8px; font: 700 11px sans-serif; }
+.pw-order header small { font: 700 7px sans-serif; letter-spacing: .8px; color: #b5c9ad; }
+.pw-order-title { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; margin-top: 14px; }
+.pw-order-title strong { font: 700 15px sans-serif; }
+.pw-order-title span { font: 700 8px sans-serif; color: var(--gold); }
+.pw-order-title b { font-size: 23px; font-variant-numeric: tabular-nums; }
+.pw-order-reason { padding-bottom: 10px; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.pw-order dl { display: flex; gap: 25px; font: 10px/1.5 sans-serif; }
+.pw-order dt { color: var(--muted); }
+.pw-order dd { margin: 3px 0 0; color: var(--cream); font-weight: 700; }
+.pw-order .pw-order-cost { color: var(--gold-hi); font-size: 9px; }
+.pw-order .pw-order-hint { font-size: 10px; }
 #workshop-installation { position: relative; width: 100%; margin: 0 0 14px; box-sizing: border-box; padding: 13px 16px; border: 1px solid #93dfef88; border-radius: 9px; background: #0b192cf0; box-shadow: 0 6px 30px #0005; text-align: left; pointer-events: none; z-index: 2; }
 #workshop-installation[hidden] { display: none; }
 #workshop-installation small { display: block; color: #8fdded; font: 700 8px sans-serif; letter-spacing: 1.5px; }

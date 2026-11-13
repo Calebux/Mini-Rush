@@ -1,3 +1,4 @@
+import { signedInDriver } from './auth-fixture.mjs';
 // Isolated browser fixture: no transactions or backend writes leave this test.
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
@@ -5,6 +6,7 @@ import { mkdir } from 'node:fs/promises';
 import * as borsh from 'borsh';
 import { SCHEMA } from 'near-api-js';
 const base = process.argv[2] ?? 'http://127.0.0.1:5174';
+let loginRequired = false; // set once the market shows whether this server asks for a login
 const out = '/tmp/minirush-cinematic'; await mkdir(out, { recursive: true });
 const me = 'preview.minirush-garage.testnet';
 let offline = false, held = [{ token_id: 'rush', balance: '5000' }], calls = [];
@@ -33,18 +35,19 @@ await page.route('**/*', async route => {
     return route.fulfill({ json: { jsonrpc: '2.0', id: body.id, result } });
   }
   if (body.path === 'near:createPlayer') return route.fulfill({ json: { status: 'success', value: { account: me, welcome: 0, created: true } } });
-  if (body.path === 'near:relay') {
+  if (body.path === 'near:relayTracked') {
     const delegate = borsh.deserialize(SCHEMA.SignedDelegate, Buffer.from(body.args.signedDelegate, 'base64'));
     const call = delegate.delegateAction.actions[0].functionCall, args = JSON.parse(Buffer.from(call.args).toString());
     if (call.methodName === 'consume') {
       assert.equal(args.token_id, 'part:nitro-can');
       held = held.filter(h => h.token_id !== args.token_id);
-      return route.fulfill({ json: { status: 'success', value: { tx: 'fixture-consume', value: null } } });
+      return route.fulfill({ json: { status: 'success', value: { state: 'confirmed', tx: 'fixture-consume', value: null } } });
     }
     assert.equal(call.methodName, 'buy'); calls.push(args);
+    assert.equal(req.headers().authorization, loginRequired ? 'Bearer fixture-login-token' : undefined, 'a purchase carries a login token only where sign-in is required');
     const offer = list.find(l => l.token_id === args.token_id); assert.equal(args.max_price, offer.price);
     held[0].balance = String(Number(held[0].balance) - Number(offer.price)); held.push({ token_id: args.token_id, balance: '1' }); offer.stock--;
-    return route.fulfill({ json: { status: 'success', value: { tx: 'fixture-receipt', value: null } } });
+    return route.fulfill({ json: { status: 'success', value: { state: 'confirmed', tx: 'fixture-receipt', value: null } } });
   }
   return route.fulfill({ json: { status: 'success', value: body.path === 'near:beginRace' ? 'fixture-race' : [] } });
 });
@@ -52,7 +55,7 @@ try {
   await page.goto(`${base}/?q=1`, { waitUntil: 'networkidle' });
   await page.waitForFunction(() => window.__game?.state === 'menu');
   await page.click('#btn-market-home');
-  await page.waitForFunction(() => document.querySelector('.mk-status')?.textContent === 'Dealer prices · NEAR testnet');
+  await page.waitForFunction(() => document.querySelector('.mk-status')?.textContent === 'Live dealer prices');
   await page.click('.mk-motion'); // stop the default orbit for repeatable images
   await page.waitForTimeout(900);
   await page.screenshot({ path: `${out}/market-desktop.png` });
@@ -78,6 +81,17 @@ try {
   assert.match(await page.locator('.mk-reason p').textContent(), /Four available/);
   assert.equal(await page.locator('.mk-trend').textContent(), '▼ 10% UNDER LIST');
   assert.equal(await page.locator('.mk-ledger').getAttribute('href'), 'economy/');
+  // By default the garage on this device buys directly. A server started with
+  // VITE_SHOP_SIGN_IN=required puts the login in front of the first purchase.
+  loginRequired = await page.locator('.mk-buy').textContent() === 'SIGN IN TO BUY';
+  if (loginRequired) {
+    await page.click('.mk-buy');
+    await page.waitForFunction(() => document.querySelector('#social-sign-in').open);
+    assert.equal(calls.length, 0, 'guest cannot send a purchase');
+    assert.equal(held[0].balance, '5000');
+    await page.locator('[data-auth-close]').first().click();
+    await signedInDriver(page);
+  } else assert.equal(await page.locator('#social-sign-in').count(), 0, 'no login panel when the garage is the access');
   await page.click('.mk-buy');
   await page.waitForFunction(() => document.querySelector('.mk-meta')?.textContent.includes('Owned ×1'));
   assert.equal(calls.length, 1); assert.equal(calls[0].token_id, 'car:r8');

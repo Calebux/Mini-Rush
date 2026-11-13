@@ -1,0 +1,25 @@
+#garage-activity { width: min(520px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); box-sizing: border-box; overflow-y: auto; padding: 22px; background: #1b1d18; color: #f1efe9; border: 1px solid #d7c19b66; border-radius: 10px; font: 12px/1.5 system-ui,sans-serif; box-shadow: 0 20px 80px #0009; }
+#garage-activity::backdrop { background: #080b0bc9; }
+#garage-activity header { display: flex; justify-content: space-between; align-items: center; }
+#garage-activity header small { color: #d7c19b; letter-spacing: 2px; font-size: 9px; }
+#garage-activity h2 { font-size: 25px; margin: 3px 0; }
+#garage-activity button { min-height: 40px; padding: 8px 12px; background: #f1efe9; color: #191a17; border: 0; border-radius: 4px; font: 800 10px system-ui; cursor: pointer; }
+#garage-activity button:disabled { opacity: .5; cursor: default; }
+#garage-activity .ga-note, #garage-activity time, #garage-activity p { color: #b3b3aa; }
+#garage-activity ol { list-style: none; margin: 18px 0; padding: 0; }
+#garage-activity li { padding: 14px 0; border-top: 1px solid #eeead323; overflow-wrap: anywhere; }
+#garage-activity li strong, #garage-activity time { display: block; }
+#garage-activity time { font-size: 10px; margin: 3px 0 7px; }
+#garage-activity li > b { font-size: 9px; letter-spacing: 1px; color: #d7c19b; }
+#garage-activity li[data-state=confirmed] > b { color: #b5c9ad; }
+#garage-activity footer { display: flex; gap: 12px; align-items: center; justify-content: space-between; }
+#garage-activity footer span { color: #b3b3aa; font-size: 8px; }
+#garage-activity details { font-size: 11px; margin-top: 10px; }
+#garage-activity summary { cursor: pointer; color: #d7c19b; }
+#garage-activity a { color: #f1e9da; }
+#garage-activity .ga-about { margin-top: 20px; padding-top: 12px; border-top: 1px solid #eeead323; }
+#garage-activity :is(button,summary,a):focus-visible { outline: 2px solid #d7c19b; outline-offset: 3px; }
+.mk-activity { color: inherit; background: transparent; border: 1px solid #ffffff30; border-radius: 4px; padding: 7px 10px; font: 800 9px sans-serif; cursor: pointer; }
+.pw-payment-details, .rr-payment-details { font: 10px/1.5 sans-serif; color: var(--muted); margin: 8px 0; }
+.pw-payment-details summary, .rr-payment-details summary { cursor: pointer; }
+.pw-payment-details a, .rr-payment-details a { color: var(--gold-hi); }

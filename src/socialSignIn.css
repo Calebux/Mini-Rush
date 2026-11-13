@@ -1,0 +1,24 @@
+#social-sign-in { box-sizing: border-box; width: min(460px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); overflow: auto; padding: 26px; background: #171a17; color: #f1efe9; border: 1px solid #d7c19b66; border-radius: 12px; font: 13px/1.6 system-ui, sans-serif; box-shadow: 0 24px 90px #000a; }
+#social-sign-in::backdrop { background: #080b0bd9; }
+#social-sign-in header, #social-sign-in footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+#social-sign-in header small { font-size: 9px; letter-spacing: 2px; color: #d7c19b; }
+#social-sign-in h2 { font-size: 28px; line-height: 1.15; margin: 22px 0 16px; }
+#social-sign-in p { color: #c1c3b8; }
+#social-sign-in .auth-scope { padding: 14px; background: #ffffff05; border-left: 2px solid #d7c19b; font-size: 12px; }
+#social-sign-in .auth-status { min-height: 42px; padding: 12px 0; color: #d7c19b; font-size: 12px; }
+#social-sign-in button { min-height: 44px; border: 1px solid #ffffff24; border-radius: 5px; padding: 10px 14px; font: 650 12px system-ui; color: inherit; background: transparent; cursor: pointer; }
+#social-sign-in button:disabled { opacity: .45; cursor: default; }
+#social-sign-in .auth-primary { display: block; width: 100%; background: #f1efe9; color: #171a17; }
+#social-sign-in .auth-secondary { width: 100%; margin-top: 10px; }
+#social-sign-in [hidden] { display: none !important; }
+#social-sign-in footer { margin-top: 24px; padding-top: 18px; border-top: 1px solid #ffffff18; }
+#social-sign-in footer span { font-size: 10px; color: #a6ad9c; }
+#social-sign-in details { margin-top: 20px; font-size: 11px; }
+#social-sign-in summary { cursor: pointer; color: #d7c19b; }
+#social-sign-in code { display: block; overflow-wrap: anywhere; }
+#social-sign-in .auth-proof { border-top: 1px solid #ffffff24; margin-top: 20px; padding-top: 12px; }
+#social-sign-in .auth-proof h3 { margin: 6px 0; font-size: 15px; }
+#social-sign-in .auth-proof p { font-size: 11px; }
+#social-sign-in [data-auth-proof-status] { color: #d7c19b; }
+#social-sign-in :is(button,summary):focus-visible { outline: 2px solid #d7c19b; outline-offset: 3px; }
+.social-sign-in-entry { min-height: 44px; margin: 10px 0; padding: 10px 16px; border: 1px solid #d7c19b66; border-radius: 5px; background: #171a17; color: #f1efe9; font: 650 11px system-ui; cursor: pointer; }

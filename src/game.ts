@@ -174,6 +174,7 @@ export class Game {
   // menu-family camera: which page is up, turntable angle, flyby distance
   private uiScene: 'menu' | 'garage' | 'tour' | 'workshop' | 'market' = 'menu';
   private marketCar = 'rush-one';
+  private marketPaint: number | null = null; // a limited edition's own paint
   private showroom: Showroom | null = null;
   private workshopPreview: Build | null = null;
   private workshopChassis: string | null = null;
@@ -328,7 +329,7 @@ export class Game {
     this.ui.onWorkshopPreview = (build, chassis) => {
       this.showroom?.clearInstallation(); this.workshopPreview = build; this.workshopChassis = chassis ?? null;
     };
-    this.ui.onMarketPreview = id => { this.marketCar = id; };
+    this.ui.onMarketPreview = (id, paint) => { this.marketCar = id; this.marketPaint = paint ?? null; };
     this.ui.onComponentInstalled = (recipe, chassis) => {
       if (this.uiScene === 'workshop' && this.workshopChassis === chassis) this.showroom?.installComponent(recipe);
     };
@@ -585,7 +586,7 @@ export class Game {
     const score = Math.round(placeBonus(r.place, r.field) + Math.max(0, ((LAPS * LAP_METRES) / 18 - r.time) * 4));
     const standings = r.results.map((x) => ({ name: x.name, car: x.you ? car : 'VIPER GT', time: x.time, estimated: x.estimated, you: x.you }));
     track('race');
-    this.ui.completeRaceRewards(CARS[this.carIndex].id, null, 'City GP pays local coins. NEAR salvage is available in connected circuit races.');
+    this.ui.completeRaceRewards(CARS[this.carIndex].id, null, 'City GP pays coins. Connected circuit races also earn RUSH and crafting materials.');
     this.ui.showResults(r.place, r.time, coins, score, LAPS, car, false, 0, false, false, 0, true, standings);
     void this.audio.playMusic('menu');
   }
@@ -1533,7 +1534,7 @@ export class Game {
   renderFrame(forceWorld = false): void {
     if (!forceWorld && this.state === 'menu' && this.uiScene !== 'tour') {
       this.showroom ??= new Showroom(this.assets);
-      const spec = this.uiScene === 'market' ? CARS.find(c => c.id === this.marketCar)!
+      const spec = this.uiScene === 'market' ? { ...CARS.find(c => c.id === this.marketCar)!, ...(this.marketPaint === null ? {} : { color: this.marketPaint }) }
         : this.workshopPreview ? workshopSpec(CARS.find(c => c.model === 300)!, this.workshopPreview) : this.carSpec(this.workshopChassis ? Math.max(0, CARS.findIndex(c => c.id === this.workshopChassis)) : this.carIndex);
       this.showroom.setCar(spec);
       this.showroom.render(this.renderer, this.uiScene === 'workshop', this.uiScene === 'garage', this.uiScene === 'market');

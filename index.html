@@ -1566,11 +1566,16 @@
         <button class="driver-chip" id="driver-chip"></button>
       </div>
     </div>
-    <div id="home-car-stage" tabindex="0" role="img" aria-label="Your selected car in the showroom. Drag or use left and right arrow keys to rotate.">
+    <div id="home-car-stage" tabindex="0" role="group" aria-label="Your selected car in the showroom. Drag or use left and right arrow keys to rotate." data-shot="front" data-orbit="true">
       <div class="showroom-caption"><small id="home-car-eyebrow">YOUR GARAGE / READY TO ROLL</small><div id="home-car-name">VIPER GT</div></div>
       <span class="showroom-hint">DRAG TO EXPLORE ↔</span>
+      <button type="button" class="home-camera-motion" data-home-motion aria-pressed="true" aria-label="Automatic camera movement">Ⅱ PAUSE CAMERA</button>
     </div>
     <div class="menu-panel">
+      <section class="home-account" aria-label="Your driver garage">
+        <div><small data-home-session-label>YOUR GARAGE</small><p data-home-session-copy>Saved on this device. No wallet, no sign-in.</p></div>
+        <button type="button" id="home-sign-in" data-social-sign-in hidden>SIGN IN <span aria-hidden="true">↗</span></button>
+      </section>
       <div class="setup-strip">
         <button class="setup-pill" id="pill-city" type="button"><span>CITY</span><strong id="menu-city">LAGOS</strong></button>
         <button class="setup-pill" id="pill-car" type="button"><span>CAR</span><strong id="menu-car">VIPER GT</strong></button>
@@ -1654,7 +1659,12 @@
       <span class="showroom-hint">DRAG TO ROTATE ↔</span>
     </div>
     <div class="car-roster-shell">
-      <div class="car-tabs" role="tablist" aria-label="Car classes">
+      <div class="garage-collection-filter" role="group" aria-label="Garage collection filter">
+        <button id="garage-owned-cars" type="button" aria-pressed="false">OWNED CARS</button>
+        <button id="garage-all-cars" type="button" aria-pressed="true">ALL CARS</button>
+        <button type="button" data-garage-activity>ACTIVITY</button>
+      </div>
+      <div class="car-tabs" id="garage-car-classes" role="tablist" aria-label="Car classes">
         <button class="car-tab" id="tab-hyper" type="button" role="tab" data-class="hyper">HYPER</button>
         <button class="car-tab" id="tab-fast" type="button" role="tab" data-class="fast">FAST</button>
         <button class="car-tab junk" id="tab-junk" type="button" role="tab" data-class="junk">JUNKYARD</button>

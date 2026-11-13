@@ -1,3 +1,4 @@
+import { signedInDriver } from './auth-fixture.mjs';
 // Browser interaction check with an isolated, in-memory chain/backend fixture.
 // Contract accounting and authorization are tested in Rust, not by this fixture.
 import { chromium } from 'playwright';
@@ -32,6 +33,7 @@ await page.route('**/*', async route => {
       switch (body.params.method_name) {
         case 'component_inventory': value = inventory; break;
         case 'component_offers': value = offers; break;
+        case 'component_orders': value = []; break;
         case 'mt_tokens_for_owner': value = Object.entries(balance).map(([token_id, n]) => ({ token_id, balance: String(n) })); break;
         case 'listings': value = []; break;
         default: throw new Error(`Unmocked view ${body.params.method_name}`);
@@ -41,7 +43,7 @@ await page.route('**/*', async route => {
     return route.fulfill({ json: { jsonrpc: '2.0', id: body.id, result } });
   }
   if (body.path === 'near:createPlayer') return route.fulfill({ json: { status: 'success', value: { account: me, welcome: 0, created: true } } });
-  if (body.path === 'near:relay') {
+  if (body.path === 'near:relayTracked') {
     const delegate = borsh.deserialize(SCHEMA.SignedDelegate, Buffer.from(body.args.signedDelegate, 'base64'));
     const call = delegate.delegateAction.actions[0].functionCall;
     const args = JSON.parse(Buffer.from(call.args).toString()); calls.push(call.methodName);
@@ -67,7 +69,7 @@ await page.route('**/*', async route => {
       }
       default: throw new Error(`Unmocked mutation ${call.methodName}`);
     }
-    return route.fulfill({ json: { status: 'success', value: { tx: 'test-transaction', value: null } } });
+    return route.fulfill({ json: { status: 'success', value: { state: 'confirmed', tx: 'test-transaction', value: null } } });
   }
   if (body.path === 'near:beginRace') return route.fulfill({ json: { status: 'success', value: 'fixture-race' } });
   if (body.path === 'near:raceProgress') { progressCalls.push(body.args); return route.fulfill({ json: { status: 'success', value: null } }); }
@@ -75,9 +77,10 @@ await page.route('**/*', async route => {
   return route.fulfill({ json: { status: 'success', value: [] } });
 });
 const action = (name, id) => page.locator(`[data-action="${name}"]${id ? `[data-id="${id}"]` : ''}`);
-const idle = async () => { await page.waitForFunction(() => !document.querySelector('.pw-status')?.textContent?.match(/Confirming|Refreshing/)); };
+const idle = async () => { await page.waitForFunction(() => !document.querySelector('.pw-status')?.textContent?.match(/Completing|Confirming|Refreshing/)); };
 try {
   await page.goto(`${base}/?q=1`, { waitUntil: 'networkidle' });
+  await signedInDriver(page);
   await page.waitForFunction(() => window.__game?.state === 'menu');
   await page.click('#btn-garage-menu');
   await page.click('#btn-workshop-garage');
@@ -142,6 +145,7 @@ try {
   assert.equal(await page.locator('#garage').isVisible(),true);
   assert.equal(await page.evaluate(() => window.__game.workshopChassis),null);
   await page.reload({ waitUntil: 'networkidle' });
+  await signedInDriver(page);
   await page.waitForFunction(() => window.__game?.state === 'menu' && window.__game.carSpec(0).grip === 1.08);
   await page.click('#btn-play'); await page.click('#btn-tour-done'); await page.click('#btn-garage-done');
   await page.waitForFunction(() => window.__game?.state === 'racing');

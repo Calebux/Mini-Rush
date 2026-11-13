@@ -107,3 +107,49 @@
   .mk-status { order: 3; width: 100%; margin: 0; font-size: 9px; }
   .mk-select { flex-basis: 150px; padding: 10px 12px; } .mk-select strong { font-size: 15px; }
 }
+
+/* Limited editions: numbered cars priced in NEAR. Gold marks everything paid in NEAR. */
+.mk-near { padding: 5px 10px; border: 1px solid #fcd34d66; border-radius: 4px 10px 10px 10px; background: #fcd34d14; color: #fcd34d; font: inherit; font-size: 11px; font-weight: 800; letter-spacing: 1px; cursor: pointer; }
+.mk-near[hidden], .mk-wallet[hidden] { display: none; }
+.mk-near:hover, .mk-near:focus-visible { background: #fcd34d26; }
+.mk-limited { color: #fcd34d; }
+.mk-select[data-select^="edition:"] { border-color: #fcd34d55; background: linear-gradient(130deg, #3a2f12e6, #121d2be6); }
+.mk-select[data-select^="edition:"] i, .mk-select[data-select^="edition:"] small { color: #fcd34d; }
+.mk-nearprice small { color: #fcd34d; font-weight: 800; letter-spacing: 1.4px; }
+.mk-run { height: 4px; margin: 0 0 12px; background: #ffffff14; border-radius: 2px; overflow: hidden; }
+.mk-run i { display: block; height: 100%; background: linear-gradient(90deg, #fcd34d, #ff9a3d); }
+.mk-buy-near { border-color: #fcd34d99; background: linear-gradient(110deg, #c98a12, #e0a91e); color: #140d00; font-weight: 800; }
+.mk-buy-near:disabled { background: #273449; border-color: #758bab35; color: #a2b0c5; }
+.mk-own, .mk-asks { margin-top: 14px; padding-top: 14px; border-top: 1px solid #fcd34d2e; }
+.mk-own-head { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.mk-own-head strong { font-size: 11px; letter-spacing: 1.5px; color: #fcd34d; }
+.mk-own small, .mk-wallet small { display: block; font-size: 10px; line-height: 1.5; color: var(--mk-muted); }
+.mk-own p { margin: 0 0 10px; font-size: 12px; line-height: 1.5; color: #b3c2d8; }
+.mk-own p b { color: #fcd34d; }
+.mk-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 6px; }
+.mk-list span, .mk-asks h3, .mk-wallet label, .mk-wallet header small { font-size: 9px; letter-spacing: 1.6px; font-weight: 700; color: #a6c8e5; }
+.mk-list-price { min-height: 40px; padding: 0 12px; border: 1px solid #b8d9ff44; border-radius: 6px; background: #060c16; color: #fff; font: inherit; font-size: 16px; }
+.mk-list-price:focus-visible { outline: 2px solid #fcd34d; outline-offset: 1px; }
+.mk-ghost { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 0 14px; margin-top: 8px; border: 1px solid #fcd34d77; border-radius: 6px; background: #fcd34d10; color: #fcd34d; font: inherit; font-size: 10px; font-weight: 800; letter-spacing: 1.2px; text-decoration: none; cursor: pointer; }
+.mk-ghost:disabled { border-color: #758bab35; color: #a2b0c5; background: transparent; cursor: default; }
+.mk-asks h3 { margin: 0 0 6px; }
+.mk-ask { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid #ffffff10; }
+.mk-ask span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.mk-ask b { font-size: 14px; color: #fff; }
+.mk-ask small { font-size: 9px; color: var(--mk-muted); overflow: hidden; text-overflow: ellipsis; }
+.mk-ask strong { font-size: 13px; color: #fcd34d; white-space: nowrap; }
+.mk-ask .mk-ghost { margin-top: 0; min-height: 36px; }
+.mk-wallet { position: absolute; z-index: 6; top: 74px; right: 22px; width: min(340px, calc(100vw - 32px)); box-sizing: border-box; padding: 18px; background: linear-gradient(140deg, #1b1a12f7, #09111cf7); border: 1px solid #fcd34d55; border-top-color: #fcd34dcc; border-radius: 4px 16px 16px 16px; box-shadow: 0 24px 60px #000a; }
+.mk-wallet header { display: flex; justify-content: space-between; align-items: center; }
+.mk-wallet header button { min-width: 36px; min-height: 36px; border: 0; background: none; color: #c9d5e5; font-size: 14px; cursor: pointer; }
+.mk-wallet p { margin: 0 0 12px; font-size: 12px; line-height: 1.55; color: #b3c2d8; }
+.mk-wallet label { display: flex; flex-direction: column; gap: 6px; }
+.mk-wallet code { padding: 9px 10px; border-radius: 6px; background: #060c16; color: #e9f1fb; font-size: 11px; letter-spacing: 0; overflow-wrap: anywhere; user-select: all; }
+.mk-wallet-actions { display: flex; gap: 8px; margin-bottom: 8px; }
+.mk-wallet-actions .mk-ghost { flex: 1; }
+.mk-wallet .mk-buy { margin-top: 14px; }
+.mk-wallet-note { min-height: 18px; margin: 10px 0 0 !important; color: #fcd34d !important; }
+@media (max-width: 760px) {
+  .mk-near { font-size: 10px; padding: 4px 8px; }
+  .mk-wallet { top: 62px; right: 16px; }
+}

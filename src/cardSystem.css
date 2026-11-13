@@ -1,0 +1,114 @@
+/* Shared materials for menu cards. Race HUD colours remain independent. */
+:root {
+  --card-surface: linear-gradient(145deg, #242520f5, #171815fa);
+  --card-raised: #ffffff04;
+  --card-paper: #f1efe9;
+  --card-muted: #b3b3aa;
+  --card-accent: #d7c19b;
+  --card-line: #eeead323;
+  --card-radius: 8px;
+  --card-control-radius: 5px;
+  --card-shadow: 0 18px 48px #0004, inset 0 1px #ffffff06;
+  --card-font: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+:is(#menu,#garage,#workshop,#market,#tour,#modes,#results,#profile,#welcome,#social-sign-in,#garage-activity) {
+  --nn-glass: #191a18eb; --nn-glass-hi: #242520;
+  --nn-accent: var(--card-accent); --nn-accent-hi: var(--card-paper);
+  --nn-cyan: var(--card-accent); --nn-violet: #9a927e;
+  --nn-text: var(--card-paper); --nn-muted: var(--card-muted);
+  --nn-line: var(--card-line); --nn-line-hi: #d7c19b66;
+  --nn-display: var(--card-font); --nn-money: var(--card-accent);
+  --rg-deep: #242421; --rg-deep-2: #151614; --rg-glass: #191a18f5;
+  --gold: var(--card-accent); --gold-hi: #f1e9da; --gold-ink: #191a17;
+  --cream: var(--card-paper); --muted: var(--card-muted); --line: var(--card-line);
+  --console-paper: var(--card-paper); --console-muted: var(--card-muted);
+  --console-line: var(--card-line); --console-panel: #191a18eb;
+  color: var(--card-paper); font-family: var(--card-font);
+}
+#menu .menu-panel, #garage .garage-specs, #garage .car-roster-shell,
+#workshop .workshop-panel, #market .mk-body, #tour .stage-card,
+#modes .mode-slide, #profile .profile-card, #race-rewards,
+#social-sign-in, #garage-activity {
+  background: var(--card-surface); border: 1px solid var(--card-line);
+  border-top-color: #eeead345; border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+}
+#menu { background: linear-gradient(180deg, #11120fbb, transparent 27%, transparent 40%, #11120fe6 70%, #11120f); }
+#menu .logo { text-shadow: none; }
+#menu .logo em { background: none; color: var(--card-accent); }
+#menu .sub-logo, #menu #home-car-eyebrow { color: var(--card-accent); }
+#menu #home-car-name { text-shadow: 0 2px 12px #000; }
+#menu :is(.setup-pill,.mode-home,.menu-track,#btn-bounty),
+#garage :is(.car-roster-item,.upg), #workshop :is(.part-card,.pw-order),
+#market .mk-select, #profile .pstat, #results :is(.tally,.dock-btn) {
+  border: 1px solid var(--card-line); border-radius: var(--card-control-radius);
+  background: var(--card-raised); box-shadow: none;
+}
+#menu .home-account {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 0 0 12px; border-bottom: 1px solid var(--card-line); text-align: left;
+}
+.home-account small { font: 750 9px/1.4 var(--card-font); letter-spacing: 1.6px; color: var(--card-accent); }
+.home-account p { margin: 4px 0 0; color: var(--card-muted); font: 12px/1.4 var(--card-font); }
+#home-sign-in {
+  flex-shrink: 0; min-height: 44px; padding: 10px 14px;
+  border: 1px solid #d7c19b66; border-radius: var(--card-control-radius);
+  background: #d7c19b0b; color: var(--card-paper); cursor: pointer;
+  font: 750 10px/1.4 var(--card-font); letter-spacing: .8px;
+}
+#menu #btn-play, #garage :is(#btn-buy-car,#btn-garage-done),
+#workshop :is(#workshop-save,.pw-actions .pw-action), #market .mk-buy,
+#tour .stage-cta, #modes .mode-cta, #results .dock-hero,
+#social-sign-in .auth-primary, #race-rewards .rr-workshop {
+  background: var(--card-paper); color: #191a17; border: 1px solid var(--card-paper);
+  border-radius: var(--card-control-radius); box-shadow: none; text-shadow: none;
+  font-family: var(--card-font); font-style: normal;
+}
+#menu #btn-garage-menu, #menu .driver-chip, #menu .mode-home-cta,
+#market :is(.mk-back,.mk-camera button,.mk-refresh), #tour :is(.stage-back,.stage-arrow),
+#social-sign-in button, #garage-activity button {
+  border-radius: var(--card-control-radius); box-shadow: none; font-family: var(--card-font);
+}
+#menu #btn-bounty { border-left: 2px solid var(--card-accent); }
+#menu #btn-bounty.live { box-shadow: none; border-color: #d7c19b66; }
+#menu #btn-play { animation: none; }
+#market {
+  --mk-muted: var(--card-muted);
+  background: linear-gradient(180deg, #11120fe0, transparent 38%, #11120f47 65%, #11120f), linear-gradient(90deg, #11120f40, transparent 55%, #11120fa6);
+  font-family: var(--card-font);
+}
+#market :is(.mk-title small,.mk-edition,.mk-kicker,.mk-stage-caption i,.mk-ledger,.mk-reason a,.mk-toast a) { color: var(--card-accent); }
+#market :is(.mk-heading p,.mk-drag,.mk-dealer,.mk-rating,.mk-reason p,.mk-preview-note p) { color: var(--card-muted); }
+#market :is(.mk-title strong,.mk-heading h1) { font-style: normal; }
+#market .mk-heading h1 { text-shadow: 0 2px 30px #11120f; }
+#market .mk-stats em { background: var(--card-accent); }
+#market .mk-price b { color: var(--card-paper); }
+#market .mk-reason { background: #d7c19b08; border-left-color: var(--card-accent); }
+#market :is(.mk-head,.mk-item,.mk-preview-note,.mk-collection) { border-color: var(--card-line); }
+#market :is(.mk-back,.mk-camera button,.mk-refresh) { background: #191a18d9; color: var(--card-muted); border-color: var(--card-line); }
+#market .mk-camera button[aria-pressed=true],
+#garage .car-roster-item.selected, #workshop .part-card[aria-pressed=true],
+#market .mk-select[aria-pressed=true] { background: #d7c19b0e; color: var(--card-paper); border-color: #d7c19b99; box-shadow: inset 0 2px var(--card-accent); }
+#market .mk-select { color: var(--card-paper); }
+#market .mk-select :is(span,small) { color: var(--card-muted); }
+#market .mk-select strong { font-style: normal; }
+#market .mk-rail { scrollbar-color: #77776b #191a18; }
+#market .mk-toast { background: #191a18f5; border-color: #d7c19b66; border-radius: var(--card-radius); }
+#market .mk-buy:disabled { background: #ffffff08; color: var(--card-muted); border-color: var(--card-line); }
+#workshop .pw-actions :is([data-action=recycle],[data-action=cancel],[data-action=list]) { background: transparent; border-color: var(--card-line); color: var(--card-paper); }
+#tour .stage-title em, #tour #map-route, #results .console-eyebrow { color: var(--card-accent); }
+#modes .mode-slide.is-active { border-color: #d7c19b99; box-shadow: var(--card-shadow); }
+#modes .slide-icon { background: #ffffff04; border-color: var(--card-line); box-shadow: none; border-radius: var(--card-control-radius); }
+#modes .mode-card-stats > span { border-radius: var(--card-control-radius); }
+#modes .mode-cta.locked { background: #ffffff08; color: var(--card-muted); border-color: var(--card-line); }
+#social-sign-in, #garage-activity { box-shadow: 0 24px 90px #000a; }
+:is(#menu,#garage,#workshop,#market,#tour,#modes,#results,#profile,#social-sign-in,#garage-activity) :is(button,a,summary,input,select):focus-visible {
+  outline: 2px solid var(--card-accent); outline-offset: 3px;
+}
+@media (max-width: 420px) {
+  #menu .home-account { gap: 8px; padding-bottom: 9px; }
+  .home-account p { font-size: 10px; }
+  #home-sign-in { padding: 9px 11px; }
+}
+
+#home-sign-in[hidden] { display: none; }

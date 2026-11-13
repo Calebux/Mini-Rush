@@ -1,3 +1,4 @@
+import { signedInDriver } from './auth-fixture.mjs';
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
@@ -6,7 +7,13 @@ const shots = '/tmp/minirush-workshop';
 await mkdir(shots, { recursive: true });
 const browser = await chromium.launch({ channel: 'chrome', headless: true });
 const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, hasTouch: true });
+// This test covers local coin purchases only. Never provision live accounts.
+await page.route('**/*', route => route.request().method() === 'POST' ? route.abort() : route.continue());
 const errors = []; page.on('pageerror', e => errors.push(e.message));
+const buySelected = async () => {
+  await page.click('#workshop-buy');
+  await page.waitForFunction(() => document.querySelector('#workshop-buy').textContent === 'PART OWNED');
+};
 // the customs workshop is reached from the garage
 const openWorkshop = async () => {
   if (await page.locator('#garage').evaluate(el => el.classList.contains('hidden'))) await page.click('#btn-garage-menu');
@@ -18,6 +25,7 @@ try {
     localStorage.setItem('minirush.welcomed', '1'); // not a first-open run
   });
   await page.goto(`${base}/?q=1&len=600&laps=1`, { waitUntil: 'networkidle' });
+  await signedInDriver(page);
   await page.waitForFunction(() => window.__game?.state === 'menu');
   await page.waitForTimeout(800);
   await page.screenshot({ path: `${shots}/home-mobile.png` });
@@ -30,13 +38,13 @@ try {
   assert.equal(await page.evaluate(() => window.__game.workshopPreview), null);
   await page.evaluate(() => localStorage.setItem('minirush.bank', '1000'));
   await openWorkshop();
-  await page.click('[data-part="wide"]'); await page.click('#workshop-buy');
+  await page.click('[data-part="wide"]'); await buySelected();
   assert.equal(await page.evaluate(() => localStorage.getItem('minirush.bank')), '840');
   assert.equal(await page.locator('#workshop-buy').isDisabled(), true);
-  await page.click('[data-slot="paint"]'); await page.click('[data-part="lagoon"]'); await page.click('#workshop-buy');
-  await page.click('[data-slot="wheels"]'); await page.click('[data-part="turbine"]'); await page.click('#workshop-buy');
-  await page.click('[data-slot="wing"]'); await page.click('[data-part="gt"]'); await page.click('#workshop-buy');
-  await page.click('[data-slot="power"]'); await page.click('[data-part="sprint"]'); await page.click('#workshop-buy');
+  await page.click('[data-slot="paint"]'); await page.click('[data-part="lagoon"]'); await buySelected();
+  await page.click('[data-slot="wheels"]'); await page.click('[data-part="turbine"]'); await buySelected();
+  await page.click('[data-slot="wing"]'); await page.click('[data-part="gt"]'); await buySelected();
+  await page.click('[data-slot="power"]'); await page.click('[data-part="sprint"]'); await buySelected();
   await page.fill('#workshop-name', 'LAGOS SPECIAL');
   await page.screenshot({ path: `${shots}/workshop-mobile.png` });
   await page.click('#workshop-save');
@@ -44,6 +52,7 @@ try {
   assert.equal(await page.evaluate(() => window.__game.carSpec(window.__game.carIndex).accel), 1.1);
   assert.equal(await page.evaluate(() => localStorage.getItem('minirush.bank')), '410');
   await page.reload({ waitUntil: 'networkidle' });
+  await signedInDriver(page);
   await page.waitForFunction(() => window.__game?.state === 'menu');
   assert.equal(await page.locator('#home-car-name').textContent(), 'LAGOS SPECIAL');
   await page.screenshot({ path: `${shots}/home-custom-mobile.png` });

@@ -18,6 +18,7 @@ export class RaceRewards {
   private target: Recipe = craftingTarget();
   private settle: (() => Promise<Reward | null>) | null = null;
   private chassis = 'viper';
+  private pendingRace: string | null = null;
   onWorkshop: (recipe: string, chassis: string) => void = () => {};
 
   constructor(private root: HTMLElement) {
@@ -35,12 +36,19 @@ export class RaceRewards {
     window.addEventListener('minirush:crafting-target', e => {
       this.target = RECIPES.find(r => r.id === (e as CustomEvent<string>).detail) ?? craftingTarget(); this.render();
     });
+    window.addEventListener('minirush:reward-settled', e => {
+      const result = (e as CustomEvent<Reward>).detail;
+      if (this.status !== 'pending' || result.race !== this.pendingRace) return;
+      this.reward = result; this.status = 'confirmed'; this.pendingRace = null;
+      this.note = 'Race rewards added to your garage.'; this.render(); void this.loadBalances();
+    });
     this.render();
   }
   reset(): void {
     ++this.generation; ++this.balanceRequest;
     this.status = 'unavailable'; this.note = 'Complete a connected circuit race to earn salvage.';
     this.reward = null; this.held = null; this.loading = false; this.settle = null;
+    this.pendingRace = null;
     this.render();
   }
   finish(chassis: string, settle: (() => Promise<Reward | null>) | null, reason = ''): void {
@@ -53,17 +61,21 @@ export class RaceRewards {
   private async claim(): Promise<void> {
     if (!this.settle || this.status === 'confirming' || this.status === 'confirmed') return;
     const generation = this.generation;
-    this.status = 'confirming'; this.note = 'Confirming this race’s salvage on NEAR…'; this.render();
+    this.status = 'confirming'; this.note = 'Adding your race rewards…'; this.render();
     try {
       const result = await this.settle();
       if (generation !== this.generation) return;
       this.reward = result;
       this.status = result ? 'confirmed' : 'unavailable';
       this.note = result ? 'Salvage received. Your garage balance is updating.' : 'This race had no connected reward session. Local coins are still banked.';
-    } catch {
+    } catch (err) {
       if (generation !== this.generation) return;
       this.status = 'pending';
-      this.note = 'Salvage not confirmed. Retry this claim, or recover it later in Performance & Parts. Race limits and eligibility still apply.';
+      const pending = err as { code?: string; race?: string } | null;
+      this.pendingRace = pending?.code === 'reward_pending' && typeof pending.race === 'string' ? pending.race : null;
+      this.note = pending?.code === 'reward_storage'
+        ? 'Keep this race open and allow browser storage, then collect your rewards.'
+        : 'Your rewards are still arriving. We’ll check again automatically. You can keep playing; race limits still apply.';
     }
     this.render(); void this.loadBalances();
   }
@@ -80,7 +92,7 @@ export class RaceRewards {
       this.held = null;
     }
     this.loading = false;
-    if (this.status === 'confirmed') this.note = 'Salvage received on NEAR. The receipt records this race’s payout.';
+    if (this.status === 'confirmed') this.note = 'Race rewards added to your garage.';
     this.render();
   }
   private render(): void {
@@ -100,14 +112,15 @@ export class RaceRewards {
     this.root.innerHTML = `<div class="rr-heading"><span>RACE SALVAGE</span><strong>${({ unavailable: 'NOT RECEIVED', ineligible: 'NOT ELIGIBLE', confirming: 'CONFIRMING', confirmed: 'RECEIVED', pending: 'CLAIM PENDING' })[this.status]}</strong></div>
       <div class="rr-payout">${resources.map(x => `<div><b>${x.payout === undefined ? '—' : `+${x.payout}`}</b><span>${x.label}</span></div>`).join('')}</div>
       <ol class="rr-tiers" aria-label="RUSH paid by finishing place">${([['WIN', RACE_PAYOUT.first, 1], ['2ND', RACE_PAYOUT.second, 2], ['3RD', RACE_PAYOUT.third, 3], ['FINISH', RACE_PAYOUT.finish, 0]] as const).map(([label, rush, tier]) => `<li${r && (r.place ?? 0) === tier ? ' aria-current="true"' : ''}><span>${label}</span><b>${rush}</b></li>`).join('')}</ol>
-      <p class="rr-status" role="status" aria-live="polite">${esc(this.note)}${r ? ` <a href="${explorerTx(encodeURIComponent(r.tx))}" target="_blank" rel="noopener">View receipt ↗</a>` : ''}</p>
-      ${this.status === 'pending' ? '<button type="button" data-reward-action="retry" class="rr-retry">RETRY SALVAGE CLAIM</button>' : ''}
+      <p class="rr-status" role="status" aria-live="polite">${esc(this.note)}</p>
+      ${r ? `<details class="rr-payment-details"><summary>Reward details</summary><p>NEAR testnet · <a href="${explorerTx(encodeURIComponent(r.tx))}" target="_blank" rel="noopener">View record ↗</a></p></details>` : ''}
+      ${this.status === 'pending' ? '<button type="button" data-reward-action="retry" class="rr-retry">COLLECT REWARDS</button>' : ''}
       <div class="rr-target"><label for="reward-target">BUILD TOWARD YOUR NEXT PART</label><select id="reward-target">${RECIPES.map(recipe => `<option value="${recipe.id}" ${recipe.id === target.id ? 'selected' : ''}>${recipe.name} · ${recipe.slot}</option>`).join('')}</select>
       <p class="rr-tradeoff">${componentStats(target)}</p><p class="rr-chassis">Workshop chassis: ${this.chassis === 'rush-one' ? 'RUSH ONE' : 'VIPER GT'}</p>
       <div class="rr-materials">${resources.map(x => `<div><span>${x.label}</span><strong>${this.held ? x.balance.toLocaleString() : '—'} / ${x.cost}</strong><progress max="${x.cost}" value="${this.held ? Math.min(x.balance, x.cost) : 0}" aria-label="${x.label}: ${this.held ? x.balance : 'balance unavailable'} of ${x.cost} needed"></progress></div>`).join('')}</div>
       <p class="rr-progress-note">${this.loading ? 'Reading confirmed garage balances…' : !this.held ? 'Balance unavailable. Refresh to check your materials.' : ready ? 'Materials ready. Craft this part in the workshop.' : `About ${races} more eligible ${races === 1 ? 'race' : 'races'} at the finish rate; podiums pay more RUSH. Daily limits apply.`}</p>
       <button type="button" class="rr-workshop" data-reward-action="workshop">${ready ? 'CRAFT THIS PART' : 'VIEW RECIPE'} <span>↗</span></button>
-      <div class="rr-foot"><span>NEAR TESTNET · SEPARATE FROM LOCAL COINS</span><button type="button" data-reward-action="refresh" ${this.loading ? 'disabled' : ''}>REFRESH</button></div></div>`;
+      <div class="rr-foot"><span>RUSH & MATERIALS · WORKSHOP RESOURCES</span><button type="button" data-reward-action="refresh" ${this.loading ? 'disabled' : ''}>REFRESH</button></div></div>`;
     if (restore) (this.root.querySelector<HTMLElement>(`#${CSS.escape(restore)}`) ?? this.root.querySelector<HTMLElement>(`[data-reward-action="${CSS.escape(restore)}"]`))?.focus({ preventScroll: true });
     if (celebrate && !matchMedia('(prefers-reduced-motion: reduce)').matches)
       this.root.querySelectorAll('.rr-payout b').forEach(el => el.animate([{ opacity: .35, transform: 'translateY(5px)' }, { opacity: 1, transform: 'translateY(0)' }], { duration: 450 }));

@@ -3,6 +3,7 @@
 // after the cars themselves are owned. Stored like economy.ts.
 import { CarSpec } from './cars';
 import { spend } from './economy';
+import { checkLocalPurchase } from './shopSession';
 
 export type UpgradeStat = 'speed' | 'grip' | 'nitro';
 
@@ -47,6 +48,7 @@ export function tier(carId: string, stat: UpgradeStat): number {
 
 /** Buy the next tier from the coin bank. False = maxed or can't afford. */
 export function buyTier(carId: string, stat: UpgradeStat): boolean {
+  if (!checkLocalPurchase()) return false;
   const t = tier(carId, stat);
   if (t >= MAX_TIER || !spend(TIER_COST[t])) return false;
   const store = load();

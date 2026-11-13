@@ -1,6 +1,8 @@
 //! Unique crafted components, atomic RUSH settlement and bounded race emissions.
 //! Components expose NEP-171 ownership plus metadata and enumeration.
 use super::*;
+#[path = "component_orders.rs"]
+mod orders;
 
 pub const ALLOY: &str = "material:alloy";
 pub const CIRCUIT: &str = "material:circuit";
@@ -76,7 +78,8 @@ impl Garage {
     pub fn migrate_components() -> Self {
         let old: LegacyGarage = env::state_read().expect("expected v1 garage state");
         Self { owner: old.owner, dealers: old.dealers, tokens: old.tokens, supply: old.supply,
-            balances: old.balances, owned: old.owned, listings: old.listings, workshop: Workshop::default() }
+            balances: old.balances, owned: old.owned, listings: old.listings, workshop: Workshop::default(),
+            showroom: Showroom::default() }
     }
     pub fn component_recipes(&self) -> Vec<Recipe> { recipes() }
     pub fn component_inventory(&self, account_id: AccountId) -> Vec<Component> {
@@ -94,13 +97,15 @@ impl Garage {
         let today = if self.workshop.global.day == day { self.workshop.global.races } else { 0 };
         let supply = |t: &str| U128(self.supply.get(t).copied().unwrap_or(0));
         let dealer_rush: u128 = self.dealers.iter().map(|d| self.balance(RUSH, d)).sum();
+        let dealer_rush_reserved: u128 = self.dealers.iter().map(|d| self.reserved_order_rush(d)).sum();
         json!({ "rush_supply": supply(RUSH), "alloy_supply": supply(ALLOY), "circuit_supply": supply(CIRCUIT),
-            "dealer_rush": U128(dealer_rush), "parts": self.workshop.parts.len(), "offers": self.workshop.offers.len(),
+            "dealer_rush": U128(dealer_rush), "dealer_rush_reserved": U128(dealer_rush_reserved),
+            "parts": self.workshop.parts.len(), "offers": self.workshop.offers.len(),
             "parts_issued": self.workshop.serial, "races_today": today, "races_per_day": RACES_PER_DAY,
             "races_per_account_day": RACES_PER_ACCOUNT_DAY,
             "payout": { "first": U128(race_rush(Some(1))), "second": U128(race_rush(Some(2))),
                 "third": U128(race_rush(Some(3))), "finish": U128(race_rush(None)), "alloy": 2, "circuit": 1 },
-            "market_fee_percent": 2, "ledger": self.workshop.ledger })
+            "market_fee_percent": 2, "ledger": self.workshop.ledger, "near": self.near_ledger() })
     }
 
     pub fn craft_component(&mut self, recipe_id: String) -> Component {
@@ -281,9 +286,10 @@ fn nft_event(name: &str, data: near_sdk::serde_json::Value) {
 #[near]
 impl Garage {
     pub fn nft_metadata(&self) -> near_sdk::serde_json::Value {
-        json!({"spec":"nft-1.0.0","name":"MiniRush Components","symbol":"RUSHPART"})
+        json!({"spec":"nft-1.0.0","name":"MiniRush Garage","symbol":"MINIRUSH"})
     }
     pub fn nft_token(&self, token_id: String) -> Option<near_sdk::serde_json::Value> {
+        if editions::is_edition_car(&token_id) { return self.edition_nft(&token_id); }
         self.workshop.parts.get(&token_id).map(|p| {
             let r = recipe(&p.recipe_id);
             json!({"token_id":p.id,"owner_id":p.owner,"metadata":{
@@ -293,9 +299,9 @@ impl Garage {
             }})
         })
     }
-    pub fn nft_total_supply(&self) -> U128 { U128(u128::from(self.workshop.parts.len())) }
+    pub fn nft_total_supply(&self) -> U128 { U128(u128::from(self.workshop.parts.len()) + self.edition_supply()) }
     pub fn nft_supply_for_owner(&self, account_id: AccountId) -> U128 {
-        U128(self.workshop.inventories.get(&account_id).map_or(0, |ids| ids.len()) as u128)
+        U128((self.workshop.inventories.get(&account_id).map_or(0, |ids| ids.len()) + self.edition_count_for(&account_id)) as u128)
     }
     pub fn nft_tokens(&self, from_index: Option<U128>, limit: Option<u32>) -> Vec<near_sdk::serde_json::Value> {
         let start = from_index.unwrap_or(U128(0)).0.min(u128::from(self.workshop.parts.len())) as usize;
@@ -303,7 +309,8 @@ impl Garage {
             .filter_map(|id| self.nft_token(id.clone())).collect()
     }
     pub fn nft_tokens_for_owner(&self, account_id: AccountId, from_index: Option<U128>, limit: Option<u32>) -> Vec<near_sdk::serde_json::Value> {
-        let ids = self.workshop.inventories.get(&account_id).cloned().unwrap_or_default();
+        let mut ids = self.workshop.inventories.get(&account_id).cloned().unwrap_or_default();
+        ids.extend(self.edition_ids_for(&account_id));
         let start = from_index.unwrap_or(U128(0)).0.min(ids.len() as u128) as usize;
         ids.into_iter().skip(start).take(limit.unwrap_or(50).min(100) as usize).filter_map(|id| self.nft_token(id)).collect()
     }
@@ -312,6 +319,7 @@ impl Garage {
         near_sdk::assert_one_yocto();
         require!(approval_id.is_none(), "approvals not supported");
         require!(memo.as_ref().map_or(true, |m| m.len() <= 280), "memo too long");
+        if editions::is_edition_car(&token_id) { return self.transfer_edition_car(&token_id, receiver_id, memo); }
         let p = self.my_component(&token_id);
         require!(p.price.is_none(), "cancel the listing first");
         self.transfer_component(p, receiver_id, memo);
@@ -321,6 +329,7 @@ impl Garage {
         use near_sdk::{Gas, NearToken, Promise};
         require!(env::prepaid_gas().as_gas() >= Gas::from_tgas(80).as_gas(), "attach at least 80 Tgas");
         require!(msg.len() <= 2048, "message too long");
+        require!(!editions::is_edition_car(&token_id), "edition cars move with nft_transfer");
         let sender = env::predecessor_account_id();
         self.nft_transfer(receiver_id.clone(), token_id.clone(), approval_id, memo);
         let held = self.workshop.reserved.get(&sender).copied().unwrap_or(0);

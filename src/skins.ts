@@ -2,6 +2,7 @@
 // multiple color variants. Active skin swaps the car's color (underglow +
 // toon material). Same spend/own pattern as economy.ts.
 import { spend } from './economy';
+import { checkLocalPurchase } from './shopSession';
 
 export interface Skin {
   name: string;
@@ -134,6 +135,7 @@ export function buySkin(carId: string, index: number): boolean {
   const skins = CAR_SKINS[carId];
   if (!skins || index < 0 || index >= skins.length) return false;
   if (skinOwned(carId, index)) return false;
+  if (!checkLocalPurchase()) return false;
   if (!spend(skins[index].price)) return false;
   const store = load();
   if (!store.owned[carId]) store.owned[carId] = [];
