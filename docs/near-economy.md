@@ -16,12 +16,26 @@ NEAR grants now wait for `FINAL` receipts before the UI refreshes. The edition
 browser check asserts this behavior. Recovery checks cover both guest shopping
 and optional sign-in-required deployments.
 
-Production Convex (`precious-dalmatian-332`) is configured for the same testnet
-garage; its frontend artifact uses that production backend. Sign-in stays off
+Production Convex (`precious-dalmatian-332`) and the frontend at
+https://minirush.site are now deployed. The production release is
+https://mini-rush-f3yf7bdd3-calebuxs-projects.vercel.app and uses the same testnet
+garage. Sign-in stays off
 on both sides, because the hosted Auth0 callback is still rejected. Dealer
 automation is enabled only on production; development sets
 `NEAR_DEALER_AGENTS_ENABLED=false` to avoid competing submissions from the same
-dealer keys. Backend and frontend production publication is the remaining step.
+dealer keys. A manual production dealer tick completed successfully.
+
+The live-domain browser check passed account creation, the 2 test NEAR grant,
+a 1.5 test NEAR purchase of LAGOS GOLD #2, relayed listing and cancellation,
+and ownership after reload. The market fits a 390px viewport, and `/economy/`
+reads both edition runs and the 3 test NEAR primary-sale volume. The game account
+had about 11.3 test NEAR available after storage at the end of these checks.
+The two LAGOS GOLD cars minted during validation belong to isolated test garages;
+these were real testnet purchases, not mocked supply changes.
+
+Release source is committed on `economy-parts-workshop`; this rollout did not
+push or merge that branch on GitHub. The older Vercel release
+`mini-rush-pat148jzr-calebuxs-projects.vercel.app` remains the prior deployment.
 
 Older development notes below describe when individual features were first
 implemented; this rollout status supersedes their "not deployed" statements.
