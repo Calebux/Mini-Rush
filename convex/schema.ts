@@ -5,6 +5,12 @@ import { defineSchema, defineTable } from 'convex/server';
 import { v } from 'convex/values';
 
 export default defineSchema({
+  friendRooms: defineTable({
+    code: v.string(), createdAt: v.number(), expiresAt: v.number(), round: v.number(), startAt: v.number(),
+    state: v.union(v.literal('lobby'), v.literal('loading'), v.literal('race'), v.literal('finished'), v.literal('closed')),
+    players: v.array(v.object({ token: v.string(), name: v.string(), ready: v.boolean(), loaded: v.boolean(), seen: v.number(),
+      s: v.number(), x: v.number(), v: v.number(), seq: v.number(), sampleAt: v.number(), finishAt: v.union(v.number(), v.null()), dnf: v.boolean() }))
+  }).index('by_code', ['code']).index('by_created', ['createdAt']).index('by_expiry', ['expiresAt']),
   // One row per bounty week, keyed by the ISO week the game uses ("2026-W38").
   bountyWeeks: defineTable({
     week: v.string(),

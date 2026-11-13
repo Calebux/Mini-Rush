@@ -5,6 +5,8 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
+    "check:friends": "node scripts/check-friends.mjs",
+    "check:friend-rules": "node scripts/check-friend-rules.mjs",
     "dev": "vite --host",
     "dev:auth": "vite --host localhost --port 3000 --strictPort",
     "build": "tsc --noEmit && vite build",

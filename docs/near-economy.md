@@ -1,5 +1,38 @@
 # NEAR parts economy — first playable slice
 
+## Race Friends — private multiplayer
+
+The homepage **Race Friends** button opens a two-driver room. Create a race,
+copy its invite (or share the eight-character code), and have both drivers
+choose **I'm ready**. Guests can join without a wallet or sign-in. Both get a
+stock Viper GT on the same Lagos circuit, a server-timed start, a live opponent,
+shared results and a rematch. Contact between the two cars is disabled. No AI
+opponents, traffic, pickups, purchased upgrades or paid nitro cans enter this mode.
+
+Rooms use Convex WebSocket subscriptions, with at most five position updates
+per second per browser and brief interpolation for the other car. The server
+controls seats, rounds, the loading barrier, start time and finish receipt
+order. Progress bounds and sequence numbers reject implausible jumps and old
+packets. This is **client-simulated friendly racing**, not authoritative physics:
+modified clients can still cheat, and network delay affects close finishes.
+It deliberately gives no coins, salvage, RUSH, leaderboard entries or prizes.
+
+Keep the tab active: live races cannot pause. A 20-second disconnect marks a
+driver DNF; a race times out after four minutes. A short refresh restores the
+tab's private seat and its last accepted progress from session storage.
+Leaving closes the room for both drivers. Invites expire after 45 minutes;
+idle rooms stop their watchdog, and expired records are pruned hourly.
+Seat tokens are never included in public snapshots or invite links. Creation
+is limited to 120 rooms in a rolling hour per deployment.
+
+Validation: `npm run check:friend-rules` exercises the real backend handlers
+with a deterministic clock. `npm run check:friends -- http://localhost:4173`
+drives two isolated Chrome clients against development Convex, blocks all NEAR
+transactions, and tests invites, two-seat access, shared start, real physics
+finishes, reload recovery, rematch and disconnect. Run `npm run build` and
+`npm run preview -- --host localhost --port 4173 --strictPort` first to prevent
+Vite hot reload from interrupting an in-progress test race.
+
 ## Testnet rollout status — 2026-11-13
 
 The live `minirush-garage.testnet` contract has been upgraded. LAGOS GOLD

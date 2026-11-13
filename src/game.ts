@@ -63,6 +63,8 @@ import { decodeGhost, encodeGhost } from './ghostShare';
 import { Challenge, challengeCode, createChallenge, loadChallenge } from './challenge';
 import { RewardRace, refreshComponents, useNitroCan } from './near';
 import { applyComponents } from './components';
+import { FriendRace } from './friendRace';
+import { FRIEND_LENGTH, FRIEND_SEED, type FriendRoom } from '../shared/friendRace';
 
 type State = 'boot' | 'menu' | 'countdown' | 'racing' | 'finished';
 
@@ -443,6 +445,8 @@ export class Game {
       this.state = 'menu';
       this.renderer.setAnimationLoop(() => this.tick());
     });
+    this.friends = new FriendRace({ prepare: (room, slot) => this.prepareFriendRace(room, slot),
+      update: (room, slot) => this.updateFriendRoom(room, slot), exit: () => this.leaveFriendRace() });
     // a "beat my time" link takes over the circuit once the world is standing
     const code = challengeCode();
     if (code) void this.enterChallenge(code);
@@ -783,7 +787,7 @@ export class Game {
 
   /** Lap length to build: a mode with its own (HARDCORE's long circuit) overrides the pick. */
   private lapLength(): number {
-    return this.practice ? TEST_LENGTH : MODES[this.modeIndex].trackLength ?? this.trackLength;
+    return this.friendRun ? FRIEND_LENGTH : this.practice ? TEST_LENGTH : MODES[this.modeIndex].trackLength ?? this.trackLength;
   }
 
   private buildRace(): void {
@@ -796,7 +800,7 @@ export class Game {
     });
 
     // weather
-    this.weather = this.practice ? { type: 'clear', label: 'CLEAR', icon: '☀️', gripMul: 1, fogMul: 1, tint: 0xffffff } : rollWeather(map.id, seed);
+    this.weather = this.practice || this.friendRun ? { type: 'clear', label: 'CLEAR', icon: '☀️', gripMul: 1, fogMul: 1, tint: 0xffffff } : rollWeather(map.id, seed);
     const fogNear = map.fogNear * this.weather.fogMul;
     const fogFar = map.fogFar * this.weather.fogMul;
     (this.scene.fog as THREE.Fog).near = fogNear;
@@ -887,7 +891,7 @@ export class Game {
     this.sunDisc.lookAt(0, 0, 0);
     this.sunGlow.position.copy(this.sunDisc.position).multiplyScalar(1.01);
     this.sunGlow.lookAt(0, 0, 0);
-    this.entities = new Entities(this.scene, this.track, seed, !this.practice);
+    this.entities = new Entities(this.scene, this.track, seed, !this.practice && !this.friendRun);
     this.player = new Player(this.scene, this.assets, this.track, this.carSpec(this.carIndex));
     // Closed circuits belong to the race grid. City free-roam has its own traffic.
     this.traffic = new TrafficManager(
@@ -901,7 +905,7 @@ export class Game {
       : CARS.filter(c => c.class !== 'junk' && c.id !== CARS[this.carIndex].id);
     this.rivals = new RivalManager(
       this.scene, this.assets, this.track, CARS[this.carIndex].model,
-      mode.rivals, mode.pursuit, rivalPool, mode.pro, !!(mode.tumble || mode.heist)
+      this.friendRun ? 0 : mode.rivals, mode.pursuit, rivalPool, mode.pro, !!(mode.tumble || mode.heist)
     );
     this.rivals.paceMul = this.player.speedMul;
     this.rivals.accelMul = this.carSpec(this.carIndex).accel;
@@ -938,6 +942,7 @@ export class Game {
 
   /** The car spec to race/park: upgrades applied, active paint-job color swapped in. */
   private carSpec(i: number): CarSpec {
+    if (this.friendRun) return { ...CARS[0], color: this.friendRun.slot === 0 ? 0xff2e8a : 0xe7bb68 };
     if (this.practice && i === this.carIndex) {
       const fitted = this.practice.fitted, base = CARS[i];
       return this.practice.setup === 'stock'
@@ -985,6 +990,7 @@ export class Game {
   }
 
   private disposeRace(): void {
+    if (this.friendCar) { this.scene.remove(this.friendCar); disposeCarInstance(this.friendCar); this.friendCar = null; }
     this.scenery.dispose(this.scene);
     this.entities.dispose(this.scene);
     this.traffic?.dispose(this.scene);
@@ -1004,6 +1010,10 @@ export class Game {
 
   private resetGrid(): void {
     this.traffic?.reset(0);
+    if (this.friendRun) {
+      this.player.reset({ s: 0, x: this.friendRun.slot === 0 ? -2 : 2 });
+      this.rivals.reset([]); return;
+    }
     if (this.practice) {
       this.player.reset({ s: 0, x: 0 });
       this.rivals.reset([]);
@@ -1068,15 +1078,80 @@ export class Game {
 
   private rewardRace: RewardRace | null = null;
   private preparingRace = false;
+  private friends!: FriendRace;
+  private friendRun: { room: FriendRoom; slot: number; saved: { car: number; map: number; mode: number; seed: number; laps: number } } | null = null;
+  private friendCar: THREE.Group | null = null;
+  private friendS = 0;
+  private friendX = 0;
+
+  private async prepareFriendRace(room: FriendRoom, slot: number): Promise<void> {
+    await this.booted;
+    if (this.friends.room?.code !== room.code || this.friends.room.round !== room.round) return;
+    const saved = this.friendRun?.saved ?? { car: this.carIndex, map: this.mapIndex, mode: this.modeIndex, seed: this.seedCounter, laps: this.laps };
+    this.friendRun = { room, slot, saved };
+    this.carIndex = 0; this.mapIndex = MAPS.findIndex(m => m.id === 'lagos');
+    this.modeIndex = MODES.findIndex(m => m.id === 'timeattack');
+    this.seedCounter = FRIEND_SEED; this.laps = 1;
+    this.cine.t = this.cine.flash = 0;
+    await this.startRace();
+    const me = room.players[slot];
+    this.player.s = me.s / FRIEND_LENGTH * this.track.length; this.player.x = me.x; this.player.v = me.v;
+    this.friendCar = this.assets.cloneCar({ ...CARS[0], color: slot === 0 ? 0xe7bb68 : 0xff2e8a });
+    this.friendCar.name = 'live-friend-car';
+    this.scene.add(this.friendCar);
+    this.friendS = room.players[1 - slot].s / FRIEND_LENGTH * this.track.length;
+    this.friendX = room.players[1 - slot].x;
+    this.track.place(this.friendCar, this.friendS, this.friendX); this.friendCar.rotation.y += Math.PI;
+    const sky = environmentTheme(MAPS[this.mapIndex]);
+    lightCars(this.friendCar, mapEnvironment(this.renderer, sky), carReflection(sky));
+    this.ui.setRacers(2);
+  }
+
+  private updateFriendRoom(room: FriendRoom, slot: number): void {
+    if (!this.friendRun) return;
+    this.friendRun.room = room;
+    const me = room.players[slot];
+    if (room.state === 'closed' || me.dnf || me.finishAt !== null) {
+      this.state = 'finished'; this.audio.stopEngine(); this.ui.endTestDriveRun();
+    }
+  }
+
+  private leaveFriendRace(): void {
+    if (!this.friendRun) return;
+    const saved = this.friendRun.saved;
+    this.friendRun = null;
+    this.state = 'menu'; this.paused = false; this.rewardRace = null;
+    this.audio.stopEngine(); void this.audio.playMusic('menu');
+    this.ui.endTestDriveRun(); this.ui.leaveCity();
+    this.carIndex = saved.car; this.mapIndex = saved.map; this.modeIndex = saved.mode;
+    this.seedCounter = saved.seed; this.laps = saved.laps;
+    this.input.uiGas = this.input.uiBrake = false;
+    this.disposeRace(); this.buildRace();
+  }
+
+  private tickFriend(dt: number): void {
+    if (!this.friendRun || !this.friendCar) return;
+    const { room, slot } = this.friendRun, opponent = room.players[1 - slot];
+    if (!opponent) return;
+    const age = Math.max(0, (this.friends.now - opponent.sampleAt) / 1000);
+    // Short interpolation/extrapolation window; freeze a stale opponent, never invent a bot.
+    const projected = Math.min(FRIEND_LENGTH, opponent.s + (opponent.dnf || opponent.finishAt !== null ? 0 : opponent.v * Math.min(.3, age)));
+    const target = projected / FRIEND_LENGTH * this.track.length;
+    this.friendS += (target - this.friendS) * Math.min(1, dt * 12);
+    this.friendX += (opponent.x - this.friendX) * Math.min(1, dt * 12);
+    this.track.place(this.friendCar, this.friendS, this.friendX); this.friendCar.rotation.y += Math.PI;
+    this.friendCar.visible = !opponent.dnf;
+    if (this.state === 'racing' || this.state === 'finished') this.friends.sample(this.player.s / this.track.length * FRIEND_LENGTH, this.player.x, this.player.v);
+  }
 
   private async startRace(): Promise<void> {
-    if (!this.practice && !localStorage.getItem('minirush.controls-guide')) {
+    if (!this.friendRun && !this.practice && !localStorage.getItem('minirush.controls-guide')) {
       this.ui.showFirstRunGuide();
       return;
     }
     if (this.preparingRace) return;
     this.preparingRace = true;
-    if (!this.practice) await refreshComponents(false).catch(() => {});
+    if (!this.practice && !this.friendRun) await refreshComponents(false).catch(() => {});
     this.preparingRace = false;
     this.paused = false;
     this.ui.hidePause();
@@ -1086,7 +1161,7 @@ export class Game {
     this.raceLaps = MODES[this.modeIndex].lapsLocked ?? this.laps;
     this.player.damageCool = MODES[this.modeIndex].pursuit ? HEAT_COOL : 3.5;
     this.player.raceLength = this.raceLaps * this.track.length;
-    this.rewardRace = this.practice ? null : new RewardRace(Math.ceil(this.player.raceLength));
+    this.rewardRace = this.practice || this.friendRun ? null : new RewardRace(Math.ceil(this.player.raceLength));
     this.ui.resetRaceRewards();
     this.rivals.raceLength = this.raceLaps * this.track.length;
     this.lapsDone = -1;
@@ -1128,8 +1203,8 @@ export class Game {
 
     // ghost of your best run on this exact circuit (no cop-chase hauntings —
     // a spectral cruiser reads as a second cop)
-    this.ghostRec = this.practice ? null : new GhostRecorder();
-    this.ghostData = this.practice || mode.pursuit ? null : loadGhost(this.currentGhostKey());
+    this.ghostRec = this.practice || this.friendRun ? null : new GhostRecorder();
+    this.ghostData = this.practice || this.friendRun || mode.pursuit ? null : loadGhost(this.currentGhostKey());
     if (this.ghostObj) {
       this.scene.remove(this.ghostObj);
       this.ghostObj = null;
@@ -1149,7 +1224,7 @@ export class Game {
       this.ui.popText(`GHOST: ${this.ghostData.time.toFixed(1)}s — BEAT IT`, '#9adfff');
     }
     // the Weekend GP puts the weekend's fastest players on track with you
-    if (!this.practice && (this.weekend || this.challenge) && this.weekendGhosts.length > 0) {
+    if (!this.practice && !this.friendRun && (this.weekend || this.challenge) && this.weekendGhosts.length > 0) {
       this.rivalGhosts = this.weekendGhosts.map((g) => ({ data: g.data, obj: placeGhost(g.data, 0xffc531) }));
       this.ui.popText(`RACING: ${this.weekendGhosts.map((g) => g.tag).join(', ')}`, '#ffc531');
     }
@@ -1184,6 +1259,7 @@ export class Game {
   }
 
   private togglePause(): void {
+    if (this.friendRun) { this.ui.popText('LIVE RACE · THE CLOCK KEEPS RUNNING', '#e2bf73'); return; }
     if (this.practice && this.state === 'finished') return;
     if (!this.paused && this.state !== 'countdown' && this.state !== 'racing') return;
     this.paused = !this.paused;
@@ -1283,6 +1359,12 @@ export class Game {
 
   private finishRace(): void {
     if (this.state === 'finished') return;
+    if (this.friendRun) {
+      this.state = 'finished'; this.audio.stopEngine(); this.audio.play('finish');
+      this.ui.endTestDriveRun();
+      this.friends.sample(FRIEND_LENGTH, this.player.x, this.player.v);
+      return;
+    }
     if (this.practice) {
       this.state = 'finished'; this.paused = true;
       this.audio.stopEngine(); this.audio.play('finish');
@@ -1579,7 +1661,7 @@ export class Game {
     }
     // Bullet time: the world slows, the clock the cinematic runs on does not.
     if (this.cine.t > 0) this.cine.t -= real;
-    const dilation = this.state === 'finished' && !this.busted ? 0.35 : this.cine.t > 0 ? 0.3 : 1;
+    const dilation = this.friendRun ? 1 : this.state === 'finished' && !this.busted ? 0.35 : this.cine.t > 0 ? 0.3 : 1;
     const dt = real * dilation;
     let trafficUpdated = false;
     this.cine.flash = Math.max(0, this.cine.flash - real * 5.5);
@@ -1599,7 +1681,10 @@ export class Game {
         break;
 
       case 'countdown': {
-        this.countdownT -= dt;
+        if (this.friendRun) {
+          const room = this.friendRun.room;
+          this.countdownT = room.startAt ? (room.startAt - this.friends.now) / 1000 : 4;
+        } else this.countdownT -= dt;
         const n = Math.ceil(this.countdownT);
         if (n !== this.lastCount) {
           this.lastCount = n;
@@ -1616,13 +1701,13 @@ export class Game {
           // A nitro can held on NEAR is cracked open at the line: burned on
           // chain, +1 tank in the car once the burn lands.
           const racer = this.player;
-          if (!this.practice) void useNitroCan().then((used) => {
+          if (!this.practice && !this.friendRun) void useNitroCan().then((used) => {
             if (!used || this.player !== racer || this.state !== 'racing') return;
             racer.nitroTanks++;
             this.ui.popText('NITRO CAN CRACKED · +1 TANK', '#7fd4ff');
           });
           this.audio.play('go');
-          if (!this.practice) this.ui.startTutorial();
+          if (!this.practice && !this.friendRun) this.ui.startTutorial();
           setTimeout(() => this.ui.hideCountdown(), 600);
         }
         this.player.update(dt, elapsed, 0, 0, false);
@@ -1635,7 +1720,8 @@ export class Game {
       }
 
       case 'racing': {
-        this.raceTime += dt;
+        if (this.friendRun) this.raceTime = Math.max(0, (this.friends.now - this.friendRun.room.startAt) / 1000);
+        else this.raceTime += dt;
         this.rewardRace?.sample(this.player.s, this.raceTime);
         // A finger held off to one side keeps steering, like a held arrow
         // key; the drag alone stops the moment the thumb does, and a corner
@@ -1741,7 +1827,7 @@ export class Game {
       }
 
       case 'finished': {
-        if (this.practice) break;
+        if (this.practice || this.friendRun) break;
         this.finishT += real;
         this.player.update(dt, elapsed, 0, 0, false);
         this.rivals.update(dt, elapsed, this.raceTime, this.player.s, true);
@@ -1763,6 +1849,7 @@ export class Game {
     }
 
     if (this.state !== 'boot') {
+      this.tickFriend(real);
       // the world streams in around the camera's subject: the tour flyby
       // point while the World Tour page is up, the player otherwise
       const distance = this.state === 'menu' && this.uiScene === 'tour'
@@ -2192,16 +2279,16 @@ export class Game {
     const a = this.track.frame(this.player.s), b = this.track.frame(this.player.s + 2);
     const len = Math.hypot(b.x - a.x, b.z - a.z) || 1;
     this.raceMap.draw(this.player.mesh.position, { x: (b.x - a.x) / len, z: (b.z - a.z) / len },
-      this.rivals.rivals.map((r) => ({ x: r.mesh.position.x, z: r.mesh.position.z,
+      this.friendCar ? [{ x: this.friendCar.position.x, z: this.friendCar.position.z, colour: '#e2bf73' }] : this.rivals.rivals.map((r) => ({ x: r.mesh.position.x, z: r.mesh.position.z,
         colour: r.finishTime >= 0 ? 'rgba(233,241,255,0.4)' : '#5b8cff' })));
   }
 
   private updateHud(): void {
-    const ahead = this.rivals.rivals.filter((r) => r.s > this.player.s).length;
+    const ahead = this.friendRun ? Number(this.friendS > this.player.s) : this.rivals.rivals.filter((r) => r.s > this.player.s).length;
     const total = this.raceLaps * this.track.length;
     this.ui.updateHud(
       1 + ahead,
-      this.rivals.rivals.length + 1,
+      this.friendRun ? 2 : this.rivals.rivals.length + 1,
       this.raceTime,
       this.coins,
       this.player.nitroTanks,
@@ -2211,7 +2298,7 @@ export class Game {
       this.raceLaps,
       [
         Math.max(0, this.player.s / total),
-        ...this.rivals.rivals.map((r) => Math.max(0, r.s / total))
+        ...(this.friendRun ? [this.friendS / total] : this.rivals.rivals.map((r) => Math.max(0, r.s / total)))
       ],
       this.style.mult,
       this.style.gauge
