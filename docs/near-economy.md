@@ -1,5 +1,30 @@
 # NEAR parts economy — first playable slice
 
+## Race Friends seat recovery production release — 2026-11-14
+
+Deployed source **1baeab8** to production Convex
+`precious-dalmatian-332.eu-west-1.convex.cloud` and both https://minirush.site
+and https://www.minirush.site. Vercel reports Ready for
+https://mini-rush-6xpt2t148-calebuxs-projects.vercel.app
+(`dpl_4UrbRom7j6BjuGAtNzeh5RiVo9xX`). No schema or contract changes.
+
+A disconnected guest previously held the second waiting seat indefinitely
+while the host stayed online. Waiting lobbies now release that guest after
+one minute without contact and reset the host's ready consent. Loading and
+started races keep their original seats. The browser saves private seat
+credentials before submitting a join, preserving recovery after a lost reply;
+started and finished races also have distinct join errors.
+
+Backend rule tests, browser tests for lost acknowledgements/reload/blocked
+session storage/released seats, strict backend type checking and the production
+build passed. `node scripts/check-live-friend-seats.mjs` then passed against
+the live domain: first-attempt second-driver join, reload recovery, active
+third-driver rejection, real one-minute disconnected-seat cleanup, readiness
+reset and replacement joining as driver two. It used its own temporary room
+and closed that room afterward; no account creation or economy actions were
+part of the test. The release record and live check script are post-release
+documentation/test additions and do not require another deployment.
+
 ## Security hardening production release — 2026-11-14
 
 Deployed source **512f517** to production Convex
