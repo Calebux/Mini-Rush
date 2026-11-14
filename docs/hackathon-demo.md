@@ -36,6 +36,74 @@ shown at normal speed; short holds make craft and sale receipts readable. The
 economy excerpts are labelled with their original date. No purchase, result or
 settlement is simulated. The editor needs Chrome, Playwright and ffmpeg.
 
+### Current-design walkthrough with cursor
+
+The revised 5:16 guided cut uses short captions, music and game sounds, with
+**no voice-over**. It opens with a 1:35 account and purchase guide: find the
+browser-created garage account, click **Get test NEAR**, buy ISLAND NIGHT for
+0.75 test NEAR, confirm ownership and check the remaining balance. It explains
+the difference between test NEAR, RUSH and local coins, and the current lack of
+cross-device account recovery at recording time. The recovery-file feature was
+added afterward, so this video predates the home-screen Protect/Restore controls.
+The Customs Shop section is 1:58 and also exports separately. It retains the visible cursor and PlayStation controller guide and
+expands the current Customs Shop into a full sequence: body kits, wheels, wings,
+paint, power tunes, rotating the build, Street slicks, Slide compound, Low-drag,
+engine upgrades and dealer orders. Older workshop transaction footage is excluded
+from this edit. The separate 90-second cinematic trailer remains available.
+
+Generated local exports:
+
+- `output/walkthrough-demo-v3/minirush-walkthrough-1080p.mp4` — revised master.
+- `output/walkthrough-demo-v3/minirush-walkthrough-share.mp4` — 720p sharing copy.
+- `output/walkthrough-demo-v3/minirush-account-guide.mp4` — account and purchase guide.
+- `output/walkthrough-demo-v3/minirush-customs-shop.mp4` — Customs Shop excerpt.
+- `output/walkthrough-demo-v3/purchase-evidence.json` — public ownership and receipt data.
+- `output/walkthrough-demo-v3/captions.txt` — timestamped captions.
+- `output/walkthrough-demo-v3/README.txt` — chapters, recording notes and music credit.
+
+```sh
+node scripts/record-walkthrough-demo.mjs http://localhost:3000
+node scripts/record-customs-demo.mjs http://localhost:3000
+# Sends one testnet grant request and buys one edition (maximum 0.75 test NEAR):
+node scripts/record-account-demo.mjs --send http://localhost:3000
+node scripts/edit-walkthrough-demo.mjs
+node scripts/edit-walkthrough-demo.mjs --verify-only
+```
+
+Racing and Customs Shop capture use the dedicated testnet demo profile from the rehearsal.
+The account recorder uses a separate profile at `/tmp/minirush-account-demo-browser`
+and saves raw footage and public evidence to `/tmp/minirush-account-demo`.
+Keep both browser profiles private. Reuse completed captures for edits; do not
+repeat a successful purchase. The recorder refuses a garage that already owns an edition.
+The editor
+requires Chrome, Playwright and ffmpeg; it does not use speech generation. Use
+`--prepare-only` for graphics, `--render-only` to reuse them, or `--finish-only`
+to reassemble rendered chapters. The chapter plan is in
+`scripts/walkthrough-plan.mjs`.
+
+Cursor movements and press rings are captured with the real UI. The Customs
+Shop recorder scrolls options into view and checks that selections took effect.
+Customs changes are previews: that recorder does not buy, save, craft or simulate
+settlement, and blocks HTTP transaction writes. The account guide performs a real
+purchase, verifies the owner against contract state and cuts network waiting time
+between pending and confirmed steps. Later scenes use the separate racing demo
+garage. Driving footage
+uses assisted normal inputs with unchanged physics and results. The controller
+guide reflects the game's mappings; a physical pad was not tested during capture.
+PlayStation pads need a compatible browser/device, a USB or Bluetooth connection,
+and an initial button press to become visible to the game.
+
+The November 14 account recording used `p5463eb15fe9b.minirush-garage.testnet`:
+
+- [Test NEAR top-up](https://testnet.nearblocks.io/txns/CsSX1UC23Kzzubu4vmeRd7spsriYYXeMskN6QSLHeKec).
+- [ISLAND NIGHT #1 purchase, 0.75 test NEAR](https://testnet.nearblocks.io/txns/6odu99fnT1oX75gkz1oK9dPQwT1acj2FKtZruRB8ZHYg).
+
+The displayed spendable balance moved from 1.95 to 1.20 test NEAR. The game keeps
+a fee reserve aside; the purchase also incurs a network fee. This recording used
+the local frontend and development backend. The development backend was updated
+to accept the current signed top-up request before recording; this is not evidence
+of a production deployment.
+
 ### Longer walkthrough
 
 Aim for a two-to-three-minute edit, keeping the uncut recording and public
@@ -108,8 +176,9 @@ evidence of live settlement.
   test NEAR are separate resources.
 - NPC component demand uses inventory and budget rules; it is not a claim that
   unconstrained AI controls the economy. Recipes remain code-defined.
-- Browser-held garage keys make the first session unobtrusive. Cross-device
-  recovery and hosted Google authentication remain unfinished.
+- Browser-held garage keys make the first session unobtrusive. Encrypted recovery
+  files support another device if a backup was saved beforehand. Protected signing,
+  passkey recovery and hosted Google authentication remain unfinished.
 - Race telemetry has checks, but competitive results are not yet authoritative.
   Live multiplayer has no prize or salvage payout.
 - NEAR Intents is not implemented. Show the actual multi-token, component

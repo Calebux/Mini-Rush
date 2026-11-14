@@ -20,6 +20,7 @@ jobs:
       - run: npm run check:race-rules
       - run: npm run check:friend-rules
       - run: npm run check:garage-recovery
+      - run: npm run check:garage-backup
       - run: npm run check:identity-proof
       - run: npm audit --audit-level=high
   contract:

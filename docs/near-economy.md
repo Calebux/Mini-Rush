@@ -1,5 +1,24 @@
 # NEAR parts economy — first playable slice
 
+## Encrypted garage recovery production release — 2026-11-14
+
+Deployed the current working-tree frontend to https://minirush.site and
+https://www.minirush.site using the authenticated Vercel account `calebux`.
+Release: https://mini-rush-7js3qnkij-calebuxs-projects.vercel.app
+(`dpl_CRoXCPRQQoykZMJudkNZhDy9gUYa`), reported **Ready** by Vercel.
+The prebuilt production bundle targets
+`precious-dalmatian-332.eu-west-1.convex.cloud` and `minirush-garage.testnet`.
+No backend, contract, secret-setting or key-permission changes were required.
+
+Home now offers **Protect your garage** and **Restore garage**. The production
+build passed, and a hosted browser check passed encrypted-file download,
+restore into a separate browser profile, explicit confirmation/reload, mobile
+layout, the production backend target and the guest-play policy. That check
+used disposable fixture keys and mocked public access-key reads; provisioning
+and transactions were blocked. It is a hosted UI verification, not a live
+on-chain recovery transaction. The prior local adversarial and purchase tests
+are documented under [Encrypted garage backup and restore](#encrypted-garage-backup-and-restore).
+
 ## Race Friends seat recovery production release — 2026-11-14
 
 Deployed source **1baeab8** to production Convex
@@ -510,7 +529,9 @@ states. Blockchain records remain accessible in collapsed action/reward/price
 details. A test-build disclosure remains visible; Activity explains that items
 have no cash value and that access still depends on this browser's saved key.
 A separate Google sign-in preview is available on the driver card (see above).
-Cross-device garage recovery is not implemented.
+Encrypted file recovery is available separately from Google identity linking;
+see [Encrypted garage backup and restore](#encrypted-garage-backup-and-restore).
+The action journal itself remains device-local.
 
 Before sending an economy action, the browser durably saves its exact signed
 delegate, account/network scope, method and arguments. Storage failure blocks
@@ -538,7 +559,9 @@ entitlements after recovered purchases. Reward responses identify their race,
 so a delayed old reward cannot overwrite a newer results screen. A confirmed
 purchase remains confirmed if a subsequent inventory read fails. New account keys
 and reward requests must be saved before their initial submission. Clearing browser
-storage still loses the recovery journal and local account access.
+storage still loses the recovery journal and local account access unless a
+recovery file and its password were saved beforehand. The file restores access,
+not the action journal or unfinished race claims.
 
 The browser keeps 30 terminal actions plus all unresolved entries. Convex's
 `garageActions` table retains unresolved rows; a scheduled bounded cleanup removes
@@ -710,8 +733,95 @@ a real race occurred: a bot can fabricate plausible checkpoints, and multiple
 accounts can evade per-account caps. Authoritative physics replay, account abuse
 controls and sponsored gas budgets remain prerequisites for valuable rewards.
 The whole feature remains testnet-only, with no cash value or redemption promise.
-Player keys are still stored in browser storage; wallet recovery and stronger key
-protection are separate work.
+Player keys are still stored in browser storage. Encrypted recovery files restore
+account access, but stronger protection of the active signing key is separate work.
+
+## Encrypted garage backup and restore
+
+The home screen offers **Protect your garage** and **Restore garage** without
+requiring sign-in or interrupting immediate play. This frontend change was
+deployed on November 14, 2026 (see the release record above). No new contract
+or backend method is needed.
+
+To protect a garage, choose and confirm a unique password of at least 12
+characters, then download the file. Keep both the file and password. To restore,
+select the file and enter its password in another browser, review the verified
+account address, acknowledge the effect on the current garage, then restore and
+reload. Back up the current garage before replacing it. The UI deliberately says
+"download requested": it cannot prove that a browser saved the file to disk.
+
+The versioned JSON envelope uses Web Crypto PBKDF2-HMAC-SHA-256 with 600,000
+iterations, a fresh 16-byte salt, AES-256-GCM with a fresh 12-byte IV and a 128-bit
+authentication tag. Format/version/network/contract/algorithm metadata is
+authenticated as additional data. Algorithm/work-factor choices are fixed for
+v1; unknown fields, other networks/contracts, oversized files and malformed
+encodings are rejected before expensive work. The whole file is limited to
+16 KB. Passwords are not normalized or trimmed. The encrypted payload contains
+the account, Ed25519 key, public key, network, contract and creation date.
+
+Implementation references: [Web Crypto key derivation](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/deriveKey),
+[AES-GCM parameters](https://developer.mozilla.org/en-US/docs/Web/API/AesGcmParams)
+and [OWASP password work factors](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html).
+These explain the primitives and choices; they are not a security audit of this implementation.
+
+Export and import derive the public key from the saved secret and check the
+configured NEAR RPC's finalized `view_access_key` response. The key must still
+have `FullAccess`; a missing/revoked/restricted key or failed network check blocks
+the operation. The import file never supplies an RPC endpoint. The check is
+repeated immediately before activation. No private key, password or decrypted
+file is sent to a server; only the public account/key pair is queried. A
+permission read is a point-in-time check through the configured trusted RPC,
+not a guarantee against later key revocation.
+
+Restore requires the home screen and an explicit switch acknowledgement. It
+coordinates with purchases and top-ups through the same Web Lock, rejects stale
+account snapshots, and blocks switching away from pending relayed actions or
+race rewards. Restoring access to the same account can preserve its pending
+claims. A single atomic localStorage write stores the new account/key together;
+failure preserves the previous account. A page reload discards old in-memory
+ownership and reads the restored garage from chain. Other open tabs running this
+version reload when that record changes. Older already-open builds should be
+closed before restoring. Restore requires Web Locks; the UI fails closed if the
+browser lacks them.
+
+Existing garages continue using the legacy account/key slots until restored.
+After restore, `minirush.near.credentials.v1` is authoritative and legacy slots
+are removed on a best-effort basis. Corrupt authoritative records do not silently
+fall back to old credentials. Password inputs clear after processing, decrypted
+preview state clears on close, preview approval expires after five minutes and
+download object URLs are revoked on close. JavaScript cannot guarantee erasure
+of immutable strings from memory.
+
+This restores the NEAR account and its on-chain balances, numbered cars and
+parts. It does **not** back up local coins, cosmetic builds, driver records,
+action history or unfinished race claims; those remain device-local. Backups do
+not rotate keys. Anyone with a file and password has the backed-up key's full
+authority. Recovery cannot recreate a lost sole key, reset a forgotten backup
+password or resurrect a deleted account. Make a new backup after any future key
+rotation. FastAuth identity links do not substitute for this file.
+
+The active key is still readable by same-origin game code. The encrypted file
+protects the exported copy; it does not solve XSS, malicious dependencies or
+signing isolation. Planned subsequent work is a protected ownership signer,
+restricted gameplay keys and a passkey-backed vault or on-chain recovery design.
+NEAR [function-call keys](https://docs.near.org/protocol/accounts-contracts/access-keys)
+cannot attach NEAR deposits, and their gas allowance does not cap contract-asset
+spending; limited-edition purchases need their own approval path.
+
+Validation:
+
+```sh
+npm run check:garage-backup
+npm run check:garage-backup-ui -- http://localhost:3000
+```
+
+The first check uses real Web Crypto with disposable keys and tests password,
+tamper, schema, context and storage-failure cases. The browser check downloads
+an actual encrypted file and restores it into a separate isolated browser
+profile, with mocked public RPC responses. It checks wrong passwords, offline
+and revoked/restricted keys, revalidation before commit, active races, pending
+rewards, cross-tab coordination, cancellation, storage failures and refreshed
+ownership. It does not use player keys or send live transactions.
 
 ## Rollout
 

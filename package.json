@@ -29,6 +29,8 @@
     "check:dealer-orders": "node --experimental-strip-types scripts/check-dealer-orders.mjs",
     "check:garage-recovery": "node --experimental-strip-types scripts/check-garage-recovery.mjs && node --experimental-strip-types scripts/check-garage-recovery.mjs --guest",
     "check:garage-recovery-ui": "node scripts/check-garage-recovery-ui.mjs",
+    "check:garage-backup": "node --experimental-strip-types scripts/check-garage-backup.mjs",
+    "check:garage-backup-ui": "node scripts/check-garage-backup-ui.mjs",
     "check:near-auth": "node --experimental-strip-types scripts/check-near-auth.mjs",
     "check:identity-proof": "node --experimental-strip-types scripts/check-identity-proof.mjs",
     "check:auth-origin": "node scripts/check-auth-origin.mjs",

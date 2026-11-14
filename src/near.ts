@@ -2,8 +2,9 @@
  * The player's NEAR side (testnet), kept invisible: on first launch the phone
  * makes a key, the game's backend creates `p….minirush-garage.testnet` for it
  * and eligible race sessions earn salvage plus RUSH from a fixed table by finishing place.
- * every purchase is a meta-transaction the player signs and the game pays
- * gas for — no wallet, no seed phrase, no NEAR needed.
+ * Ordinary trading uses sponsored meta-transactions; numbered editions are
+ * paid directly from the garage's test NEAR. Keys stay in browser storage and
+ * can be backed up to a password-encrypted recovery file.
  *
  * near-api-js is loaded on first use so it never weighs on the race bundle.
  * Everything fails soft: offline or without Convex the game plays as before.
@@ -16,12 +17,14 @@ import { identityStartMessage, identityMessage, identityPayload, IDENTITY_TTL, t
 import { requiresShopSignIn } from '../shared/shopPolicy';
 import { PAID_CALL_TGAS, spendableNear, type Edition, type EditionCar } from '../shared/editions';
 import { openShopSignIn, SIGN_IN_REQUIRED } from './shopSession';
+import { CREDENTIALS_KEY, LEGACY_KEY, LEGACY_ACCOUNT, readCredentials, credentialSnapshot, commitCredentials } from '../shared/garageCredentials';
+import type { GarageBackup } from '../shared/garageBackup';
 
 export const GARAGE = (import.meta.env.VITE_NEAR_GARAGE as string | undefined) ?? 'minirush-garage.testnet';
 const RPC = (import.meta.env.VITE_NEAR_RPC as string | undefined) ?? 'https://test.rpc.fastnear.com';
 const CONVEX_URL = (import.meta.env.VITE_CONVEX_URL as string | undefined)?.trim().replace(/\/+$/, '');
-const KEY_STORE = 'minirush.near.key';
-const ACCOUNT_STORE = 'minirush.near.account';
+const KEY_STORE = LEGACY_KEY;
+const ACCOUNT_STORE = LEGACY_ACCOUNT;
 const TGAS = 1_000_000_000_000n;
 
 export const explorerTx = (hash: string) => `https://testnet.nearblocks.io/txns/${hash}`;
@@ -47,7 +50,9 @@ const read = (k: string): string | null => { try { return localStorage.getItem(k
 const write = (k: string, v: string): void => { try { localStorage.setItem(k, v); } catch { /* private mode */ } };
 
 export const nearEnabled = (): boolean => !!CONVEX_URL;
-export const nearAccount = (): string | null => read(ACCOUNT_STORE);
+export const nearAccount = (): string | null => {
+  try { return readCredentials(localStorage).account; } catch { return null; }
+};
 const actionScope = () => `${RPC}|${GARAGE}|${nearAccount() ?? ''}`;
 const actionJournal = new ActionJournal({ getItem: k => localStorage.getItem(k), setItem: (k,v) => localStorage.setItem(k,v) });
 export const garageActivity = (): SavedAction[] => actionJournal.list(actionScope()).slice().reverse();
@@ -99,8 +104,9 @@ export async function convex<T>(kind: 'query' | 'action', path: string, args: un
 
 async function keyPair() {
   const { KeyPair } = await near();
-  let k = read(KEY_STORE);
-  if (!k && nearAccount()) throw new Error('This browser no longer has access to your saved garage. Account recovery is not available yet.');
+  const stored = readCredentials(localStorage);
+  let k = stored.secretKey;
+  if (!k && stored.account) throw new Error('This browser no longer has access to your saved garage. Use Restore garage with a recovery file you saved earlier.');
   if (!k) { k = KeyPair.fromRandom('ed25519').toString(); localStorage.setItem(KEY_STORE, k); }
   return KeyPair.fromString(k as `ed25519:${string}`);
 }
@@ -115,7 +121,10 @@ export function ensureAccount(): Promise<string | null> {
   ensuring ??= (async () => {
     try {
       const kp = await keyPair();
+      const expected = credentialSnapshot(localStorage);
       const { account } = await convex<{ account: string }>('action', 'near:createPlayer', { publicKey: kp.getPublicKey().toString() }, 45_000);
+      // A restore or another tab may have completed while account creation ran.
+      if (credentialSnapshot(localStorage) !== expected) return nearAccount();
       write(ACCOUNT_STORE, account);
       return account;
     } catch {
@@ -154,6 +163,18 @@ export function syncCars(h: Holding[]): void {
 
 /** Sign a garage call and have the game relay it (the game pays gas). */
 let signingAction = false;
+let garageWrite = false;
+async function withGarageWrite<T>(work: () => Promise<T>): Promise<T> {
+  if (garageWrite) throw new Error('A garage action is completing. Please wait before trying again.');
+  garageWrite = true;
+  try {
+    if (navigator.locks) return await navigator.locks.request('minirush-garage-write', { ifAvailable:true }, lock => {
+      if (!lock) throw new Error('A garage action is completing in another tab.');
+      return work();
+    });
+    return await work();
+  } finally { garageWrite = false; }
+}
 export async function relayed(method: string, args: Record<string, unknown>, deposit = 0n): Promise<{ tx: string; value: unknown }> {
   const credential = requiresShopSignIn(method, SIGN_IN_REQUIRED) ? await (await import('./nearAuth')).loginToken().catch(() => null) : null;
   if (requiresShopSignIn(method, SIGN_IN_REQUIRED) && !credential) { openShopSignIn(); throw new Error('Sign in to buy cars and parts. Guest racing is always available.'); }
@@ -185,11 +206,7 @@ export async function relayed(method: string, args: Record<string, unknown>, dep
       throw new Error('Your action is still completing. You can keep browsing; check Activity for its progress.');
     } finally { signingAction = false; }
   };
-  if (navigator.locks) return navigator.locks.request('minirush-garage-write', { ifAvailable: true }, lock => {
-    if (!lock) throw new Error('An action is completing in another tab.');
-    return run();
-  });
-  return run();
+  return withGarageWrite(run);
 }
 
 // ── Limited editions: numbered cars bought and resold for NEAR ──
@@ -224,6 +241,9 @@ export async function nearSpendable(): Promise<bigint> {
  * and must hold FEE_RESERVE_YOCTO spare while the call runs.
  */
 async function paid<T>(method: string, args: Record<string, unknown>, deposit: bigint): Promise<T> {
+  return withGarageWrite(() => sendPaid<T>(method, args, deposit));
+}
+async function sendPaid<T>(method: string, args: Record<string, unknown>, deposit: bigint): Promise<T> {
   if (signingAction || hasPendingAction()) throw new Error('Your previous action is still completing. Check Activity for its progress.');
   signingAction = true;
   try {
@@ -259,6 +279,9 @@ export const listEditionCar = (carId: string, price: bigint) => relayed('list_ed
 export const cancelEditionListing = (carId: string) => relayed('cancel_edition_listing', { car_id: carId });
 /** Testnet only: a one-time top-up so a new garage can try a NEAR purchase. */
 export async function requestTestNear(): Promise<{ state: 'sent' | 'already' | 'unavailable'; message: string; tx?: string }> {
+  return withGarageWrite(sendTestNear);
+}
+async function sendTestNear(): Promise<{ state: 'sent' | 'already' | 'unavailable'; message: string; tx?: string }> {
   const account = await ensureAccount();
   if (!account) return { state: 'unavailable', message: 'Your garage is unavailable right now. Please reconnect.' };
   const at = Date.now();
@@ -267,6 +290,62 @@ export async function requestTestNear(): Promise<{ state: 'sent' | 'already' | '
   return convex('action', 'near:testNear', { account, at, signature }, 45_000);
 }
 export const onTestnet = GARAGE.endsWith('.testnet');
+
+export async function currentGarageBackup(): Promise<GarageBackup> {
+  const { KeyPair } = await near();
+  const stored = readCredentials(localStorage);
+  if (!stored.account || !stored.secretKey) throw new Error('Your garage key is not available. Reconnect, or restore a file saved earlier.');
+  let publicKey: string;
+  try { publicKey = KeyPair.fromString(stored.secretKey as `ed25519:${string}`).getPublicKey().toString(); }
+  catch { throw new Error('This browser cannot read your garage key. Restore a file saved earlier.'); }
+  return { account:stored.account, secretKey:stored.secretKey, publicKey, network:'testnet', garage:GARAGE, createdAt:new Date().toISOString() };
+}
+
+/** Recovery only checks the configured RPC. No transaction or secret is sent. */
+export async function verifyRecoveryAccess(saved: GarageBackup): Promise<void> {
+  if (!onTestnet || saved.network !== 'testnet' || saved.garage !== GARAGE || !/^[a-z0-9]+(?:[._-][a-z0-9]+)*\.testnet$/.test(saved.account) || saved.account.length > 64) throw new Error('This recovery file belongs to another game or network.');
+  const { KeyPair } = await near();
+  let publicKey: string;
+  try {
+    const key = KeyPair.fromString(saved.secretKey as `ed25519:${string}`);
+    publicKey = key.getPublicKey().toString();
+    const challenge = crypto.getRandomValues(new Uint8Array(32));
+    if (publicKey !== saved.publicKey || !key.verify(challenge, key.sign(challenge).signature)) throw new Error();
+  } catch { throw new Error('The recovery file contains an invalid garage key.'); }
+  let body: { result?: { permission?: unknown }; error?: unknown };
+  try {
+    const response = await fetch(RPC, { method:'POST', headers:{'Content-Type':'application/json'}, signal:AbortSignal.timeout(12_000),
+      body:JSON.stringify({ jsonrpc:'2.0', id:'minirush-recovery-check', method:'query', params:{ request_type:'view_access_key', finality:'final', account_id:saved.account, public_key:publicKey } }) });
+    if (!response.ok) throw new Error();
+    body = await response.json();
+  } catch { throw new Error('Could not check garage ownership. Reconnect and try again; nothing was switched.'); }
+  if (body.error || body.result?.permission !== 'FullAccess') throw new Error('This key no longer has full access to that garage, or the account is unavailable. Nothing was switched.');
+}
+
+/** Wait for automatic onboarding before capturing the account being replaced. */
+export async function waitForGarageCreation(): Promise<void> { if (ensuring) await ensuring; }
+
+export async function restoreSavedGarage(saved: GarageBackup, expected: string): Promise<void> {
+  // Web Locks serialize this final check and commit with purchases across tabs.
+  // Fail closed on older browsers rather than risk switching during a payment.
+  if (!navigator.locks) throw new Error('Restore needs a browser with Web Locks support. Use a current Chrome, Safari or Firefox browser.');
+  await withGarageWrite(async () => {
+    await waitForGarageCreation();
+    const idle = () => {
+      const state = (window as unknown as { __game?: { state:string } }).__game?.state;
+      if (state && state !== 'menu') throw new Error('Return to the home screen before restoring your garage.');
+      const switching = nearAccount() !== saved.account;
+      if (signingAction || actionFlights.size || rewardFlights.size || (switching && (hasPendingAction() || hasPendingReward()))) throw new Error('Let your current purchases and race rewards finish before switching garages. Check Activity.');
+      if (credentialSnapshot(localStorage) !== expected) throw new Error('Your active garage changed. Check the recovery file again.');
+    };
+    idle();
+    await verifyRecoveryAccess(saved); // Key may have been revoked since preview.
+    idle();
+    try { commitCredentials(localStorage, expected, { account:saved.account, secretKey:saved.secretKey }); }
+    catch { throw new Error('Browser storage could not save the restored garage. Your current garage is unchanged. Allow storage and check the file again.'); }
+    // A reload is required so all in-memory cars, parts and UI belong to this account.
+  });
+}
 
 export async function buy(tokenId: string, maxPrice: string): Promise<string> {
   const { tx } = await relayed('buy', { token_id: tokenId, max_price: maxPrice });
@@ -435,6 +514,7 @@ export function startGarageRecovery(): void {
   window.setInterval(() => { if (!document.hidden && Date.now() >= nextRecovery) void recoverGarage(); }, 15_000);
   window.addEventListener('online', () => { nextRecovery = 0; void recoverGarage(); });
   window.addEventListener('storage', e => {
+    if (e.key === CREDENTIALS_KEY && e.newValue !== e.oldValue) { location.reload(); return; }
     if (e.key !== ACTIONS_KEY) return;
     window.dispatchEvent(new Event('minirush:garage-action'));
     if (nearAccount()) void Promise.allSettled([holdings().then(syncCars), refreshComponents(false)])

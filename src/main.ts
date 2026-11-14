@@ -4,6 +4,7 @@ import { track } from './usage';
 import { recoverPurchase } from './workshop';
 import { recoverSkinPurchase } from './skins';
 import { installGarageActivity } from './garageActivity';
+import { installGarageProtection } from './garageProtection';
 import { SIGN_IN_REQUIRED } from './shopSession';
 import { installHomePriceWire } from './homePriceWire';
 import './neonHome.css'; // the Neon Night theme overrides the older sheets
@@ -14,6 +15,7 @@ import './partsWorkshop.css';
 import './raceRewards.css';
 import './garagePresentation.css';
 import './garageActivity.css';
+import './garageProtection.css';
 import './cardSystem.css';
 import './homePriceWire.css';
 import './workshopCinematic.css';
@@ -26,6 +28,7 @@ trackVisibleViewport(); // keeps the bottom controls inside what the browser sho
 watchAndroidHost(); // keeps the bottom controls clear of the Android nav bar
 new Game(document.getElementById('app')!);
 installGarageActivity();
+installGarageProtection();
 installHomePriceWire();
 // The garage made on this device is how a player gets in. The login panel is
 // only loaded where a deployment requires one for buying.

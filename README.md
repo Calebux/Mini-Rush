@@ -18,7 +18,7 @@ ordinary DOM controls alongside the 3D renderer, without a UI framework.
 
 ## For hackathon reviewers
 
-**Track: Gaming & NFTs. Target: NEAR testnet.** The economy supplies the next
+**Tracks: Games With Real Economies (`games`) and NFTs That Do Something (`nfts`). Target: NEAR testnet.** The economy supplies the next
 race build: racing produces materials, crafting creates individually owned parts,
 and players choose whether to fit them or sell to funded demand. A dealer spends
 its own reserved RUSH and acquires that same part for resale; maker credit stays
@@ -28,7 +28,7 @@ with the serial.
 | --- | --- | --- |
 | Agent NPCs | Three dealer wallets, inventory-aware repricing and funded component orders | Component buyers use rules; optional model-assisted car pricing is bounded, not unrestricted autonomy |
 | Player-owned economy | Crafted parts, four-slot builds, player listings and numbered car resales | Local skins/coins are not NFTs; recipes are code-defined |
-| Chain unobtrusiveness | Guest garage, device signing and sponsored crafting/trading | Test NEAR purchases remain explicit; browser-key recovery is unfinished |
+| Chain unobtrusiveness | Guest garage, device signing, sponsored crafting/trading and encrypted recovery files | Test NEAR purchases remain explicit; protected signing and passkey recovery are unfinished |
 | NEP-245 | Multi-token balances, supplies and core transfers | No claim of full optional-extension or external-marketplace compatibility |
 | Social login | Local NEAR Auth integration and ownership-proof checks | Hosted Google sign-in is disabled pending allowlisting |
 | NEAR Intents | Not implemented | Current settlement uses direct calls and signed delegate actions |
@@ -46,10 +46,45 @@ anti-cheat certification.
 [Craft](https://testnet.nearblocks.io/txns/D9mf1fYhHo1Gjwif4jBXG6fEU31eCNJ5m5iQGk9UhWbp) ·
 [Dealer delivery](https://testnet.nearblocks.io/txns/AbnxoJgkXK8hjS9qTWJnAkr3dWgQzAB2x5uuD6hNDWZY)
 
-Follow the [2–3 minute demo](docs/hackathon-demo.md) to reproduce the player
-journey. Public receipts, fixture screenshots and offline tests are labelled
+Follow the [demo guide](docs/hackathon-demo.md) to reproduce the player
+journey. It includes a cinematic trailer and a [captioned walkthrough covering accounts, a real testnet purchase,
+the current Customs Shop and PlayStation controls](docs/hackathon-demo.md#current-design-walkthrough-with-cursor). Public receipts, fixture screenshots and offline tests are labelled
 separately. See [security and trust boundaries](SECURITY.md): this is a testnet
 prototype with spending controls, **not an independently audited or cheat-proof game**.
+
+### Hackathon scope and baseline
+
+MiniRush is an existing browser racing game. Its earlier driving engine, world
+content and Celo tracker are **baseline work**, not a game built from scratch
+during NEAR HACKATHON. The last baseline commit is
+[`511dad22cc2fc999c6810fd87339ee04bc229986`](https://github.com/Calebux/Mini-Rush/commit/511dad22cc2fc999c6810fd87339ee04bc229986)
+(October 15, 2026). The subsequent work in this branch begins on November 9, 2026.
+
+The dedicated development branch is `economy-parts-workshop`. The
+[baseline-to-branch diff](https://github.com/Calebux/Mini-Rush/compare/511dad22cc2fc999c6810fd87339ee04bc229986...economy-parts-workshop)
+is the review boundary. In a checkout containing the branch, inspect the same
+changes with:
+
+```sh
+git diff --stat 511dad22cc2fc999c6810fd87339ee04bc229986...economy-parts-workshop
+git log --oneline 511dad22cc2fc999c6810fd87339ee04bc229986..economy-parts-workshop
+```
+
+Work added during the hackathon includes the Rust NEAR garage contract; RUSH and
+material balances; craftable performance parts, fitting and maker records;
+funded dealer orders and player markets; limited car editions and owner resales;
+sponsored guest transactions; encrypted garage backup/restore; the public economy
+view; and private two-player races. Presentation and customization improvements
+are also in the diff. The feature and limitation tables below distinguish what
+is on-chain, local-only, live, or unfinished.
+
+Development used **Claude Code and OpenAI Codex** for AI-assisted implementation,
+review, tests and documentation. Third-party foundations include Three.js,
+TypeScript, Vite, Convex, `near-api-js`, the NEAR Auth SDKs and Rust `near-sdk`;
+see [JavaScript dependencies](package.json),
+[contract dependencies](contracts/near/Cargo.toml) and their committed lockfiles.
+Playwright supports browser verification. Imported art and music retain their
+own licences and are credited in [CREDITS.md](CREDITS.md).
 
 ## Architecture and authority
 
@@ -107,6 +142,8 @@ Local browser test capture with fixture coins; no on-chain purchase.
 | Build your first performance part | Home → **Your next build**; inspect materials, then **Race for materials** or **Craft part** |
 | Race another person live | Home → **Race Friends** → **Create a race** → copy the invite; both drivers choose **I'm ready** |
 | See your cars | **Garage → Owned cars**; **All cars** shows the broader roster |
+| Back up your NEAR garage | Home → **Protect your garage** → choose a password → download the encrypted recovery file |
+| Restore on another device | Home → **Restore garage** → select the recovery file → enter its password → check ownership → confirm and reload |
 | Customize RUSH ONE | **Garage → Customs workshop → Customize** |
 | Buy and personalize a skin | **Garage → select a car → Skin Studio → select a skin** |
 | Craft, install or sell parts | **Garage → Customs workshop → Performance & Parts** |
@@ -117,8 +154,13 @@ Local browser test capture with fixture coins; no on-chain purchase.
 
 **Current guest policy:** guests can race, buy, craft and trade. Shopping does
 not currently require Google sign-in. A garage key is created and kept in this
-browser when the backend is available. Clearing browser storage can lose access
-to that garage; cross-device recovery is not implemented.
+browser when the backend is available. Before clearing browser storage, use
+**Protect your garage** to download a password-encrypted recovery file. That file
+and password restore the same NEAR testnet account on another device after a live
+ownership check. Local coins, cosmetics and race records are not included. A lost
+sole key cannot be recovered if no backup was made, and forgotten recovery
+passwords cannot be reset. Backup and restore are live on minirush.site as of
+November 14, 2026.
 
 ## Features built
 
@@ -243,6 +285,7 @@ Other ways to play:
 | Owner car resales | **From Owners** listings for edition cars, asking prices, cancellation, purchase and a 2% resale royalty retained by the game |
 | Testnet top-up | A limited, one-time **Get test NEAR** grant per garage, subject to backend daily caps and available game funds |
 | Activity and recovery | Status and receipts for tracked relayed actions, retry/recovery for pending claims, and confirmed balance refreshes |
+| Garage backup and restore | Password-encrypted file, live key-permission checks before restore, explicit account switching and atomic account/key storage; no FastAuth required |
 | Economy visibility | Live supply, mint/burn totals, crafting, recycling, trade volume, dealer stock/funds, price-change reasons and edition revenue |
 | Homepage Price Wire | Edition and dealer prices plus owner-listing count; pause, reduced motion and stale/offline labels |
 
@@ -275,6 +318,8 @@ NEAR Auth/Google integration exists as an **optional preview**. It is disabled
 on the live site: the shared testnet client's hosted-origin/callback allowlist
 has not been resolved for `minirush.site`. Local authentication and optional
 identity-to-garage proof work do **not** provide cross-device account recovery.
+Encrypted file recovery is independent of that preview. See the
+[recovery format, trust boundaries and tests](docs/near-economy.md#encrypted-garage-backup-and-restore).
 
 ## What is still unfinished
 
@@ -284,7 +329,7 @@ These are the remaining work items, not features advertised as shipped.
 | --- | --- | --- |
 | Before competitive rewards | Authoritative race validation | Move decisive race progress/results to server simulation or verified replay. Current telemetry checks cannot prove a real race occurred; solo reward placement is client-reported. |
 | Next multiplayer milestone | Public matchmaking and larger grids | Add a queue, four-player rooms, connection/load testing and clear latency handling. Current live rooms support two friends only, without contact or rewards. |
-| Account continuity | Hosted Google sign-in and garage recovery | Resolve hosted Auth0 origin/callback configuration, then implement secure identity-bound recovery. Browser keys remain device-local today. |
+| Account continuity | Protected signer, passkeys and hosted Google sign-in | Encrypted file recovery is implemented. Next isolate ownership signing, introduce narrowly scoped gameplay keys and connect passkeys to a real vault or recovery mechanism. Resolve hosted Auth0 origins separately. |
 | Hackathon integration gap | NEAR Intents | Design and implement an actual intent-based transaction flow. The current marketplace uses direct contract calls and sponsored relays, not NEAR Intents. |
 | Economy readiness | Balance and abuse resistance | Simulate emission/sink/dealer solvency over time; validate bot/Sybil resistance and tune the new atomic account-funding and sponsored-attempt budgets from measured usage. |
 | Versioning and interoperability | Stable recipes/rules and external NFT compatibility | Version recipes and competitive records; verify third-party wallet/marketplace behavior. Optional NFT approvals and royalty-standard extensions are not implemented. |
@@ -388,6 +433,8 @@ Contract and auth/recovery checks:
 ```sh
 cargo test --manifest-path contracts/near/Cargo.toml
 npm run check:garage-recovery
+npm run check:garage-backup
+npm run check:garage-backup-ui -- http://localhost:3000
 npm run check:identity-proof
 npm run check:dealer-orders -- http://localhost:3000
 npm run check:handling-rivals -- http://localhost:3000
@@ -422,6 +469,7 @@ for live verification and remaining limitations.
 | `src/ui.ts`, `src/market.ts`, `src/workshopUI.ts`, `src/partsWorkshop.ts` | Menus, garage, market and build flows |
 | `src/friendRace.ts`, `shared/friendRace.ts`, `convex/friends.ts` | Live multiplayer UI, shared rules and room backend |
 | `src/near.ts`, `src/garageActivity.ts` | Garage account access, transactions and recovery UI |
+| `src/garageProtection.ts`, `shared/garageBackup.ts`, `shared/garageCredentials.ts` | Encrypted backup UI, portable recovery-file format and atomic restored credentials |
 | `convex/` | Rooms, boards, reward validation, relays and dealer automation |
 | `contracts/near/` | Rust garage contract, token ledger, components, orders and editions |
 | `shared/components.json` | Shared crafting catalogue and stat changes |
