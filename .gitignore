@@ -12,6 +12,9 @@ contracts/broadcast/
 .env
 .env.local
 .env.*.local
+.env.*
+!.env.example
+.near-credentials/
 # generated throwaway wallet keys (stress test)
 scripts/.stress-wallets*.json
 # local treasury wallet generated for market testing

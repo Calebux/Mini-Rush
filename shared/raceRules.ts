@@ -9,7 +9,10 @@ export function checkProgress(race: Progress, progress: number, elapsed: number,
   if (elapsed < race.elapsed || progress < race.progress || progress > race.distance + 100) throw new Error('invalid progress');
   const wall = (now - race.startedAt) / 1000;
   const step = Math.min((now - race.sampledAt) / 1000, elapsed - race.elapsed);
-  if (elapsed > wall + 3 || progress - race.progress > Math.max(0, step) * 80 + 20) throw new Error('impossible pace');
+  // A per-sample allowance alone compounds into free distance with many samples.
+  if (now < race.sampledAt || elapsed < 0 || progress < 0 || elapsed > wall + 3 ||
+    progress > Math.min(wall, elapsed) * 80 + 20 ||
+    progress - race.progress > Math.max(0, step) * 80 + 20) throw new Error('impossible pace');
   if (!finish && now - race.sampledAt < 2000) throw new Error('checkpoint too soon');
   if (finish && (elapsed < 40 || wall < 40 || race.samples < 4 || progress < race.distance)) throw new Error('complete a full race to earn salvage');
 }

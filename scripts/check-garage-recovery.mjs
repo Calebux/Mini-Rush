@@ -69,6 +69,7 @@ const ctx={
  },
  runMutation:async(ref,args)=>{
   const name=getFunctionName(ref);
+  if(name==='nearDb:reserveBroadcast')return;
   if(name==='nearDb:prepareGarageAction'){
    if(!stored.has(args.digest))stored.set(args.digest,{...args,state:'pending',createdAt:Date.now()});
    return stored.get(args.digest);
@@ -94,7 +95,7 @@ try{
  for (const method of ['buy_component','craft_component']) {
   assert.equal((await relayTracked._handler(ctx,await request(9,method))).state,'failed');
  }
- await assert.rejects(() => relay._handler(ctx,req), /Sign in/,'legacy endpoint also requires a session');
+ await assert.rejects(() => relay._handler(ctx,req), /tracked garage actions/,'legacy endpoint is retired');
  }
  signedIn = requireLogin;
  assert.equal((await relayTracked._handler(ctx,req)).state,'pending');

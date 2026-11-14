@@ -17,6 +17,8 @@ assert.throws(() => checkProgress({ ...race, samples: 0 }, 1800, 60, start + 60_
 assert.throws(() => checkProgress({ ...race, distance: 2400 }, 1800, 60, start + 60_000, true), /full race/);
 assert.throws(() => checkProgress(race, 1681, 57, start + 56_500, false), /too soon/);
 assert.throws(() => checkProgress({ ...race, elapsed: 20, progress: 400, distance: 500 }, 500, 25, start + 60_000, true), /full race/);
+assert.throws(() => checkProgress({ ...race, progress: 4700, elapsed: 56, distance: 6000 }, 4800, 58, start + 58_000, false), /impossible pace/, 'sample slack cannot accumulate beyond the whole-run speed bound');
+assert.throws(() => checkProgress(race, race.progress, race.elapsed, start + 55_000, true), /impossible pace/, 'server time cannot move backwards');
 // Only a whole-number podium picks a bonus tier; anything else a client sends is a plain finish.
 assert.deepEqual([1, 2, 3, 4, 0, -1, 1.5, '1', null, undefined, NaN, 255].map(rewardPlace), [1, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
 assert.deepEqual([1, 2, 3, 4, undefined].map(raceRush), [45, 36, 30, 24, 24]);

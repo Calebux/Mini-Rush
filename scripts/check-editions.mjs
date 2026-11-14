@@ -5,7 +5,7 @@ import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import * as borsh from 'borsh';
-import { SCHEMA } from 'near-api-js';
+import { SCHEMA, PublicKey } from 'near-api-js';
 
 const base = process.argv[2] ?? 'http://127.0.0.1:5174';
 const out = '/tmp/minirush-editions'; await mkdir(out, { recursive: true });
@@ -15,6 +15,7 @@ const edition = { id: 'lagos-gold', name: 'LAGOS GOLD', model: 'tourbillon', col
 const car = (serial, owner, price = null) => ({ id: `edition:lagos-gold:${serial}`, edition_id: 'lagos-gold', serial, owner, first_owner: owner,
   minted_ms: Date.now(), price, offer: price ? 10 + serial : 0, last_price: String(2n * NEAR), sales: 0 });
 let cars = [car(3, rival, String(3n * NEAR / 2n))], revision = 40;
+let garagePublicKey;
 let balance = NEAR / 100n, grants = 0, offline = false;
 const calls = [];
 
@@ -72,8 +73,11 @@ await page.route('**/*', async route => {
     }
     return route.fulfill({ json: { jsonrpc: '2.0', id: body.id, result } });
   }
-  if (body.path === 'near:createPlayer') return route.fulfill({ json: { status: 'success', value: { account: me, welcome: 0, created: true } } });
+  if (body.path === 'near:createPlayer') { garagePublicKey = body.args.publicKey; return route.fulfill({ json: { status: 'success', value: { account: me, welcome: 0, created: true } } }); }
   if (body.path === 'near:testNear') {
+    assert.equal(body.args.account, me);
+    assert.ok(Math.abs(Date.now() - body.args.at) < 60_000);
+    assert.ok(PublicKey.from(garagePublicKey).verify(new TextEncoder().encode(`minirush:test-near:${me}:${body.args.at}`), Buffer.from(body.args.signature, 'base64')), 'top-up is authorized by this garage key');
     grants++; balance += 4n * NEAR;
     return route.fulfill({ json: { status: 'success', value: { state: 'sent', message: 'Test NEAR added to your garage.', tx: 'fixture-grant' } } });
   }

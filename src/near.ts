@@ -261,7 +261,10 @@ export const cancelEditionListing = (carId: string) => relayed('cancel_edition_l
 export async function requestTestNear(): Promise<{ state: 'sent' | 'already' | 'unavailable'; message: string; tx?: string }> {
   const account = await ensureAccount();
   if (!account) return { state: 'unavailable', message: 'Your garage is unavailable right now. Please reconnect.' };
-  return convex('action', 'near:testNear', { account }, 45_000);
+  const at = Date.now();
+  const { grantMessage } = await import('../shared/sponsorPolicy');
+  const signature = await signMessage(grantMessage(account, at));
+  return convex('action', 'near:testNear', { account, at, signature }, 45_000);
 }
 export const onTestnet = GARAGE.endsWith('.testnet');
 

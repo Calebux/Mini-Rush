@@ -1,8 +1,5 @@
-// Wallet profiles: the driver name and bought cars behind a Nimiq address, so
-// a player who loses the phone's storage (Nimiq Pay can clear it) gets both
-// back on the next sign-in. Same trust model as the boards — the game writes
-// from the phone and nothing is signed — so cars are only ever added, never
-// taken away, and the NIM payment for each purchase stays on-chain to check.
+// Archived Nimiq profiles. Current NEAR gameplay has no callers of these writes.
+// Keep reads and operator-only corrections; unauthenticated client writes are retired.
 import { v } from 'convex/values';
 import { internalMutation, mutation, MutationCtx, query } from './_generated/server';
 
@@ -11,7 +8,6 @@ const ADDRESS = /^NQ\d{2}[0-9A-HJ-NP-VXY]{32}$/;
 const CAR = /^[a-z0-9-]{1,24}$/;
 const MAX_CARS = 64;
 const MAX_PURCHASES = 64;
-const TX_MAX = 1024;
 
 // the username rules the game applies (src/driver.ts)
 const NAME_MIN = 3;
@@ -67,47 +63,17 @@ export const get = query({
   }
 });
 
-/**
- * Sign-in sync: back up what the phone holds. The name is only filled in when
- * the profile has none, so a phone with a fresh generated name never
- * overwrites the one the wallet already raced under; setName changes it.
- */
+// These old endpoints accepted an arbitrary address without proof of ownership.
+// Retain explicit rejections for stale clients instead of silently acknowledging writes.
+const retired = async (): Promise<never> => { throw new Error('Legacy wallet profile writes are disabled'); };
 export const sync = mutation({
-  args: { address: v.string(), name: v.optional(v.string()), cars: v.array(v.string()) },
-  handler: async (ctx, { address: raw, name: rawName, cars }) => {
-    const address = compact(raw);
-    if (!address) return null;
-    const row = await find(ctx, address);
-    const name = rawName === undefined ? null : cleanName(rawName);
-    await save(ctx, address, {
-      cars: cars.slice(0, MAX_CARS),
-      ...(name && !row?.name ? { name } : {})
-    });
-    return null;
-  }
+  args: { address: v.string(), name: v.optional(v.string()), cars: v.array(v.string()) }, handler: retired
 });
-
-/** The player picked a new username while signed in. */
 export const setName = mutation({
-  args: { address: v.string(), name: v.string() },
-  handler: async (ctx, { address: raw, name: rawName }) => {
-    const address = compact(raw);
-    const name = cleanName(rawName);
-    if (!address || !name) return null;
-    await save(ctx, address, { name });
-    return null;
-  }
+  args: { address: v.string(), name: v.string() }, handler: retired
 });
-
-/** A car bought for NIM: unlock it on the wallet and keep the payment reference. */
 export const addCar = mutation({
-  args: { address: v.string(), car: v.string(), tx: v.string() },
-  handler: async (ctx, { address: raw, car, tx }) => {
-    const address = compact(raw);
-    if (!address || !CAR.test(car)) return null;
-    await save(ctx, address, { cars: [car], purchase: { car, tx: tx.slice(0, TX_MAX) } });
-    return null;
-  }
+  args: { address: v.string(), car: v.string(), tx: v.string() }, handler: retired
 });
 
 /**

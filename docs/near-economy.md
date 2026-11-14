@@ -1,5 +1,19 @@
 # NEAR parts economy — first playable slice
 
+## Security hardening prepared — 2026-11-14
+
+The working tree adds atomic sponsorship budgets, durable account creation,
+signed test-NEAR top-ups with concurrent pool reservations, an emergency backend
+pause, stricter browser headers and compatible dependency security updates.
+See [SECURITY.md](../SECURITY.md) for limits, tests and unresolved risks.
+
+**These changes have not been deployed.** The live release is still the one
+recorded below. Release backend and frontend together: the new `near:testNear`
+endpoint requires a timestamp and garage signature, and old clients must refresh.
+The schema adds `nearCreations`, `sponsorBudgets`, grant indexes and an optional
+settlement timestamp; no Rust contract layout changes or on-chain migration are
+part of this revision. CI configuration is prepared locally, not yet run on GitHub.
+
 ## Cinematic workshop and Skin Studio production release
 
 Deployed frontend source **7774a33** to https://minirush.site on 2026-11-13.

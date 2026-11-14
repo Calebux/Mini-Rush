@@ -3,11 +3,7 @@ import { v } from 'convex/values';
 import { checkProgress, rewardPlace } from '../shared/raceRules';
 import { identityMessage, IDENTITY_TTL } from '../shared/identityProof';
 import { internalMutation, internalQuery, query } from './_generated/server';
-
-export const RACE_CAP = 400;          // RUSH per race payout
-export const DAY_CAP = 4000;          // RUSH per account per UTC day
-export const RACE_GAP_MS = 40_000;    // no two payouts closer than a short race
-export const CREATIONS_PER_HOUR = 120;
+import { spendBudget } from './sponsorBudget';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -116,19 +112,42 @@ export const playerByKey = internalQuery({
     ctx.db.query('nearPlayers').withIndex('by_key', (q) => q.eq('publicKey', publicKey)).first()
 });
 
+export const creationByKey = internalQuery({
+  args: { publicKey: v.string() },
+  handler: (ctx, { publicKey }) => ctx.db.query('nearCreations').withIndex('by_key', q => q.eq('publicKey', publicKey)).first()
+});
+export const prepareCreation = internalMutation({
+  args: { account: v.string(), publicKey: v.string(), tx: v.string(), signedTransaction: v.string() },
+  handler: async (ctx, args) => {
+    const old = await ctx.db.query('nearCreations').withIndex('by_key', q => q.eq('publicKey', args.publicKey)).first();
+    if (old) return old;
+    await spendBudget(ctx, 'creations:hour', 20, 3600_000);
+    await spendBudget(ctx, 'creations:day', 100, 86400_000);
+    const id = await ctx.db.insert('nearCreations', { ...args, createdAt: Date.now() });
+    return (await ctx.db.get(id))!;
+  }
+});
+// Called immediately before each broadcast, including retries. Budget failures
+// happen outside RPC catch blocks so callers see an actionable limit message.
+export const reserveBroadcast = internalMutation({
+  args: { account: v.string(), kind: v.union(v.literal('relay'), v.literal('race'), v.literal('creation')) },
+  handler: async (ctx, { account, kind }) => {
+    await spendBudget(ctx, `${kind}:${account}:minute`, 12, 60_000);
+    await spendBudget(ctx, `${kind}:${account}:day`, kind === 'race' ? 40 : kind === 'creation' ? 20 : 200, 86400_000);
+    await spendBudget(ctx, `${kind}:global:day`, kind === 'race' ? 3000 : kind === 'creation' ? 200 : 5000, 86400_000);
+  }
+});
+export const pruneSponsorBudgets = internalMutation({
+  args: {}, handler: async ctx => {
+    const old = await ctx.db.query('sponsorBudgets').withIndex('by_expiry', q => q.lt('expiresAt', Date.now() - 86400_000)).take(200);
+    for (const row of old) await ctx.db.delete(row._id);
+  }
+});
+
 export const playerByAccount = internalQuery({
   args: { account: v.string() },
   handler: (ctx, { account }) =>
     ctx.db.query('nearPlayers').withIndex('by_account', (q) => q.eq('account', account)).first()
-});
-
-export const recentCreations = internalQuery({
-  args: {},
-  handler: async (ctx) => {
-    const since = Date.now() - 3_600_000;
-    const rows = await ctx.db.query('nearPlayers').withIndex('by_created', (q) => q.gt('createdAt', since)).collect();
-    return rows.length;
-  }
 });
 
 /** Players paid in the last hour: how busy the streets are, for the dealers. */
@@ -143,12 +162,23 @@ export const recentRacers = internalQuery({
 
 /** Records a test NEAR top-up before it is sent: one per garage, `cap` per UTC day. */
 export const reserveGrant = internalMutation({
-  args: { account: v.string(), amount: v.string(), cap: v.number() },
-  handler: async (ctx, { account, amount, cap }): Promise<'ok' | 'already' | 'budget'> => {
+  args: { account: v.string(), amount: v.string(), cap: v.number(), availableForGrants: v.string(), balanceReadStartedAt: v.number() },
+  handler: async (ctx, { account, amount, cap, availableForGrants, balanceReadStartedAt }): Promise<'ok' | 'already' | 'budget' | 'pool'> => {
     if (await ctx.db.query('nearGrants').withIndex('by_account', (q) => q.eq('account', account)).first()) return 'already';
     const day = today();
     const sent = await ctx.db.query('nearGrants').withIndex('by_day', (q) => q.eq('day', day)).collect();
     if (sent.length >= cap) return 'budget';
+    // Hold all uncertain transfers and grants reserved while the RPC snapshot
+    // was in flight. Concurrent requests cannot all spend the same free balance.
+    // Bounded reads fail closed if unresolved records need operator reconciliation.
+    if (Date.now() - balanceReadStartedAt > 60_000) return 'pool';
+    const pending = await ctx.db.query('nearGrants').withIndex('by_tx', q => q.eq('tx', undefined)).take(101);
+    const recent = await ctx.db.query('nearGrants').withIndex('by_at', q => q.gte('at', balanceReadStartedAt)).take(101);
+    const settled = await ctx.db.query('nearGrants').withIndex('by_settled', q => q.gte('settledAt', balanceReadStartedAt)).take(101);
+    if (pending.length > 100 || recent.length > 100 || settled.length > 100) return 'pool';
+    const held = new Map([...pending, ...recent, ...settled].map(row => [row._id, BigInt(row.amount)]));
+    const committed = [...held.values()].reduce((sum, value) => sum + value, 0n);
+    if (BigInt(availableForGrants) < committed + BigInt(amount)) return 'pool';
     await ctx.db.insert('nearGrants', { account, day, amount, at: Date.now() });
     return 'ok';
   }
@@ -158,7 +188,7 @@ export const settleGrant = internalMutation({
   args: { account: v.string(), tx: v.string() },
   handler: async (ctx, { account, tx }) => {
     const row = await ctx.db.query('nearGrants').withIndex('by_account', (q) => q.eq('account', account)).first();
-    if (row) await ctx.db.patch(row._id, { tx });
+    if (row) await ctx.db.patch(row._id, { tx, settledAt: Date.now() });
   }
 });
 
@@ -170,37 +200,6 @@ export const insertPlayer = internalMutation({
     await ctx.db.insert('nearPlayers', {
       account, publicKey, createdAt: Date.now(), paidToday: 0, payDay: today(), lastPaidAt: 0, lastNonce: 0
     });
-  }
-});
-
-/**
- * Reserve a race payout before minting. Throws when the request breaks a
- * limit; the caps live here, inside one transaction, so two racing requests
- * can't both slip under them.
- */
-export const reservePayout = internalMutation({
-  args: { account: v.string(), coins: v.number(), nonce: v.number() },
-  handler: async (ctx, { account, coins, nonce }) => {
-    const p = await ctx.db.query('nearPlayers').withIndex('by_account', (q) => q.eq('account', account)).first();
-    if (!p) throw new Error('unknown player');
-    const now = Date.now();
-    if (nonce <= p.lastNonce) throw new Error('replayed');
-    if (Math.abs(nonce - now) > 10 * 60_000) throw new Error('stale');
-    if (now - p.lastPaidAt < RACE_GAP_MS) throw new Error('too soon');
-    const paidToday = p.payDay === today() ? p.paidToday : 0;
-    const amount = Math.max(0, Math.min(Math.floor(coins), RACE_CAP, DAY_CAP - paidToday));
-    if (amount <= 0) throw new Error('daily cap reached');
-    await ctx.db.patch(p._id, { paidToday: paidToday + amount, payDay: today(), lastPaidAt: now, lastNonce: nonce });
-    return amount;
-  }
-});
-
-/** Give back a reservation whose mint failed, so the player isn't short-changed by the cap. */
-export const releasePayout = internalMutation({
-  args: { account: v.string(), amount: v.number() },
-  handler: async (ctx, { account, amount }) => {
-    const p = await ctx.db.query('nearPlayers').withIndex('by_account', (q) => q.eq('account', account)).first();
-    if (p) await ctx.db.patch(p._id, { paidToday: Math.max(0, p.paidToday - amount), lastPaidAt: 0 });
   }
 });
 
@@ -245,6 +244,8 @@ export const beginRace = internalMutation({
     const previous = await ctx.db.query('nearRaces').withIndex('by_account_started', q => q.eq('account', account)).order('desc').first();
     const now = Date.now();
     if (previous && now - previous.startedAt < 5000) throw new Error('wait before restarting');
+    await spendBudget(ctx, `race-start:${account}:day`, 120, 86400_000);
+    await spendBudget(ctx, 'race-start:global:day', 6000, 86400_000);
     if (previous?.status === 'active') await ctx.db.patch(previous._id, { status: 'abandoned' });
     return ctx.db.insert('nearRaces', { account, run, distance, startedAt: now, sampledAt: now,
       progress: 0, elapsed: 0, samples: 0, status: 'active' });

@@ -1,10 +1,11 @@
 {
   "name": "minirush",
   "version": "0.1.0",
-  "description": "MiniRush Outbreak GP — mobile-first zombie racing for the web",
+  "description": "MiniRush — browser racing with a player-owned car and parts economy on NEAR testnet",
   "license": "MIT",
   "type": "module",
   "scripts": {
+    "check:security": "node --experimental-strip-types scripts/check-security.mjs",
     "check:friends": "node scripts/check-friends.mjs",
     "check:friend-rules": "node scripts/check-friend-rules.mjs",
     "dev": "vite --host",
@@ -19,7 +20,7 @@
     "stress": "node scripts/stress.mjs",
     "check:parts": "node scripts/check-parts-workshop.mjs",
     "check:race-rules": "node --experimental-strip-types scripts/check-race-rules.mjs",
-    "check:economy-server": "tsc --ignoreConfig --noEmit --target ES2022 --module ESNext --moduleResolution bundler --types node --skipLibCheck --strict convex/near.ts convex/nearDb.ts convex/schema.ts",
+    "check:economy-server": "tsc --ignoreConfig --noEmit --target ES2022 --module ESNext --moduleResolution bundler --types node --skipLibCheck --strict convex/near.ts convex/nearDb.ts convex/schema.ts convex/profiles.ts convex/crons.ts",
     "check:market": "node scripts/check-cinematic-market.mjs",
     "check:race-workshop": "node scripts/check-race-workshop.mjs",
     "check:test-drive": "node scripts/check-test-drive.mjs",

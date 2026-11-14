@@ -3,6 +3,7 @@ import { internal } from './_generated/api';
 
 const crons = cronJobs();
 crons.interval('friend room retention', { hours: 1 }, internal.friends.prune, {});
+crons.interval('sponsorship budget retention', { hours: 1 }, internal.nearDb.pruneSponsorBudgets, {});
 // The three dealer agents look at their stalls and reprice every 15 minutes.
 crons.interval('dealer agents', { minutes: 15 }, internal.near.dealerTick, {});
 crons.interval('completed action retention', { hours: 6 }, internal.nearDb.pruneGarageActions, {});

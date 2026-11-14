@@ -16,6 +16,58 @@ this is a testnet game, not a mainnet launch.
 Built with **Three.js, TypeScript, Vite, Convex and Rust/NEAR**. The frontend uses
 ordinary DOM controls alongside the 3D renderer, without a UI framework.
 
+## For hackathon reviewers
+
+**Track: Gaming & NFTs. Target: NEAR testnet.** The economy supplies the next
+race build: racing produces materials, crafting creates individually owned parts,
+and players choose whether to fit them or sell to funded demand. A dealer spends
+its own reserved RUSH and acquires that same part for resale; maker credit stays
+with the serial.
+
+| Track theme | Demonstrable implementation | Boundary |
+| --- | --- | --- |
+| Agent NPCs | Three dealer wallets, inventory-aware repricing and funded component orders | Component buyers use rules; optional model-assisted car pricing is bounded, not unrestricted autonomy |
+| Player-owned economy | Crafted parts, four-slot builds, player listings and numbered car resales | Local skins/coins are not NFTs; recipes are code-defined |
+| Chain unobtrusiveness | Guest garage, device signing and sponsored crafting/trading | Test NEAR purchases remain explicit; browser-key recovery is unfinished |
+| NEP-245 | Multi-token balances, supplies and core transfers | No claim of full optional-extension or external-marketplace compatibility |
+| Social login | Local NEAR Auth integration and ownership-proof checks | Hosted Google sign-in is disabled pending allowlisting |
+| NEAR Intents | Not implemented | Current settlement uses direct calls and signed delegate actions |
+
+**Inspect a completed economy loop:** the [recorded evidence](docs/demo-evidence.json)
+contains two race reward receipts, crafting and dealer delivery. In that dated
+run, the player earned 81 RUSH, 4 alloy and 2 circuits, crafted Low-drag compound
+`component:2`, and sold it to Mama T for 85 RUSH after fees. Its owner became the
+dealer while the original maker remained recorded. The recording used automated
+steering through normal game physics; it is evidence of integration, not an
+anti-cheat certification.
+
+[Race reward](https://testnet.nearblocks.io/txns/2jdpcfZRd2d4Q3bzGZbkY4xAUebtnHScgWavmnN1ne9G) ·
+[Second reward](https://testnet.nearblocks.io/txns/8mUoaypATSJa3afKQC4wg7pcVJboKKcy3tbq1YmSBTaA) ·
+[Craft](https://testnet.nearblocks.io/txns/D9mf1fYhHo1Gjwif4jBXG6fEU31eCNJ5m5iQGk9UhWbp) ·
+[Dealer delivery](https://testnet.nearblocks.io/txns/AbnxoJgkXK8hjS9qTWJnAkr3dWgQzAB2x5uuD6hNDWZY)
+
+Follow the [2–3 minute demo](docs/hackathon-demo.md) to reproduce the player
+journey. Public receipts, fixture screenshots and offline tests are labelled
+separately. See [security and trust boundaries](SECURITY.md): this is a testnet
+prototype with spending controls, **not an independently audited or cheat-proof game**.
+
+## Architecture and authority
+
+```mermaid
+flowchart LR
+    A[Browser: driving, skins, local coins] -->|Signed requests| B[Convex: session checks, budgets, tracked relay]
+    B -->|Sponsored transaction| C[NEAR testnet garage contract]
+    A -->|Player-funded edition purchase| C
+    D[NPC dealer wallets and bounded policies] --> C
+    C --> E[RUSH and materials / parts / car ownership / market settlement]
+    E -->|Confirmed state| A
+```
+
+The browser renders gameplay; the contract owns the economy ledger. Convex can
+reject implausible telemetry but cannot prove a client-reported win. Contract
+owner and dealer keys stay on the backend; the player's garage key stays in their
+browser. [Security details, limits and remaining release gates](SECURITY.md).
+
 ## Screenshots
 
 These are actual game captures, not mockups. Market supply, prices and balances
@@ -232,7 +284,7 @@ These are the remaining work items, not features advertised as shipped.
 | Next multiplayer milestone | Public matchmaking and larger grids | Add a queue, four-player rooms, connection/load testing and clear latency handling. Current live rooms support two friends only, without contact or rewards. |
 | Account continuity | Hosted Google sign-in and garage recovery | Resolve hosted Auth0 origin/callback configuration, then implement secure identity-bound recovery. Browser keys remain device-local today. |
 | Hackathon integration gap | NEAR Intents | Design and implement an actual intent-based transaction flow. The current marketplace uses direct contract calls and sponsored relays, not NEAR Intents. |
-| Economy readiness | Balance and abuse resistance | Simulate emission/sink/dealer solvency over time; strengthen bot/Sybil controls and account-funding/gas budgets. |
+| Economy readiness | Balance and abuse resistance | Simulate emission/sink/dealer solvency over time; validate bot/Sybil resistance and tune the new atomic account-funding and sponsored-attempt budgets from measured usage. |
 | Versioning and interoperability | Stable recipes/rules and external NFT compatibility | Version recipes and competitive records; verify third-party wallet/marketplace behavior. Optional NFT approvals and royalty-standard extensions are not implemented. |
 | Recovery polish | Failed/expired claim cleanup | Add a safe discard path for permanently failed claims and better handling of ambiguous paid-purchase results. |
 | Device and scale validation | Real-device performance and multiplayer load | Profile physical Android/iOS devices, slow connections and multiple simultaneous rooms. Browser screenshots are not performance certification. |
@@ -306,6 +358,7 @@ Developer query parameters include `?seed=7`, `?laps=4`, `?len=1800`,
 ```sh
 npm run build
 npm run check:economy-server
+npm run check:security
 npm run check:race-rules
 npm run check:friend-rules
 ```
@@ -349,6 +402,13 @@ Refresh the read-only documentation screenshots with:
 node scripts/capture-readme.mjs
 # Optional: node scripts/capture-readme.mjs http://localhost:3000
 ```
+
+The [CI workflow](.github/workflows/verify.yml) runs build, backend typechecking,
+security/recovery/race checks and contract tests without live credentials or
+transactions. `npm audit --audit-level=high` rejects high/critical advisories;
+lower-severity findings and their exposure are documented in [SECURITY.md](SECURITY.md).
+New hardening in this revision requires a coordinated backend/frontend release;
+see the [dated deployment record](docs/near-economy.md) for what is live.
 
 ## Repository map
 

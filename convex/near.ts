@@ -24,6 +24,7 @@ import { inspectSigningToken, mpcSignature, proofBytes, strictBase64, verifyIden
 import type { ActionCtx } from './_generated/server';
 import { requiresShopSignIn, signInRequired } from '../shared/shopPolicy';
 import { YOCTO } from '../shared/editions';
+import { boundedSetting, grantMessage } from '../shared/sponsorPolicy';
 
 const GARAGE = process.env.NEAR_GARAGE ?? 'minirush-garage.testnet';
 const RPC = process.env.NEAR_RPC ?? 'https://test.rpc.fastnear.com';
@@ -32,6 +33,11 @@ const TGAS = 1_000_000_000_000n;
 const SIGN_IN_REQUIRED = signInRequired(process.env.SHOP_SIGN_IN);
 const WELCOME_RUSH = 0; // No transferable signup grant: extra accounts must not print spending money.
 const PLAYER_NEAR = 10_000_000_000_000_000_000_000n; // 0.01 NEAR: account storage only — the game pays gas
+
+function assertSponsorship() {
+  if (!GARAGE.endsWith('.testnet')) throw new Error('Sponsorship is restricted to testnet');
+  if (process.env.NEAR_SPONSORSHIP_PAUSED === 'true') throw new Error('Garage sponsorship is paused. Please try again later.');
+}
 
 function gameAccount(): Account {
   const key = process.env.NEAR_GAME_KEY;
@@ -57,6 +63,7 @@ function panicText(err: unknown): string {
 const KEY = /^ed25519:[1-9A-HJ-NP-Za-km-z]{43,44}$/;
 
 function identityDeposit(): bigint {
+  assertSponsorship();
   if (process.env.NEAR_AUTH_PROOFS_ENABLED !== 'true' || !GARAGE.endsWith('.testnet')) throw new Error('Ownership verification is not enabled on this server yet');
   const value = process.env.NEAR_AUTH_SIGN_DEPOSIT_YOCTO;
   if (!value || !/^\d{1,23}$/.test(value) || BigInt(value) > 10_000_000_000_000_000_000_000n) throw new Error('Ownership signing budget is not configured');
@@ -137,7 +144,7 @@ export const completeIdentityProof = action({
     } catch { /* Query outages say nothing about whether the original call completed. */ }
     // Operator pause and expiry stop broadcasts; already finalized results can still be checked.
     if (saved.expiresAt <= Date.now()) return result(await ctx.runMutation(internal.nearDb.finishIdentityProof, { id, verified: false, message: 'Ownership check expired. Start a new check.' }));
-    if (process.env.NEAR_AUTH_PROOFS_ENABLED !== 'true') return pending;
+    if (process.env.NEAR_AUTH_PROOFS_ENABLED !== 'true' || process.env.NEAR_SPONSORSHIP_PAUSED === 'true') return pending;
     try {
       return await finish(await game.provider.sendTransactionUntil(SignedTransaction.decode(Buffer.from(saved.signedTransaction!, 'base64')), 'FINAL'));
     } catch { return pending; }
@@ -150,15 +157,29 @@ export const createPlayer = action({
     if (!KEY.test(publicKey)) throw new Error('bad key');
     const had = await ctx.runQuery(internal.nearDb.playerByKey, { publicKey });
     if (had) return { account: had.account, welcome: 0, created: false };
-    if ((await ctx.runQuery(internal.nearDb.recentCreations, {})) >= 120) throw new Error('busy, try later');
-
+    assertSponsorship();
+    // Decode before reserving funds, not just a regex check on a key-shaped string.
+    const key = PublicKey.from(publicKey);
     const prefix = 'p' + createHash('sha256').update(publicKey).digest('hex').slice(0, 12);
     const account = `${prefix}.${GARAGE}`;
     const game = gameAccount();
-    await game.signAndSendTransaction({
-      receiverId: account,
-      actions: [actions.createAccount(), actions.transfer(PLAYER_NEAR), actions.addFullAccessKey(PublicKey.from(publicKey))]
-    });
+    let saved = await ctx.runQuery(internal.nearDb.creationByKey, { publicKey });
+    if (!saved) {
+      const signed = await game.createSignedTransaction({ receiverId: account,
+        actions: [actions.createAccount(), actions.transfer(PLAYER_NEAR), actions.addFullAccessKey(key)] });
+      saved = await ctx.runMutation(internal.nearDb.prepareCreation, { account, publicKey,
+        tx: baseEncode(createHash('sha256').update(signed.transaction.encode()).digest()),
+        signedTransaction: Buffer.from(signed.encode()).toString('base64') });
+    }
+    let outcome: ActionResult | null = null;
+    try { outcome = settledOutcome(await game.provider.viewTransactionStatus({ txHash: saved.tx, accountId: GARAGE, waitUntil: 'NONE' }), saved.tx); }
+    catch { /* Only the same saved transaction may be retried after an outage. */ }
+    if (!outcome) {
+      await ctx.runMutation(internal.nearDb.reserveBroadcast, { account, kind: 'creation' });
+      try { outcome = settledOutcome(await game.provider.sendTransactionUntil(SignedTransaction.decode(Buffer.from(saved.signedTransaction, 'base64')), 'FINAL'), saved.tx); }
+      catch { throw new Error('Garage creation is still being checked. Keep this browser data and retry shortly.'); }
+    }
+    if (outcome?.state !== 'confirmed') throw new Error('Garage creation could not be confirmed. Keep this browser data and contact support.');
     await ctx.runMutation(internal.nearDb.insertPlayer, { account, publicKey });
     return { account, welcome: WELCOME_RUSH, created: true };
   }
@@ -170,25 +191,33 @@ export const createPlayer = action({
  * the balance that covers the contract's own storage.
  */
 export const testNear = action({
-  args: { account: v.string() },
-  handler: async (ctx, { account }): Promise<{ state: 'sent' | 'already' | 'unavailable'; message: string; tx?: string }> => {
-    const amount = BigInt(Math.round(Number(process.env.NEAR_TEST_GRANT ?? '2') * 1000)) * (YOCTO / 1000n);
+  args: { account: v.string(), at: v.number(), signature: v.string() },
+  handler: async (ctx, { account, at, signature }): Promise<{ state: 'sent' | 'already' | 'unavailable'; message: string; tx?: string }> => {
+    assertSponsorship();
+    const amount = BigInt(Math.round(boundedSetting(process.env.NEAR_TEST_GRANT, 2, 0, 2) * 1000)) * (YOCTO / 1000n);
     if (!GARAGE.endsWith('.testnet') || amount <= 0n) return { state: 'unavailable', message: 'Test NEAR is only offered on testnet.' };
     const player = await ctx.runQuery(internal.nearDb.playerByAccount, { account });
     if (!player) return { state: 'unavailable', message: 'Open your garage first, then try again.' };
+    if (!Number.isSafeInteger(at) || Math.abs(Date.now() - at) > 60_000 ||
+      !PublicKey.from(player.publicKey).verify(new TextEncoder().encode(grantMessage(account, at)), strictBase64(signature, 64))) throw new Error('Invalid top-up authorization');
     const game = gameAccount();
+    const balanceReadStartedAt = Date.now();
     const state = await game.getState();
-    const reserve = BigInt(Math.round(Number(process.env.NEAR_TEST_GRANT_RESERVE ?? '3'))) * YOCTO;
+    const reserve = BigInt(Math.round(boundedSetting(process.env.NEAR_TEST_GRANT_RESERVE, 3, 3, 100) * 1000)) * (YOCTO / 1000n);
     if (BigInt(state.balance.available) < amount + reserve) {
       return { state: 'unavailable', message: 'The test NEAR pool is empty right now. You can send test NEAR to your garage address instead.' };
     }
-    const cap = Math.round(Number(process.env.NEAR_TEST_GRANT_DAILY ?? '20'));
-    const reserved = await ctx.runMutation(internal.nearDb.reserveGrant, { account, amount: amount.toString(), cap });
+    const cap = boundedSetting(process.env.NEAR_TEST_GRANT_DAILY, 20, 0, 20);
+    if (!Number.isInteger(cap)) throw new Error('Invalid sponsorship configuration');
+    const reserved = await ctx.runMutation(internal.nearDb.reserveGrant, { account, amount: amount.toString(), cap,
+      availableForGrants: (BigInt(state.balance.available) - reserve).toString(), balanceReadStartedAt });
     if (reserved === 'already') return { state: 'already', message: 'This garage has already received its test NEAR.' };
     if (reserved === 'budget') return { state: 'unavailable', message: 'Today\u2019s test NEAR has all been handed out. Try again tomorrow, or send test NEAR to your garage address.' };
+    if (reserved === 'pool') return { state: 'unavailable', message: 'Other top-ups are using the available pool. Check again shortly.' };
     // A grant stays recorded even if the outcome is unclear, so one garage can never be paid twice.
     try {
       const res = await game.signAndSendTransaction({ receiverId: account, waitUntil: 'FINAL', actions: [actions.transfer(amount)] });
+      if (settledOutcome(res, res.transaction.hash)?.state !== 'confirmed') throw new Error('Top-up not finalized');
       await ctx.runMutation(internal.nearDb.settleGrant, { account, tx: res.transaction.hash });
       return { state: 'sent', message: 'Test NEAR added to your garage.', tx: res.transaction.hash };
     } catch {
@@ -225,6 +254,8 @@ export const raceProgress = action({
     const tier = rewardPlace(r.place);
     let tx = r.tx;
     if (!tx) {
+      assertSponsorship();
+      await ctx.runMutation(internal.nearDb.reserveBroadcast, { account, kind: 'race' });
       const result = await gameAccount().signAndSendTransaction({ receiverId: GARAGE,
         actions: [actions.functionCall('reward_race', { receiver_id: account, race_id: race, place: tier || null }, 60n * TGAS, 0n)] });
       for (const receipt of result.receipts_outcome) {
@@ -246,51 +277,15 @@ const RELAYABLE: Record<string, bigint> = { buy: 0n, sell_back: 0n, consume: 0n,
 
 export const relay = action({
   args: { signedDelegate: v.string() },
-  handler: async (ctx, { signedDelegate }): Promise<{ tx: string; value: unknown }> => {
-    const bytes = Buffer.from(signedDelegate, 'base64');
-    if (bytes.length > 2048) throw new Error('too large');
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- borsh returns the schema's plain shape
-    const sd = borsh.deserialize(SCHEMA.SignedDelegate, bytes) as any;
-    const da = sd.delegateAction;
-    if (da.receiverId !== GARAGE) throw new Error('only garage calls are relayed');
-    const p = await ctx.runQuery(internal.nearDb.playerByAccount, { account: da.senderId });
-    if (!p) throw new Error('unknown player');
-    if (!da.actions.length || da.actions.length > 2) throw new Error('bad actions');
-    for (const a of da.actions) {
-      const fc = a.functionCall;
-      if (!fc || !(fc.methodName in RELAYABLE)) throw new Error('method not relayed');
-      if (BigInt(fc.deposit) !== RELAYABLE[fc.methodName]) throw new Error('bad deposit');
-      if (BigInt(fc.gas) > 80n * TGAS) throw new Error('too much gas');
-      if (requiresShopSignIn(fc.methodName, SIGN_IN_REQUIRED) && !(await ctx.auth.getUserIdentity())) throw new Error('Sign in to buy cars and parts.');
-    }
-    try {
-      const res = await gameAccount().signAndSendTransaction({
-        receiverId: da.senderId,
-        actions: [actions.signedDelegate({ delegateAction: da, signature: sd.signature })]
-      });
-      // the inner call's outcome: a contract panic surfaces in the receipts, not the tx status
-      for (const r of res.receipts_outcome) {
-        const f = (r.outcome.status as { Failure?: unknown }).Failure;
-        if (f) throw new Error(JSON.stringify(f));
-      }
-      const last = [...res.receipts_outcome].reverse()
-        .find((r) => (r.outcome.status as { SuccessValue?: string }).SuccessValue);
-      const raw = (last?.outcome.status as { SuccessValue?: string } | undefined)?.SuccessValue;
-      let value: unknown = null;
-      try { value = raw ? JSON.parse(Buffer.from(raw, 'base64').toString()) : null; } catch { value = null; }
-      return { tx: res.transaction.hash, value };
-    } catch (err) {
-      const t = err instanceof Error ? err.message : String(err);
-      const m = t.match(/ExecutionError\\?":\\?"([^"\\]+)/) ?? t.match(/Smart contract panicked: ([^"\n\\]+)/);
-      throw new Error(m ? m[1].replace('Smart contract panicked: ', '') : t.slice(0, 200));
-    }
-  }
+  // Retired: it had no durable replay journal or off-chain signature checks.
+  handler: async (): Promise<never> => { throw new Error('Update the game to use tracked garage actions'); }
 });
 
 /** Durable relay for new clients. A timeout never becomes permission to spend again. */
 export const relayTracked = action({
   args: { signedDelegate: v.string() },
   handler: async (ctx, { signedDelegate }): Promise<ActionResult> => {
+    if (signedDelegate.length > 2732) return { state: 'failed', message: 'This action is too large.' };
     const bytes = Buffer.from(signedDelegate, 'base64');
     if (bytes.length > 2048) return { state: 'failed', message: 'This action is too large.' };
     // Borsh yields the plain schema representation used by the existing relay.
@@ -308,12 +303,13 @@ export const relayTracked = action({
     }
     if (da.receiverId !== GARAGE || da.actions.length !== 1 || da.actions.some((a: { functionCall?: { methodName: string; deposit: bigint; gas: bigint } }) => {
       const fc = a.functionCall;
-      return !fc || !(fc.methodName in RELAYABLE) || BigInt(fc.deposit) !== RELAYABLE[fc.methodName] || BigInt(fc.gas) > 80n * TGAS;
+      return !fc || !Object.hasOwn(RELAYABLE, fc.methodName) || BigInt(fc.deposit) !== RELAYABLE[fc.methodName] || BigInt(fc.gas) > 80n * TGAS;
     })) return { state: 'failed', message: 'This garage action is not supported.' };
     const digest = createHash('sha256').update(bytes).digest('hex');
     let saved = await ctx.runQuery(internal.nearDb.garageAction, { digest });
     const game = gameAccount();
     if (!saved) {
+      assertSponsorship();
       if (requiresShopSignIn(da.actions[0].functionCall.methodName, SIGN_IN_REQUIRED) && !(await ctx.auth.getUserIdentity())) {
         return { state: 'failed', message: 'Sign in to buy cars and parts. Nothing was purchased.' };
       }
@@ -344,6 +340,8 @@ export const relayTracked = action({
       const result = await finish(status);
       if (result.state !== 'pending') return result;
     } catch { /* Unknown or unavailable: only the exact saved transaction may be resent. */ }
+    assertSponsorship();
+    await ctx.runMutation(internal.nearDb.reserveBroadcast, { account: da.senderId, kind: 'relay' });
     try {
       return await finish(await game.provider.sendTransactionUntil(SignedTransaction.decode(Buffer.from(saved.signedTransaction, 'base64')), 'FINAL'));
     } catch {
@@ -443,6 +441,7 @@ async function llmDecisions(dealer: string, stalls: (ListingView & { soldSince: 
 export const dealerTick = internalAction({
   args: {},
   handler: async (ctx): Promise<string> => {
+    if (process.env.NEAR_SPONSORSHIP_PAUSED === 'true') return 'Economy automation paused';
     if (process.env.NEAR_DEALER_AGENTS_ENABLED === 'false') return 'Dealer agents disabled on this deployment';
     const listings = await view<ListingView[]>('listings');
     const racers: number = await ctx.runQuery(internal.nearDb.recentRacers, {});
@@ -500,6 +499,7 @@ export const dealerTick = internalAction({
 export const componentDealerTick = internalAction({
   args: {},
   handler: async (): Promise<string> => {
+    if (process.env.NEAR_SPONSORSHIP_PAUSED === 'true') return 'Economy automation paused';
     if (process.env.NEAR_DEALER_AGENTS_ENABLED === 'false') return 'Dealer agents disabled on this deployment';
     const [recipes, dealers] = await Promise.all([view<OrderRecipe[]>('component_recipes'), view<string[]>('dealers')]);
     const report: string[] = [];

@@ -17,7 +17,8 @@ export default defineConfig({
       }
     }
   },
-  // phone testing via ngrok etc.
-  preview: { allowedHosts: true },
-  server: { allowedHosts: true }
+  // Vite's default permits localhost and IPs. For a named phone-testing tunnel,
+  // set __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS to that exact host.
+  preview: { host: 'localhost' },
+  server: { host: 'localhost' }
 });

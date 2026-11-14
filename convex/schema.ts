@@ -131,12 +131,19 @@ export default defineSchema({
     account: v.string(),                   // "p1a2b3c4d5e.minirush-garage.testnet"
     publicKey: v.string(),                 // "ed25519:…"
     createdAt: v.number(),
-    paidToday: v.number(),                 // RUSH minted on `payDay`
+    paidToday: v.number(),                 // legacy field; current emissions are enforced on chain
     payDay: v.string(),
     lastPaidAt: v.number(),
     lastNonce: v.number()
   }).index('by_account', ['account']).index('by_key', ['publicKey'])
     .index('by_created', ['createdAt']).index('by_paid', ['lastPaidAt']),
+
+  // Reservation precedes funding; retries use one saved signed transaction.
+  nearCreations: defineTable({
+    account: v.string(), publicKey: v.string(), tx: v.string(), signedTransaction: v.string(), createdAt: v.number()
+  }).index('by_key', ['publicKey']),
+  sponsorBudgets: defineTable({ scope: v.string(), window: v.number(), used: v.number(), expiresAt: v.number() })
+    .index('by_scope_window', ['scope', 'window']).index('by_expiry', ['expiresAt']),
 
   // Signed outer transaction is saved before broadcast; retries reuse its exact bytes.
   identityProofs: defineTable({
@@ -156,8 +163,8 @@ export default defineSchema({
 
   // One-time test NEAR top-ups (testnet only), so a garage is never paid twice.
   nearGrants: defineTable({
-    account: v.string(), day: v.string(), amount: v.string(), tx: v.optional(v.string()), at: v.number()
-  }).index('by_account', ['account']).index('by_day', ['day']),
+    account: v.string(), day: v.string(), amount: v.string(), tx: v.optional(v.string()), at: v.number(), settledAt: v.optional(v.number())
+  }).index('by_account', ['account']).index('by_day', ['day']).index('by_tx', ['tx']).index('by_at', ['at']).index('by_settled', ['settledAt']),
 
   garageActions: defineTable({
     digest: v.string(), account: v.string(), tx: v.string(), signedTransaction: v.string(),
