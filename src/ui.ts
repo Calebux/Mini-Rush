@@ -647,6 +647,7 @@ export class UI {
       this.renderBoard();
       this.menu.classList.add('hidden');
       $('board').classList.remove('hidden');
+      $('board').scrollTop = 0;
     });
     on('btn-board-close', () => {
       this.audio.play('back');
@@ -1617,7 +1618,7 @@ export class UI {
 
     // global daily first — it's the board that matters
     if (boardsEnabled()) {
-      const head = textEl('div', 'board-head', '🌍 GLOBAL DAILY');
+      const head = textEl('div', 'board-head', 'GLOBAL DAILY');
       const slot = textEl('div', 'board-empty', 'Loading…');
       list.append(head, slot);
       const me = boardPlayerId();
@@ -1633,9 +1634,9 @@ export class UI {
       });
     }
 
-    if (daily.length > 0) section("⚡ TODAY'S DAILY (THIS PHONE)", daily.slice(0, 5));
-    if (weekly.length > 0) section("🏆 THIS WEEK'S CUP (THIS PHONE)", weekly.slice(0, 5));
-    if (allTime.length > 0) section('ALL TIME', allTime);
+    if (daily.length > 0) section("TODAY'S DAILY · THIS DEVICE", daily.slice(0, 5));
+    if (weekly.length > 0) section("THIS WEEK'S CUP · THIS DEVICE", weekly.slice(0, 5));
+    if (allTime.length > 0) section('ALL TIME · THIS DEVICE', allTime);
     if (daily.length === 0 && weekly.length === 0 && allTime.length === 0 && !boardsEnabled()) {
       const empty = document.createElement('div');
       empty.className = 'board-empty';
@@ -1854,6 +1855,7 @@ export class UI {
     $('btn-resume').textContent = paused ? 'RESUME' : mode === 'first-run' ? 'START RACE' : 'BACK';
     $('btn-pause-restart').classList.toggle('hidden', !paused);
     $('pause').classList.remove('hidden');
+    $('pause').scrollTop = 0;
   }
 
   /**

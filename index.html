@@ -1490,6 +1490,7 @@
     <div class="pause-card">
       <div class="pause-kicker" id="pause-kicker">RACE STOPPED</div>
       <h2 id="pause-title">PAUSED</h2>
+      <p class="briefing-intro">Find your line. Build your pace. Make the next run yours.</p>
       <div class="pause-section">
         <div class="pause-label">CONTROLS</div>
         <div class="control-grid">
@@ -1770,16 +1771,22 @@
     <button class="btn ghost" id="btn-bounty-close" type="button">Back</button>
   </div>
 
-  <div class="overlay hidden" id="board">
-    <div class="logo" style="font-size:30px">Leader<em>board</em></div>
+  <div class="overlay hidden" id="board" aria-labelledby="board-title">
+    <div class="board-card">
+    <header class="board-heading"><span class="board-kicker">MINIRUSH / RACE RECORDS</span>
+      <h2 id="board-title">The board.</h2>
+      <p>Your best runs. The next score to beat.</p>
+    </header>
     <div id="name-row">
       <span class="lap-label">RACING AS</span>
       <strong id="board-name">DRIVER</strong>
       <button class="name-edit hidden" id="btn-board-name" type="button">EDIT</button>
     </div>
     <div class="hint" id="board-name-note"></div>
+    <div class="board-columns" aria-hidden="true"><span>RANK / DRIVER</span><span>SCORE</span></div>
     <div id="board-list"></div>
-    <button class="btn ghost" id="btn-board-close" type="button">Back</button>
+    <footer class="board-footer"><span>Chase the line. Climb the board.</span><button class="btn ghost" id="btn-board-close" type="button">BACK TO HOME ↗</button></footer>
+    </div>
   </div>
 
   <div class="overlay hidden" id="profile">
