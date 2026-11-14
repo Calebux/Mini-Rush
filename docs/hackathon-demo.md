@@ -6,6 +6,38 @@ handling, and its maker credit survives resale.
 
 ## A short presentation
 
+### 90-second cinematic cut
+
+The November 14 edit combines current game footage with the recorded November 13
+testnet settlement sequence. It includes slow push-ins, orbit views, Skin Studio
+previews, custom bodywork, three performance-part inspections, the limited-edition
+market and four race cameras. Captions, captured game effects and the credited
+Race Heat music accompany the edit; there is no voice-over.
+
+Local exports (generated media is excluded from git):
+
+- `output/cinematic-demo/minirush-demo-1080p.mp4` — 1920×1080 master.
+- `output/cinematic-demo/minirush-demo-share.mp4` — smaller 1280×720 copy.
+- `output/cinematic-demo/README.txt` — chapters, public receipts and music credit
+  to include in the upload description.
+- `output/cinematic-demo/edit-notes.json` — source timestamps and editing details.
+
+Reproduce after the testnet rehearsal below has populated the dedicated demo
+browser and preserved the raw economy recording:
+
+```sh
+node scripts/record-cinematic-demo.mjs http://localhost:3000
+node scripts/edit-cinematic-demo.mjs
+```
+
+The capture reads public data and blocks HTTP writes. Cosmetic shots are previews.
+Driving uses normal input and physics with automated gas/steering. Gameplay is
+shown at normal speed; short holds make craft and sale receipts readable. The
+economy excerpts are labelled with their original date. No purchase, result or
+settlement is simulated. The editor needs Chrome, Playwright and ffmpeg.
+
+### Longer walkthrough
+
 Aim for a two-to-three-minute edit, keeping the uncut recording and public
 transaction receipts available. Label sped-up racing or time cuts. Start from
 the game UI, with the chain details available when someone asks to inspect them.
