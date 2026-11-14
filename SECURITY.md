@@ -18,8 +18,9 @@ claim that no exploitable defects remain. Do not deposit mainnet assets.
 
 ## Hardening in this revision
 
-**Source changes, not a claim of a new production deployment.** The dated release
-record in [economy notes](docs/near-economy.md) identifies the live version.
+**Deployed on 2026-11-14 from source `512f517`.** The dated release record in
+[economy notes](docs/near-economy.md) identifies the frontend, backend and live
+checks. This deployment does not constitute an independent security audit.
 
 - Account creation reserves a slot in one Convex mutation **before** funding.
   Limit: 20 new reservations per UTC hour and 100 per UTC day, per deployment.

@@ -17,6 +17,7 @@ import type * as identityProofCrypto from "../identityProofCrypto.js";
 import type * as near from "../near.js";
 import type * as nearDb from "../nearDb.js";
 import type * as profiles from "../profiles.js";
+import type * as sponsorBudget from "../sponsorBudget.js";
 import type * as usage from "../usage.js";
 import type * as weekend from "../weekend.js";
 
@@ -36,6 +37,7 @@ declare const fullApi: ApiFromModules<{
   near: typeof near;
   nearDb: typeof nearDb;
   profiles: typeof profiles;
+  sponsorBudget: typeof sponsorBudget;
   usage: typeof usage;
   weekend: typeof weekend;
 }>;

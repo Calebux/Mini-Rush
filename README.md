@@ -407,8 +407,9 @@ The [CI workflow](.github/workflows/verify.yml) runs build, backend typechecking
 security/recovery/race checks and contract tests without live credentials or
 transactions. `npm audit --audit-level=high` rejects high/critical advisories;
 lower-severity findings and their exposure are documented in [SECURITY.md](SECURITY.md).
-New hardening in this revision requires a coordinated backend/frontend release;
-see the [dated deployment record](docs/near-economy.md) for what is live.
+Security hardening source `512f517` was deployed to the production backend and
+frontend on 2026-11-14; see the [dated deployment record](docs/near-economy.md)
+for live verification and remaining limitations.
 
 ## Repository map
 

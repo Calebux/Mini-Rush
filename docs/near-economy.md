@@ -1,18 +1,44 @@
 # NEAR parts economy — first playable slice
 
-## Security hardening prepared — 2026-11-14
+## Security hardening production release — 2026-11-14
 
-The working tree adds atomic sponsorship budgets, durable account creation,
-signed test-NEAR top-ups with concurrent pool reservations, an emergency backend
-pause, stricter browser headers and compatible dependency security updates.
-See [SECURITY.md](../SECURITY.md) for limits, tests and unresolved risks.
+Deployed source **512f517** to production Convex
+`precious-dalmatian-332.eu-west-1.convex.cloud` and https://minirush.site.
+Frontend release: https://mini-rush-kghku26l7-calebuxs-projects.vercel.app
+(`dpl_58CVwYNqi2bsHzGoBeqPvCVUJnL6`). Vercel reports Ready. The frontend was
+built with the production backend URL before deploying Convex, then promoted
+to the domain after the backend succeeded. The promotion used the explicit
+`calebuxs-projects` scope and deployment ID after the URL-based attempt reported
+a team-scope error.
 
-**These changes have not been deployed.** The live release is still the one
-recorded below. Release backend and frontend together: the new `near:testNear`
-endpoint requires a timestamp and garage signature, and old clients must refresh.
+Live changes: atomic sponsorship budgets, durable account creation, signed
+test-NEAR top-ups with concurrent pool reservations, a backend emergency-pause
+setting, stricter browser security headers and compatible dependency updates.
 The schema adds `nearCreations`, `sponsorBudgets`, grant indexes and an optional
-settlement timestamp; no Rust contract layout changes or on-chain migration are
-part of this revision. CI configuration is prepared locally, not yet run on GitHub.
+settlement timestamp. No indexes were deleted. No Rust contract layout changes,
+on-chain migration, production secret changes or real purchases were part of
+this release. See [SECURITY.md](../SECURITY.md) for limits and unresolved risks.
+
+The live browser check passed skin preview, local fixture-coin purchase, no
+repeat charge, reload persistence, phone layout, saved-skin racing and public
+economy reads. Requests targeted production Convex. Account creation and real
+purchases were blocked in that browser check. The separate security check
+verified headers and rejected deliberately invalid backend requests; production
+Convex masks ordinary error details, so exact rejection messages are verified
+in offline handler tests rather than claimed from public responses.
+
+Repeat with:
+
+```sh
+node scripts/check-live-security.mjs https://minirush.site
+node scripts/check-live-customization.mjs https://minirush.site
+```
+
+Existing open tabs should refresh before using **Get test NEAR**: the endpoint
+now requires the timestamp and signature supplied by the new frontend.
+The README, security document and CI workflow are committed locally; CI has not
+been run on GitHub. The verification script and release record are documentation/
+test additions after the runtime release and do not require another deployment.
 
 ## Cinematic workshop and Skin Studio production release
 
