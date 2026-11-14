@@ -2,7 +2,7 @@ import { v, ConvexError } from 'convex/values';
 import { mutation, query, internalMutation, type MutationCtx, type QueryCtx } from './_generated/server';
 import { internal } from './_generated/api';
 import type { Doc } from './_generated/dataModel';
-import { FRIEND_LENGTH, FRIEND_TIMEOUT, FRIEND_DURATION, validFriendSample } from '../shared/friendRace';
+import { FRIEND_LENGTH, FRIEND_TIMEOUT, FRIEND_DURATION, FRIEND_LOBBY_TIMEOUT, validFriendSample } from '../shared/friendRace';
 
 const credentials = { code: v.string(), token: v.string() };
 function check(code: string, token: string) {
@@ -28,6 +28,11 @@ function expireDrivers(room: Doc<'friendRooms'>, now: number) {
   }
   if (room.players.every(p => p.dnf || p.finishAt !== null)) room.state = 'finished';
 }
+function releaseAbsentGuest(room: Doc<'friendRooms'>, now: number) {
+  if (room.state === 'lobby' && room.players.length === 2 && now - room.players[1].seen >= FRIEND_LOBBY_TIMEOUT) {
+    room.players = [{ ...room.players[0], ready: false }];
+  }
+}
 export const create = mutation({ args: { ...credentials, name: v.string() }, handler: async (ctx, a) => {
   check(a.code, a.token);
   const old = await ctx.db.query('friendRooms').withIndex('by_code', q => q.eq('code', a.code)).unique();
@@ -47,8 +52,17 @@ export const join = mutation({ args: { ...credentials, name: v.string() }, handl
   const room = await ctx.db.query('friendRooms').withIndex('by_code', q => q.eq('code', a.code)).unique();
   if (!room || room.expiresAt <= Date.now() || room.state === 'closed') throw new ConvexError('Room not found or expired. Check the invite code.');
   const slot = room.players.findIndex(p => p.token === a.token);
-  if (slot >= 0) return { slot };
-  if (room.state !== 'lobby' || room.players.length !== 1) throw new ConvexError('This race already has two drivers.');
+  if (slot >= 0) {
+    if (room.state === 'lobby') {
+      room.players[slot].seen = Date.now();
+      await ctx.db.patch(room._id, { players: room.players });
+    }
+    return { slot };
+  }
+  if (room.state === 'finished') throw new ConvexError('This race has finished. Ask your friend to create a new race.');
+  if (room.state !== 'lobby') throw new ConvexError('This race has already started. Ask your friend for a new invite.');
+  releaseAbsentGuest(room, Date.now());
+  if (room.players.length !== 1) throw new ConvexError('This room already has two connected drivers. If you joined in another tab, return to that tab. A disconnected waiting seat is released after one minute.');
   await ctx.db.patch(room._id, { players: [...room.players, driver(a.token, a.name, 1)] });
   return { slot: 1 };
 } });
@@ -61,8 +75,11 @@ export const command = mutation({ args: { ...credentials, round: v.number(), act
   const { room, slot } = await member(ctx, a.code, a.token), now = Date.now();
   if (a.round !== room.round) throw new ConvexError('The race has moved to another round.');
   expireDrivers(room, now);
+  room.players[slot].seen = now;
+  // A host's heartbeat also frees abandoned waiting seats, without depending
+  // solely on the scheduled watchdog. Never replace a driver in a started race.
+  releaseAbsentGuest(room, now);
   const p = room.players[slot];
-  p.seen = now;
   if (a.action === 'leave') room.state = 'closed';
   if (a.action === 'ready' && (room.state === 'lobby' || room.state === 'finished')) {
     p.ready = !p.ready;
@@ -97,6 +114,7 @@ export const watchdog = internalMutation({ args: { id: v.id('friendRooms') }, ha
   if (!room || room.state === 'closed' || room.expiresAt <= Date.now()) return;
   const before = JSON.stringify([room.state, room.players]);
   expireDrivers(room, Date.now());
+  releaseAbsentGuest(room, Date.now());
   if ((room.state === 'lobby' || room.state === 'finished') && room.players.every(p => Date.now() - p.seen > 60_000)) room.state = 'closed';
   if (before !== JSON.stringify([room.state, room.players])) await ctx.db.patch(id, { state: room.state, players: room.players });
   if (room.state !== 'closed') await ctx.scheduler.runAfter(5000, internal.friends.watchdog, { id });

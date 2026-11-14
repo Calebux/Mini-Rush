@@ -30,7 +30,7 @@ try {
   await assert.rejects(invoke('view', other), /Join/);
   await command(host, 'ready'); assert.equal((await view()).state, 'lobby', 'cannot start alone');
   await invoke('join', { ...guest, name: '<script>driver</script>' });
-  await assert.rejects(invoke('join', { ...other, name: 'Third' }), /two drivers/);
+  await assert.rejects(invoke('join', { ...other, name: 'Third' }), /two connected drivers/);
   assert.ok((await view()).players.every(p => !('token' in p)));
   await command(guest, 'ready'); assert.equal((await view()).state, 'loading');
   await command(host, 'loaded'); assert.equal((await view()).startAt, 0, 'one loaded driver does not start the clock');
@@ -67,5 +67,39 @@ try {
   now += 46 * 60_000;
   await assert.rejects(view(), /expired/);
   await invoke('prune', {}); assert.equal(rows.size, 0);
+  // Reproduce a live host blocked by an absent second browser in the lobby.
+  await invoke('create', { ...host, name: 'Host' });
+  await invoke('join', { ...guest, name: 'Guest' });
+  await command(host, 'ready');
+  now += 59_999;
+  await assert.rejects(invoke('join', { ...other, name: 'Replacement' }), /two connected drivers/);
+  now++;
+  assert.equal((await invoke('join', { ...other, name: 'Replacement' })).slot, 1);
+  assert.equal((await view()).players.length, 2);
+  assert.equal((await view()).players[0].ready, false, 'replacement never inherits the old ready check');
+  await assert.rejects(invoke('view', guest), /Join/, 'old guest cannot control the replacement seat');
+  assert.equal((await invoke('join', { ...other, name: 'Retry' })).slot, 1, 'retry reclaims the same seat');
+  now += 60_000;
+  await command(host, 'ping');
+  assert.equal((await view()).players.length, 1, 'host heartbeat frees an absent guest');
+  await invoke('join', { ...guest, name: 'Guest' });
+  now += 60_000;
+  // Watchdog independently releases the guest while a recently-seen host waits.
+  const id = [...rows.keys()][0];
+  await ctx.db.patch(id, { players: rows.get(id).players.map((p, i) => i === 0 ? { ...p, seen: now } : p) });
+  await invoke('watchdog', { id });
+  assert.equal((await view()).players.length, 1);
+  await invoke('join', { ...guest, name: 'Guest' });
+  now += 59_000;
+  await invoke('join', { ...guest, name: 'Refresh' });
+  now += 2000;
+  await command(host, 'ping');
+  assert.equal((await view()).players.length, 2, 'a successful lobby reconnect renews presence');
+  await command(host, 'ready'); await command(guest, 'ready');
+  await assert.rejects(invoke('join', { ...other, name: 'Third' }), /already started/);
+  now += 61_000;
+  await assert.rejects(invoke('join', { ...other, name: 'Third' }), /already started/, 'never replace a started-race seat');
+  await command(host, 'ping');
+  await assert.rejects(invoke('join', { ...other, name: 'Third' }), /finished/);
   console.log('PASS: room ownership/capacity, load barrier, start clock, telemetry bounds/replay, finish order, rematch isolation, timeout, leave and expiry cleanup.');
 } finally { Date.now = originalNow; await server.close(); }

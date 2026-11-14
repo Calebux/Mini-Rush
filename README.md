@@ -172,6 +172,8 @@ Other ways to play:
   eight-character code, ready checks, loading barrier and shared countdown.
   Both drive stock Viper GTs on Lagos. Live position updates, shared results,
   rematches, short-refresh recovery and disconnect/DNF handling are implemented.
+  A disconnected waiting guest releases their seat after one minute; started
+  races keep their original drivers. Join retries retain the same private seat.
   This mode is non-contact and awards no coins, RUSH, salvage or prizes.
 - **Daily Run:** a shared daily circuit and score board, with local streak rewards.
 - **Recorded challenges:** share a completed run through a `?c=` link; another

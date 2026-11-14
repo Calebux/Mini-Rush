@@ -3,6 +3,8 @@ export const FRIEND_LENGTH = 1800;
 export const FRIEND_SEED = 731906;
 export const FRIEND_TIMEOUT = 20_000;
 export const FRIEND_DURATION = 240_000;
+// A waiting guest must not block an active host for the full invite lifetime.
+export const FRIEND_LOBBY_TIMEOUT = 60_000;
 export interface FriendDriver {
   name: string; ready: boolean; loaded: boolean; seen: number;
   s: number; x: number; v: number; seq: number; sampleAt: number;

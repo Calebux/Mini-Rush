@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "check:security": "node --experimental-strip-types scripts/check-security.mjs",
+    "check:friend-seats": "node scripts/check-friend-seat-recovery.mjs",
     "check:friends": "node scripts/check-friends.mjs",
     "check:friend-rules": "node scripts/check-friend-rules.mjs",
     "dev": "vite --host",

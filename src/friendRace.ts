@@ -8,6 +8,7 @@ const ref = (name: string) => makeFunctionReference<'mutation'>(`friends:${name}
 const view = makeFunctionReference<'query', { code: string; token: string }, FriendRoom & { slot: number }>('friends:view');
 const hex = (bytes: number) => Array.from(crypto.getRandomValues(new Uint8Array(bytes)), b => b.toString(16).padStart(2, '0')).join('');
 type Hooks = { prepare: (room: FriendRoom, slot: number) => Promise<void>; update: (room: FriendRoom, slot: number) => void; exit: () => void };
+type Seat = { code: string; token: string; create?: boolean };
 
 /** A tab owns one private seat. Invite links contain only the public room code. */
 export class FriendRace {
@@ -16,6 +17,7 @@ export class FriendRace {
   private client: ConvexClient | null = null;
   private token = '';
   private code = '';
+  private seat: Seat | null = null;
   private unsubscribe: (() => void) | null = null;
   private timer = 0;
   private prepared = 0;
@@ -70,7 +72,8 @@ export class FriendRace {
     try {
       const saved = JSON.parse(sessionStorage.getItem('minirush.friend-seat') ?? 'null');
       if (saved && /^[A-F0-9]{8}$/.test(saved.code) && /^[a-f0-9]{64}$/.test(saved.token) && (!invite || saved.code === invite.toUpperCase())) {
-        this.open(); void this.enter(false, saved);
+        this.seat = saved;
+        this.open(); void this.enter(saved.create === true, saved);
       }
     } catch { /* A blocked session store only disables refresh recovery. */ }
   }
@@ -84,17 +87,24 @@ export class FriendRace {
     const data = (e as { data?: unknown })?.data;
     this.say(typeof data === 'string' ? data : 'Connection interrupted. Check your internet, then try again.');
   }
-  private async enter(create: boolean, resume?: { code: string; token: string }) {
-    if (this.busy || this.room) return;
+  private rememberSeat(seat: Seat) {
+    this.seat = seat;
+    try { sessionStorage.setItem('minirush.friend-seat', JSON.stringify(seat)); } catch { /* Memory still preserves retries when storage is blocked. */ }
+  }
+  private async enter(create: boolean, resume?: Seat) {
+    if (this.busy || this.room || this.unsubscribe) return;
     const url = import.meta.env.VITE_CONVEX_URL as string | undefined;
     if (!url) { this.say('Multiplayer is unavailable on this build.'); return; }
-    const code = resume?.code ?? (create ? hex(4).toUpperCase() : (this.panel.querySelector('input') as HTMLInputElement).value.trim().toUpperCase());
+    const code = resume?.code ?? (create ? this.seat?.create ? this.seat.code : hex(4).toUpperCase() : (this.panel.querySelector('input') as HTMLInputElement).value.trim().toUpperCase());
     if (!/^[A-F0-9]{8}$/.test(code)) { this.say('Enter the eight-character code from your friend.'); return; }
     this.busy = true; this.say('Connecting to the paddock…');
     const generation = ++this.generation;
     try {
       this.client ??= new ConvexClient(url);
-      this.token = resume?.token ?? hex(32); this.code = code;
+      this.token = resume?.token ?? (this.seat?.code === code ? this.seat.token : hex(32)); this.code = code;
+      // Persist BEFORE sending. The server may accept a seat even when its reply
+      // is lost; retries/reloads must reclaim it, not look like a third driver.
+      this.rememberSeat({ code, token: this.token, create });
       let timer = 0;
       const { slot } = await Promise.race([
         this.client.mutation(ref(create ? 'create' : 'join'), { code, token: this.token, name: driverName() }),
@@ -102,8 +112,9 @@ export class FriendRace {
       ]).finally(() => window.clearTimeout(timer));
       if (generation !== this.generation) return;
       this.slot = slot;
-      try { sessionStorage.setItem('minirush.friend-seat', JSON.stringify({ code, token: this.token })); } catch { /* Optional. */ }
+      this.rememberSeat({ code, token: this.token });
       this.unsubscribe = this.client.onUpdate(view, { code, token: this.token }, r => {
+        if (generation !== this.generation) return;
         this.room = r; this.slot = r.slot;
         this.hooks.update(r, this.slot);
         this.draw();
@@ -111,12 +122,22 @@ export class FriendRace {
           this.prepared = r.round; this.seq = r.players[this.slot].seq + 1;
           void this.prepare(r, generation);
         }
-      }, e => this.error(e));
+      }, e => {
+        if (generation !== this.generation) return;
+        if ((e as { data?: unknown }).data === 'Join this room first.') {
+          this.unsubscribe?.(); this.unsubscribe = null;
+          window.clearInterval(this.timer); this.room = null; this.prepared = 0;
+          (this.panel.querySelector('[data-friend-setup]') as HTMLElement).hidden = false;
+          (this.panel.querySelector('[data-friend-room]') as HTMLElement).hidden = true;
+          (this.panel.querySelector('input') as HTMLInputElement).value = code;
+          this.say('Your waiting seat was released while you were offline. Join again if a seat is available.');
+        } else this.error(e);
+      });
       this.timer = window.setInterval(() => { void this.action('ping'); this.draw(); }, 3000);
     } catch (e) {
       if (generation !== this.generation) return;
       this.error(e);
-      try { sessionStorage.removeItem('minirush.friend-seat'); } catch { /* Optional. */ }
+      // A timeout does not prove the join failed. Keep the seat for a safe retry.
       void this.client?.close(); this.client = null;
     }
     finally { if (generation === this.generation) this.busy = false; }
@@ -196,6 +217,7 @@ export class FriendRace {
     const code = this.code, token = this.token;
     ++this.generation; window.clearInterval(this.timer); this.unsubscribe?.(); this.unsubscribe = null;
     this.room = null; this.prepared = 0; this.busy = false; this.bestRtt = Infinity; this.offset = 0;
+    this.seat = null;
     this.pinging = this.acting = this.sending = false;
     this.client = null; this.panel.close(); this.bar.hidden = true;
     try { sessionStorage.removeItem('minirush.friend-seat'); } catch { /* Optional. */ }
