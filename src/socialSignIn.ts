@@ -10,7 +10,7 @@ export function installSocialSignIn(): void {
   dialog.innerHTML = `<header><small>MINIRUSH · DRIVER ACCOUNT</small><button type="button" data-auth-close aria-label="Close sign-in">✕</button></header>
     <h2 id="social-sign-in-title">Your driver account</h2>
     <p data-auth-intro>Sign in to shop for cars, paint and parts. Choose Google on the secure sign-in screen.</p>
-    <p class="auth-scope">Racing is always open to guests. Your garage stays in this browser; recovery on another device is not available yet.</p>
+    <p class="auth-scope">Racing is always open to guests. Your garage stays in this browser; use Protect your garage to download an encrypted recovery file for another device.</p>
     <div class="auth-status" role="status" aria-live="polite" data-auth-status>Loading sign-in…</div>
     <button type="button" class="auth-primary" data-auth-login disabled>Continue with Google</button>
     <button type="button" class="auth-secondary" data-auth-redirect hidden>Use full-page sign-in</button>

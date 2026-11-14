@@ -5,6 +5,7 @@ import { recoverPurchase } from './workshop';
 import { recoverSkinPurchase } from './skins';
 import { installGarageActivity } from './garageActivity';
 import { installGarageProtection } from './garageProtection';
+import { installDriverOnboarding } from './driverOnboarding';
 import { SIGN_IN_REQUIRED } from './shopSession';
 import { installHomePriceWire } from './homePriceWire';
 import './neonHome.css'; // the Neon Night theme overrides the older sheets
@@ -20,6 +21,7 @@ import './cardSystem.css';
 import './homePriceWire.css';
 import './workshopCinematic.css';
 import './skinStudio.css';
+import './driverOnboarding.css';
 
 // Finish an interrupted coin purchase before any menu/race can read the bank.
 try { recoverPurchase(); } catch { /* Workshop displays the recoverable storage error. */ }
@@ -29,6 +31,7 @@ watchAndroidHost(); // keeps the bottom controls clear of the Android nav bar
 new Game(document.getElementById('app')!);
 installGarageActivity();
 installGarageProtection();
+installDriverOnboarding();
 installHomePriceWire();
 // The garage made on this device is how a player gets in. The login panel is
 // only loaded where a deployment requires one for buying.
@@ -39,10 +42,6 @@ void import('./near').then(async (n) => {
   n.startGarageRecovery();
   const account = await n.ensureAccount();
   if (!account) return;
-  if (!SIGN_IN_REQUIRED) {
-    document.querySelector('[data-home-session-label]')!.textContent = `DRIVER ${account.split('.')[0].toUpperCase()}`;
-    document.querySelector('[data-home-session-copy]')!.textContent = 'Ready to race, craft and trade. Saved on this device.';
-  }
   void n.recoverGarage();
   n.syncCars(await n.holdings().catch(() => []));
   await n.refreshComponents().catch(() => {});

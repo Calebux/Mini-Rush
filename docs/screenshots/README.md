@@ -11,6 +11,7 @@ not mockups. Prices, inventory, balances and supply are historical snapshots.
 | `first-build-choice.png` | Local frontend, real testnet craft of component #2 during the [economy demo](../hackathon-demo.md), at 1440 × 900 |
 | `workshop-inspection.png`, `workshop-customize.png` | Local cinematic workshop at 1600 × 1000, captured by `check-workshop-cinematic.mjs`; all POSTs blocked, so account balances are unavailable |
 | `skin-studio.png` | Local Skin Studio at 1600 × 1000, captured by `check-skin-studio.mjs` with isolated fixture coins and all POSTs blocked; a saved cosmetic design, not an on-chain purchase |
+| `onboarding-name.png`, `onboarding-garage.png` | November 14 local driver onboarding at 390 × 844, captured by `check-driver-onboarding.mjs` with disposable keys and mocked account/RPC responses; no real account creation or transactions |
 
 The six live-site captures use public reads and the existing test garage. The
 capture script blocks HTTP actions, mutations and transaction broadcasts; it

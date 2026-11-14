@@ -1,0 +1,38 @@
+#menu .driver-home-identity { min-width: 0; width: 100%; }
+#menu [data-home-driver-name] { display: block; margin: 7px 0 4px; color: var(--card-paper); font: 850 clamp(20px, 4vw, 27px)/1.1 var(--card-font); letter-spacing: -.7px; overflow-wrap: anywhere; }
+#menu [data-home-session-label]::before { content: ''; display: inline-block; width: 6px; height: 6px; margin-right: 7px; border-radius: 50%; background: currentColor; }
+#menu [data-home-backup-status] { display: block; margin-top: 9px; color: #d7c19b; font: 650 10px/1.4 var(--card-font); }
+#menu [data-home-backup-status][data-saved=true] { color: #c5d4b0; }
+#menu .home-account-actions button { min-height: 42px; }
+#menu .home-account-actions [data-driver-onboarding] { background: #d7c19b; border-color: #d7c19b; color: #191b17; }
+#driver-onboarding { width: min(540px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto; box-sizing: border-box; margin: auto; padding: 26px; border: 1px solid #d7c19b66; border-radius: 10px; color: #f1efe9; background: linear-gradient(145deg, #292b22, #171a16 65%); box-shadow: 0 25px 100px #000b; font: 13px/1.5 system-ui, sans-serif; }
+#driver-onboarding::backdrop { background: #080b0bdc; }
+#driver-onboarding [hidden] { display: none !important; }
+#driver-onboarding header { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+#driver-onboarding small { font-size: 9px; font-weight: 750; letter-spacing: 1.6px; color: #d7c19b; }
+#driver-onboarding h2 { font-size: clamp(28px, 7vw, 39px); font-weight: 850; letter-spacing: -1.6px; line-height: 1.05; margin: 22px 0 14px; }
+#driver-onboarding h3 { font-size: 22px; letter-spacing: -.7px; line-height: 1.15; margin: 8px 0; }
+#driver-onboarding p { color: #bcbdb3; }
+#driver-onboarding button { min-height: 44px; border: 1px solid #d7c19b55; border-radius: 5px; padding: 10px 13px; background: transparent; color: #f1efe9; cursor: pointer; font: 750 11px/1.4 system-ui; }
+#driver-onboarding :is(button,input):focus-visible { outline: 2px solid #d7c19b; outline-offset: 3px; }
+#driver-onboarding :disabled { opacity: .5; cursor: wait; }
+#driver-onboarding .driver-steps { list-style: none; padding: 0; margin: 22px 0; display: flex; gap: 12px; font: 750 9px/1.4 system-ui; letter-spacing: .8px; }
+#driver-onboarding .driver-steps li { flex: 1; border-top: 2px solid #6e706044; padding-top: 9px; color: #9b9e8f; }
+#driver-onboarding .driver-steps [data-done=true] { border-color: #d7c19b; color: #e5d4b7; }
+#driver-onboarding label { display: block; margin: 24px 0 8px; font-size: 10px; font-weight: 750; letter-spacing: 1px; color: #d7c19b; }
+#driver-onboarding input { width: 100%; box-sizing: border-box; padding: 14px; border: 1px solid #d7c19b66; border-radius: 5px; background: #0c110d; color: #f1efe9; font: 750 18px/1.3 system-ui; text-transform: uppercase; }
+#driver-onboarding .driver-fine { font-size: 11px; line-height: 1.5; }
+#driver-onboarding #driver-name-error { color: #f0b8a7; min-height: 18px; }
+#driver-onboarding .driver-primary { display: block; width: 100%; margin-top: 18px; background: #f1efe9; color: #191b17; border-color: #f1efe9; }
+#driver-onboarding .driver-secondary { display: block; width: 100%; margin-top: 10px; }
+#driver-onboarding .driver-license { display: flex; align-items: center; gap: 12px; margin: 22px 0 14px; padding: 17px 13px; border-block: 1px solid #d7c19b44; background: #f3ecda05; }
+#driver-onboarding .driver-license > div { flex: 1; min-width: 0; }
+#driver-onboarding .driver-license strong { display: block; font-size: 20px; line-height: 1.15; letter-spacing: -.5px; overflow-wrap: anywhere; }
+#driver-onboarding [data-driver-device-status] { display: block; font-size: 8px; letter-spacing: .7px; color: #c5d4b0; margin-top: 6px; }
+#driver-onboarding .driver-license-mark { display: grid; place-items: center; width: 38px; height: 48px; flex-shrink: 0; background: #d7c19b; color: #1b1d17; font-weight: 900; font-size: 17px; transform: skewY(-6deg); }
+#driver-onboarding .driver-license button { padding: 6px; font-size: 9px; }
+#driver-onboarding .driver-backup-callout { padding: 18px; margin-top: 20px; border: 1px solid #d7c19b44; border-radius: 6px; background: #d7c19b08; }
+#driver-onboarding footer { display: grid; gap: 12px; text-align: center; margin-top: 20px; padding-top: 18px; border-top: 1px solid #d7c19b33; font-size: 10px; color: #9b9e8f; }
+#welcome #welcome-card { background: #1b1d18; border-color: #d7c19b66; color: #f1efe9; }
+#welcome #welcome-card [data-driver-onboarding] { background: #f1efe9; color: #191b17; border: 1px solid #f1efe9; box-shadow: none; }
+@media (max-width: 480px) { #driver-onboarding { padding: 19px; } #driver-onboarding .driver-license { gap: 9px; padding-inline: 0; } #driver-onboarding .driver-backup-callout { padding: 14px; } }

@@ -90,6 +90,7 @@ export function setUsername(raw: string): string | null {
   if ('error' in res) return res.error;
   session = { name: res.name, chosen: true };
   save(session);
+  window.dispatchEvent(new Event('minirush:driver-name'));
   return null;
 }
 
@@ -97,4 +98,17 @@ export function setUsername(raw: string): string | null {
 export function keepDriverName(): void {
   session = { name: current().name, chosen: true };
   save(session);
+  window.dispatchEvent(new Event('minirush:driver-name'));
 }
+
+/** A blocked browser store must not be presented as a saved profile. */
+export function usernameSaved(): boolean {
+  const stored = load();
+  return !!stored?.chosen && stored.name === current().name;
+}
+
+window.addEventListener('storage', event => {
+  if (event.key !== KEY && event.key !== null) return;
+  session = null;
+  window.dispatchEvent(new Event('minirush:driver-name'));
+});

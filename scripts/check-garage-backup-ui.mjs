@@ -78,7 +78,7 @@ try {
 
   const target=await setup(b,{width:390,height:844}), page=target.page;
   await page.screenshot({path:out+'/home-mobile.png'});
-  await page.click('[data-restore-garage]');
+  await page.click('#menu [data-restore-garage]');
   await check(page,file,'incorrect password');assert.match(await status(page).textContent(),/password is incorrect/);assert.equal(await account(page),b.account);
   const changed=JSON.parse(file);changed.network='mainnet';await check(page,Buffer.from(JSON.stringify(changed)));assert.match(await status(page).textContent(),/not a supported/);
   access='offline';await check(page,file);assert.match(await status(page).textContent(),/Reconnect/);
@@ -108,7 +108,7 @@ try {
   await page.screenshot({path:out+'/restore-mobile.png'});
   assert.equal(await page.locator('#garage-protection').evaluate(el=>el.scrollWidth<=el.clientWidth),true);
   // Closing and reopening clears all decrypted preview state.
-  await page.click('[data-protection-close]');await page.click('[data-restore-garage]');
+  await page.click('[data-protection-close]');await page.click('#menu [data-restore-garage]');
   assert.equal(await page.locator('[data-protection-preview]').isVisible(),false);assert.equal(await page.inputValue('#garage-backup-password'),'');
   await check(page,file);await page.locator('[data-restore-ack]').check();
   await page.screenshot({path:out+'/restore-ready-mobile.png'});
@@ -117,7 +117,7 @@ try {
   await page.waitForFunction(async()=>(await import('/src/economy.ts')).owned().has('r8'));
   assert.equal(await page.evaluate(async()=>(await import('/src/economy.ts')).owned().has('svj')),false,'old account chain cars do not leak');
   assert.equal(await page.evaluate(()=>localStorage.getItem('minirush.bank')),'47','device-local coins stay local');
-  await sibling.waitForFunction(()=>document.querySelector('[data-home-session-label]')?.textContent.includes('BACKUP-A'));
+  await sibling.waitForFunction(()=>document.querySelector('[data-home-session-label]')?.textContent.includes('DEVICE ACCOUNT ACTIVE'));
   assert.equal(await account(sibling),a.account,'other tab reloads to restored account');
   await page.screenshot({path:out+'/restored-home-mobile.png'});
   assert.ok(accessReads.length>=8);assert.deepEqual(writes,[],'all recovery operations are reads');assert.deepEqual(errors,[]);

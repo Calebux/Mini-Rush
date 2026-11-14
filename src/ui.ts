@@ -370,6 +370,7 @@ export class UI {
     });
     // driver chip → driver card (offering a username first)
     $('driver-chip').textContent = driverName();
+    window.addEventListener('minirush:driver-name', () => this.refreshChip());
     on('driver-chip', () => this.onDriverChip());
     // the customs workshop lives in the garage, beside the cars it builds
     let workshopFromResults = false;

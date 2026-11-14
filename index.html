@@ -1525,10 +1525,12 @@
   <div class="overlay hidden" id="welcome">
     <div class="logo" style="font-size:44px">Mini<em>Rush</em></div>
     <div id="welcome-card">
-      <strong>Race. Build. Trade. Race again.</strong>
-      <p>Race for salvage, craft performance parts, then fit them to your car or trade with drivers and dealers. No wallet or sign-up needed.</p>
-      <button class="btn" id="btn-welcome-race" type="button">RACE&nbsp;NOW&nbsp;▸</button>
+      <strong>Your name. Your cars. Your garage.</strong>
+      <p>Pick a driver name, race for parts and build your collection. We create your garage automatically. Save a recovery file to keep access on another device.</p>
+      <button class="btn" data-driver-onboarding type="button">SET UP MY DRIVER&nbsp;↗</button>
+      <button class="btn ghost" id="btn-welcome-race" type="button">Race now · set up later</button>
       <button class="btn ghost" id="btn-welcome-menu" type="button">Look around first</button>
+      <button class="btn ghost" data-restore-garage type="button">Already played? Restore your garage</button>
     </div>
   </div>
 
@@ -1554,7 +1556,7 @@
     </div>
     <div class="menu-panel">
       <section class="home-account" aria-label="Your driver garage">
-        <div><small data-home-session-label>YOUR GARAGE</small><p data-home-session-copy>Saved on this device. No wallet, no sign-in.</p><div class="home-account-actions"><button type="button" data-protect-garage>Protect your garage</button><button type="button" data-restore-garage>Restore garage</button></div></div>
+        <div class="driver-home-identity"><small data-home-session-label role="status">SETTING UP YOUR GARAGE</small><strong data-home-driver-name>YOUR DRIVER</strong><p data-home-session-copy>Race now. Your device account is being prepared.</p><span data-home-backup-status>Recovery file not confirmed</span><div class="home-account-actions"><button type="button" data-driver-onboarding>Finish driver setup ↗</button><button type="button" data-protect-garage>Protect your garage</button><button type="button" data-restore-garage>Restore garage</button></div></div>
         <button type="button" id="home-sign-in" data-social-sign-in hidden>SIGN IN <span aria-hidden="true">↗</span></button>
       </section>
       <div class="setup-strip">

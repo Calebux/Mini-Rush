@@ -1,6 +1,7 @@
 import { GARAGE, nearAccount, currentGarageBackup, verifyRecoveryAccess, restoreSavedGarage, waitForGarageCreation } from './near';
 import { BACKUP_LIMIT, encryptGarageBackup, decryptGarageBackup, type GarageBackup } from '../shared/garageBackup';
 import { credentialSnapshot } from '../shared/garageCredentials';
+import { confirmBackup } from './garageBackupStatus';
 
 /** Secrets stay in this closure until download/check finishes or the dialog closes. */
 export function installGarageProtection(): void {
@@ -11,8 +12,11 @@ export function installGarageProtection(): void {
   let mode: 'protect' | 'restore' = 'protect', busy = false, generation = 0;
   let imported: GarageBackup | null = null, expected = '', checkedAt = 0, downloadUrl: string | null = null;
   let opener: HTMLElement | null = null;
+  let prepared: { account: string; publicKey: string } | null = null;
+  let downloadRequested = false;
   const clear = () => {
     generation++; imported = null; expected = ''; checkedAt = 0;
+    prepared = null; downloadRequested = false;
     if (downloadUrl) URL.revokeObjectURL(downloadUrl);
     downloadUrl = null;
     dialog.querySelectorAll<HTMLInputElement>('input').forEach(input => { input.value = ''; input.checked = false; });
@@ -38,7 +42,7 @@ export function installGarageProtection(): void {
         ${protect ? '<label for="garage-backup-confirm">Confirm password</label><input id="garage-backup-confirm" type="password" name="confirmPassword" autocomplete="new-password" minlength="12" maxlength="256" required>' : ''}
         <button type="submit" class="gp-primary">${protect ? 'CREATE RECOVERY FILE' : 'CHECK RECOVERY FILE'}</button>
       </form>
-      <div data-protection-download hidden><a class="gp-primary" data-backup-download>DOWNLOAD RECOVERY FILE ↓</a><p class="gp-help">Keep this file somewhere safe. Anyone with the file and password can control your garage. Saving another copy does not change your key.</p></div>
+      <div data-protection-download hidden><a class="gp-primary" data-backup-download>DOWNLOAD RECOVERY FILE ↓</a><p class="gp-help">Keep this file somewhere safe. Anyone with the file and password can control your garage. Saving another copy does not change your key.</p><button type="button" class="gp-primary" data-backup-saved hidden>I SAVED MY FILE · DONE ✓</button><p class="gp-help">After downloading, check your downloads folder before confirming. We cannot check that the file was saved.</p></div>
       <section data-protection-preview hidden><small>OWNERSHIP CHECKED / NEAR TESTNET</small><h3>Ready to restore</h3><code data-restore-account></code><p data-restore-date></p>
         <p class="gp-help">Restoring reloads MiniRush in your open tabs. Finish any races first.</p>
         <label class="gp-ack"><input type="checkbox" data-restore-ack><span>I have saved a recovery file for my current garage, or I understand that switching without one can lose access to it.</span></label>
@@ -51,6 +55,7 @@ export function installGarageProtection(): void {
   };
   const open = (next: typeof mode, trigger: HTMLElement) => {
     if (busy) return;
+    if (!document.getElementById('welcome')?.classList.contains('hidden')) document.getElementById('btn-welcome-menu')?.click();
     clear(); mode = next; opener = trigger;
     // Activity is another native modal; return to the home screen for switching.
     const activity = document.querySelector<HTMLDialogElement>('#garage-activity');
@@ -70,7 +75,16 @@ export function installGarageProtection(): void {
     if (busy) return;
     if (target.closest('[data-protection-close]') || target === dialog) { dialog.close(); return; }
     if (target.closest('[data-protection-switch]')) { clear(); mode = mode === 'protect' ? 'restore' : 'protect'; render(); return; }
-    if (target.closest('[data-backup-download]')) status('Download requested. Check that the file saved, and keep the password separately.');
+    if (target.closest('[data-backup-download]')) {
+      downloadRequested = true;
+      dialog.querySelector<HTMLElement>('[data-backup-saved]')!.hidden = false;
+      status('Download requested. Check that the file saved, and keep the password separately.');
+    }
+    if (target.closest('[data-backup-saved]') && downloadRequested && prepared) {
+      if (credentialSnapshot(localStorage) !== expected) { status('Your garage changed. Create a new recovery file for the current garage.', true); return; }
+      if (!confirmBackup(prepared.account, prepared.publicKey)) { status('Your file still works, but this browser could not save the confirmation. Keep the file safe.', true); return; }
+      dialog.close();
+    }
     if (target.closest('[data-restore-confirm]') && imported) {
       const ack = dialog.querySelector<HTMLInputElement>('[data-restore-ack]')!;
       if (!ack.checked) { status('Save your current garage first, then acknowledge the switch.', true); ack.focus(); return; }
@@ -103,6 +117,7 @@ export function installGarageProtection(): void {
         const file = await encryptGarageBackup(payload, password);
         if (credentialSnapshot(localStorage) !== expected) throw new Error('Your garage changed. Open Protect your garage again.');
         if (attempt !== generation) return;
+        prepared = { account: payload.account, publicKey: payload.publicKey };
         downloadUrl = URL.createObjectURL(new Blob([file], {type:'application/json'}));
         const link = dialog.querySelector<HTMLAnchorElement>('[data-backup-download]')!;
         link.href = downloadUrl; link.download = `minirush-${payload.account}-recovery.json`;

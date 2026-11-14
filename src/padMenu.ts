@@ -7,7 +7,7 @@
  * overlay are candidates, so a panel open over the menu takes the controller.
  */
 
-const CANDIDATES = 'button:not([disabled]), [role="button"], .setup-pill, input[type="range"]';
+const CANDIDATES = 'button:not([disabled]), a[download], [role="button"], .setup-pill, input[type="range"]';
 
 export class PadMenu {
   private focused: HTMLElement | null = null;
@@ -37,6 +37,9 @@ export class PadMenu {
 
   /** The overlay the controller is working in: the last visible one. */
   private layer(): ParentNode {
+    // Native account/recovery dialogs make the underlying menu inert.
+    const modal = [...document.querySelectorAll<HTMLDialogElement>('dialog[open]')].at(-1);
+    if (modal) return modal;
     // overlays, and pop-ups that mark themselves as a layer (the radio panel)
     const open = [...document.querySelectorAll<HTMLElement>('.overlay, [data-pad-layer]')]
       // not offsetParent: it is null for position: fixed, which every overlay is

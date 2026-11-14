@@ -138,6 +138,7 @@ Local browser test capture with fixture coins; no on-chain purchase.
 
 | What to try | Where to go |
 | --- | --- |
+| Set up your driver | First visit → **Set up my driver**, or Home → **Finish driver setup** → choose a name → check your garage → download an encrypted key backup |
 | A normal race | Home → **Race**; change the event under **Modes** |
 | Build your first performance part | Home → **Your next build**; inspect materials, then **Race for materials** or **Craft part** |
 | Race another person live | Home → **Race Friends** → **Create a race** → copy the invite; both drivers choose **I'm ready** |
@@ -161,6 +162,26 @@ ownership check. Local coins, cosmetics and race records are not included. A los
 sole key cannot be recovered if no backup was made, and forgotten recovery
 passwords cannot be reset. Backup and restore are live on minirush.site as of
 November 14, 2026.
+
+**Driver onboarding:** the home screen shows your chosen name and **Device
+account active** when the browser has readable garage credentials. This is
+automatic device access, not Google sign-in. The optional setup guides players
+through choosing a name, checking garage readiness and downloading their key as
+a password-encrypted recovery file. **Race now · set up later** preserves instant
+play. Offline players can race and retry garage setup when connected.
+
+Driver names are local display names used in races, friend lobbies and boards;
+they are not globally reserved or included in the recovery file. A backup badge
+only appears after the player downloads a file and explicitly confirms saving
+it. That reminder is scoped to the account and public key, and is not proof of
+ownership or a guarantee that the file still exists.
+
+| Choose your driver name | Garage readiness and key backup |
+| --- | --- |
+| ![Mobile driver name setup](docs/screenshots/onboarding-name.png) | ![Mobile garage setup and encrypted key download](docs/screenshots/onboarding-garage.png) |
+
+These onboarding screenshots use isolated browser fixtures with mocked account
+and RPC responses. They demonstrate the UI, not live on-chain activity.
 
 ## Features built
 
@@ -435,6 +456,7 @@ cargo test --manifest-path contracts/near/Cargo.toml
 npm run check:garage-recovery
 npm run check:garage-backup
 npm run check:garage-backup-ui -- http://localhost:3000
+npm run check:driver-onboarding -- http://localhost:3000
 npm run check:identity-proof
 npm run check:dealer-orders -- http://localhost:3000
 npm run check:handling-rivals -- http://localhost:3000
@@ -470,6 +492,7 @@ for live verification and remaining limitations.
 | `src/friendRace.ts`, `shared/friendRace.ts`, `convex/friends.ts` | Live multiplayer UI, shared rules and room backend |
 | `src/near.ts`, `src/garageActivity.ts` | Garage account access, transactions and recovery UI |
 | `src/garageProtection.ts`, `shared/garageBackup.ts`, `shared/garageCredentials.ts` | Encrypted backup UI, portable recovery-file format and atomic restored credentials |
+| `src/driverOnboarding.ts`, `src/driver.ts`, `src/garageBackupStatus.ts` | Optional driver setup, device-local display names and player-confirmed backup reminders |
 | `convex/` | Rooms, boards, reward validation, relays and dealer automation |
 | `contracts/near/` | Rust garage contract, token ledger, components, orders and editions |
 | `shared/components.json` | Shared crafting catalogue and stat changes |
